@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  backoffice:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: merchandising-backoffice
+    ports:
+      - "3001:80"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - merchandising-network
+    restart: unless-stopped
+
+  # Uncomment if you have a backend service
+  # backend:
+  #   build:
+  #     context: ../backend
+  #     dockerfile: Dockerfile
+  #   container_name: merchandising-backend
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - NODE_ENV=production
+  #   networks:
+  #     - merchandising-network
+  #   restart: unless-stopped
+
+networks:
+  merchandising-network:
+    driver: bridge
