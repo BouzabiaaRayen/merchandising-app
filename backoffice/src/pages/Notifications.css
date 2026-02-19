@@ -1,0 +1,44 @@
+.unread-row {
+  background-color: #f0f7ff;
+}
+
+.unread-row:hover {
+  background-color: #e3f0fc;
+}
+
+.unread-count {
+  color: #d32f2f;
+  font-weight: 600;
+}
+
+.notif-message {
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notif-type-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  background-color: #e8eaf6;
+  color: #3949ab;
+}
+
+.notif-type-badge.urgent {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.notif-type-badge.info {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.notif-type-badge.warning {
+  background-color: #fff8e1;
+  color: #f57f17;
+}

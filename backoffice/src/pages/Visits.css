@@ -1,0 +1,27 @@
+.visit-status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.visit-status-badge.scheduled {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.visit-status-badge.in-progress {
+  background-color: #fff8e1;
+  color: #f57f17;
+}
+
+.visit-status-badge.completed {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.visit-status-badge.cancelled {
+  background-color: #ffebee;
+  color: #c62828;
+}
