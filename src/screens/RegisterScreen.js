@@ -89,7 +89,7 @@ export default function RegisterScreen({ navigation }) {
           placeholder="Password"
           value={formData.password}
           onChangeText={(value) => updateField('password', value)}
-          secureTextEntry
+          secureTextEntry={true}
         />
 
         <TextInput
@@ -97,7 +97,7 @@ export default function RegisterScreen({ navigation }) {
           placeholder="Confirm Password"
           value={formData.password_confirm}
           onChangeText={(value) => updateField('password_confirm', value)}
-          secureTextEntry
+          secureTextEntry={true}
         />
 
         <View style={styles.pickerContainer}>
@@ -116,7 +116,7 @@ export default function RegisterScreen({ navigation }) {
         <TouchableOpacity
           style={styles.button}
           onPress={handleRegister}
-          disabled={loading}
+          disabled={loading === true}
         >
           <Text style={styles.buttonText}>
             {loading ? 'Registering...' : 'Register'}
