@@ -30,11 +30,23 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Handle network errors
+    if (!error.response) {
+      console.error('Network Error: Cannot connect to backend server');
+      console.error('Make sure the Django backend is running on http://localhost:8000');
+      return Promise.reject(new Error('Network Error: Cannot connect to backend server'));
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
         const refreshToken = localStorage.getItem('refreshToken');
+        
+        if (!refreshToken) {
+          throw new Error('No refresh token available');
+        }
+
         const response = await axios.post('/api/v1/users/auth/refresh/', {
           refresh: refreshToken,
         });
@@ -45,6 +57,7 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${access}`;
         return api(originalRequest);
       } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError.message);
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');

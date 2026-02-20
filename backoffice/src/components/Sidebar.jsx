@@ -1,64 +1,75 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import './Sidebar.css';
 
 const Sidebar = () => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
-        <h1>Menu</h1>
+        <div className="logo-container">
+          <div className="logo-icon">📊</div>
+          {!isCollapsed && (
+            <div className="logo-text">
+              <h1>MerchAdmin</h1>
+              <p>MANAGEMENT SYSTEM</p>
+            </div>
+          )}
+        </div>
       </div>
       <nav className="sidebar-nav">
         <NavLink 
           to="/dashboard" 
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
+          title="Dashboard"
         >
           <span className="nav-icon">📊</span>
-          Dashboard
+          {!isCollapsed && <span>Dashboard</span>}
         </NavLink>
         <NavLink 
           to="/users" 
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
+          title="Team Management"
         >
           <span className="nav-icon">👥</span>
-          Users
-        </NavLink>
-        <NavLink
-          to="/products"
-          className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
-        >
-          <span className="nav-icon">📦</span>
-          Products
-        </NavLink>
-        <NavLink
-          to="/stores"
-          className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
-        >
-          <span className="nav-icon">🏪</span>
-          Stores
+          {!isCollapsed && <span>Team Management</span>}
         </NavLink>
         <NavLink
           to="/visits"
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
+          title="Visits Control"
         >
-          <span className="nav-icon">📋</span>
-          Visits
+          <span className="nav-icon">📍</span>
+          {!isCollapsed && <span>Visits Control</span>}
         </NavLink>
         <NavLink
-          to="/inventory"
+          to="/reports"
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
+          title="Reporting"
         >
-          <span className="nav-icon">🗃️</span>
-          Inventory
+          <span className="nav-icon">📈</span>
+          {!isCollapsed && <span>Reporting</span>}
         </NavLink>
         <NavLink
-          to="/notifications"
+          to="/settings"
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
+          title="Settings"
         >
-          <span className="nav-icon">🔔</span>
-          Notifications
+          <span className="nav-icon">⚙️</span>
+          {!isCollapsed && <span>Settings</span>}
         </NavLink>
       </nav>
+      <div className="sidebar-footer">
+        <button 
+          className="collapse-btn"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+        >
+          <span className="collapse-icon">{isCollapsed ? '→' : '←'}</span>
+          {!isCollapsed && <span>Collapse Sidebar</span>}
+        </button>
+      </div>
     </aside>
   );
 };

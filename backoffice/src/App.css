@@ -1,7 +1,7 @@
 .app {
   display: flex;
   min-height: 100vh;
-  background-color: #f5f5f5;
+  background-color: #f5f7fa;
 }
 
 .main-content {
@@ -13,6 +13,7 @@
 .page-container {
   flex: 1;
   padding: 2rem;
+  overflow-y: auto;
 }
 
 .page-header {
@@ -21,10 +22,12 @@
 
 .page-header h1 {
   font-size: 2rem;
-  color: #333;
+  color: #1f2937;
   margin-bottom: 0.5rem;
+  font-weight: 600;
 }
 
 .page-header p {
-  color: #666;
+  color: #6b7280;
+  font-size: 0.875rem;
 }

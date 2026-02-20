@@ -8,6 +8,9 @@ import Stores from './pages/Stores';
 import Visits from './pages/Visits';
 import Inventory from './pages/Inventory';
 import Notifications from './pages/Notifications';
+import Reports from './pages/Reports';
+import Settings from './pages/Settings';
+import Profile from './pages/Profile';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -69,6 +72,30 @@ function App() {
           element={
             <ProtectedRoute>
               <Notifications />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute>
+              <Reports />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
             </ProtectedRoute>
           }
         />

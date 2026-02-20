@@ -39,11 +39,21 @@ const Login = () => {
 
       navigate('/dashboard');
     } catch (err) {
-      setError(
-        err.response?.data?.detail ||
-        err.response?.data?.message ||
-        'Failed to login. Please check your credentials.'
-      );
+      console.error('Login error:', err);
+      console.error('Error response:', err.response?.data);
+      console.error('Error status:', err.response?.status);
+      
+      if (err.response?.status === 401) {
+        setError('Invalid username or password. Please check your credentials.');
+      } else if (err.message === 'Network Error' || !err.response) {
+        setError('Cannot connect to the backend server. Please ensure the server is running.');
+      } else {
+        setError(
+          err.response?.data?.detail ||
+          err.response?.data?.message ||
+          'Failed to login. Please try again.'
+        );
+      }
     } finally {
       setLoading(false);
     }

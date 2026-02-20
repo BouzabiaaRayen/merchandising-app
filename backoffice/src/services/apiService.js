@@ -26,6 +26,16 @@ export const authService = {
   updateProfile: (data) =>
     api.patch('/users/profile/', data).then(r => r.data),
 
+  uploadAvatar: (file) => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    return api.patch('/users/profile/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    }).then(r => r.data);
+  },
+
   changePassword: (oldPassword, newPassword) =>
     api.post('/users/change_password/', {
       old_password: oldPassword,
