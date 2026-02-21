@@ -70,6 +70,51 @@ export const userService = {
 
   deactivateUser: (id) =>
     api.post(`/users/${id}/deactivate/`).then(r => r.data),
+
+  assignSupervisor: (merchandiserId, supervisorId) => {
+    // Convert supervisorId to integer - try multiple possible field names
+    const supervisorIdInt = parseInt(supervisorId, 10);
+    
+    // Try just the supervisor field first (most common)
+    const payload = { supervisor: supervisorIdInt };
+    
+    console.log('Assigning supervisor API call:', { 
+      merchandiserId, 
+      supervisorId, 
+      supervisorIdInt,
+      payload 
+    });
+    
+    return api.patch(`/users/${merchandiserId}/`, payload)
+      .then(r => {
+        console.log('Supervisor assignment response:', r.data);
+        return r.data;
+      })
+      .catch(err => {
+        console.error('Supervisor assignment failed:', {
+          status: err.response?.status,
+          statusText: err.response?.statusText,
+          data: err.response?.data,
+          message: err.message
+        });
+        
+        // If the first attempt failed, try alternative field names
+        if (err.response?.status === 400) {
+          console.log('Retrying with alternative field name...');
+          const altPayload = { supervisor_id: supervisorIdInt };
+          return api.patch(`/users/${merchandiserId}/`, altPayload)
+            .then(r => {
+              console.log('Supervisor assignment (retry) response:', r.data);
+              return r.data;
+            })
+            .catch(err2 => {
+              console.error('Retry also failed:', err2.response?.data);
+              throw err; // Throw original error
+            });
+        }
+        throw err;
+      });
+  },
 };
 
 // ---------------------------------------------------------------------------

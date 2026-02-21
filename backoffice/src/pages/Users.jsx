@@ -37,19 +37,68 @@ const Users = () => {
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [activeCount, setActiveCount] = useState(0);
   const [inactiveCount, setInactiveCount] = useState(0);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [selectedMerchandiser, setSelectedMerchandiser] = useState(null);
+  const [supervisors, setSupervisors] = useState([]);
+  const [selectedSupervisor, setSelectedSupervisor] = useState('');
+  const [assignError, setAssignError] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [supervisorAssignments, setSupervisorAssignments] = useState({});
 
   useEffect(() => {
     fetchUsers();
+    fetchSupervisors();
+    // Load supervisor assignments from localStorage
+    const saved = localStorage.getItem('supervisorAssignments');
+    if (saved) {
+      try {
+        setSupervisorAssignments(JSON.parse(saved));
+      } catch (e) {
+        console.error('Error loading supervisor assignments:', e);
+      }
+    }
   }, []);
 
   useEffect(() => {
     filterUsers();
   }, [users, activeTab, searchQuery]);
 
+  const fetchSupervisors = async () => {
+    try {
+      const data = await userService.getUsers({ role: 'supervisor' });
+      const supervisorList = data.results ?? [];
+      console.log('=== FETCHED SUPERVISORS ===');
+      console.log('Total supervisors:', supervisorList.length);
+      console.log('Supervisors:', supervisorList.map(s => ({
+        id: s.id,
+        name: `${s.first_name} ${s.last_name}`,
+        email: s.email
+      })));
+      setSupervisors(supervisorList);
+    } catch (err) {
+      console.error('Error fetching supervisors:', err);
+    }
+  };
+
   const fetchUsers = async () => {
     try {
-      const data = await userService.getUsers();
+      // Request expanded user data that includes supervisor info
+      const data = await userService.getUsers({ expand: 'supervisor' });
       const userList = data.results ?? [];
+      console.log('=== FETCHED USERS ===');
+      console.log('Total users:', userList.length);
+      if (userList.length > 0) {
+        console.log('Sample user object structure:', userList[0]);
+        console.log('All user fields:', Object.keys(userList[0]));
+        const merchandisers = userList.filter(u => 
+          u.role === 'merchandiser' || u.role === 'MERCHANDISER'
+        );
+        if (merchandisers.length > 0) {
+          console.log('Sample merchandiser:', merchandisers[0]);
+        }
+      }
       setUsers(userList);
       setCount(data.count ?? 0);
       
@@ -220,6 +269,129 @@ const Users = () => {
     setFormError('');
   };
 
+  const handleOpenAssignModal = (merchandiser) => {
+    setSelectedMerchandiser(merchandiser);
+    setSelectedSupervisor(merchandiser.supervisor || '');
+    setShowAssignModal(true);
+    setAssignError('');
+  };
+
+  const handleCloseAssignModal = () => {
+    setShowAssignModal(false);
+    setSelectedMerchandiser(null);
+    setSelectedSupervisor('');
+    setAssignError('');
+  };
+
+  const handleAssignSupervisor = async (e) => {
+    e.preventDefault();
+    setAssignError('');
+    setAssigning(true);
+
+    if (!selectedSupervisor) {
+      setAssignError('Please select a supervisor');
+      setAssigning(false);
+      return;
+    }
+
+    try {
+      console.log('=== ASSIGNING SUPERVISOR ===');
+      console.log('Merchandiser ID:', selectedMerchandiser.id);
+      console.log('Merchandiser object:', selectedMerchandiser);
+      console.log('Selected Supervisor ID:', selectedSupervisor);
+      console.log('Selected Supervisor type:', typeof selectedSupervisor);
+      
+      const result = await userService.assignSupervisor(selectedMerchandiser.id, selectedSupervisor);
+      console.log('=== ASSIGNMENT SUCCESS ===');
+      console.log('Result:', result);
+      console.log('Result fields:', Object.keys(result));
+      console.log('Result supervisor field:', result.supervisor);
+      console.log('Result supervisor_name field:', result.supervisor_name);
+      console.log('All result data:', JSON.stringify(result, null, 2));
+      
+      // Find the supervisor from the supervisors list
+      const supervisorId = parseInt(selectedSupervisor, 10);
+      const assignedSupervisor = supervisors.find(s => s.id === supervisorId);
+      const supervisorName = assignedSupervisor 
+        ? `${assignedSupervisor.first_name} ${assignedSupervisor.last_name}` 
+        : null;
+      
+      console.log('Assigned supervisor:', { id: supervisorId, name: supervisorName });
+      
+      // Store supervisor assignment locally
+      const newAssignments = {
+        ...supervisorAssignments,
+        [selectedMerchandiser.id]: {
+          supervisorId: supervisorId,
+          supervisorName: supervisorName
+        }
+      };
+      setSupervisorAssignments(newAssignments);
+      localStorage.setItem('supervisorAssignments', JSON.stringify(newAssignments));
+      
+      setSuccessMessage('Supervisor assigned successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+      setShowAssignModal(false);
+      
+      // Refresh users list
+      await fetchUsers();
+    } catch (err) {
+      console.error('=== ASSIGNMENT ERROR ===');
+      console.error('Full error:', err);
+      console.error('Error response:', err.response?.data);
+      console.error('Error status:', err.response?.status);
+      console.error('Error headers:', err.response?.headers);
+      
+      let errorMessage = 'Failed to assign supervisor';
+      if (err.response?.data) {
+        if (typeof err.response.data === 'string') {
+          errorMessage = err.response.data;
+        } else if (err.response.data.detail) {
+          errorMessage = err.response.data.detail;
+        } else if (err.response.data.supervisor) {
+          errorMessage = `Supervisor: ${Array.isArray(err.response.data.supervisor) ? err.response.data.supervisor.join(', ') : err.response.data.supervisor}`;
+        } else {
+          errorMessage = JSON.stringify(err.response.data);
+        }
+      }
+      setAssignError(errorMessage);
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const handleOpenViewModal = (user) => {
+    setSelectedUser(user);
+    setShowViewModal(true);
+  };
+
+  const handleCloseViewModal = () => {
+    setShowViewModal(false);
+    setSelectedUser(null);
+  };
+
+  const handleDeleteUser = async (user) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete user "${user.username}"?\n\n` +
+      `Name: ${user.first_name} ${user.last_name}\n` +
+      `Email: ${user.email}\n\n` +
+      `This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await userService.deleteUser(user.id);
+      setSuccessMessage(`User "${user.username}" deleted successfully!`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+      await fetchUsers();
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      const errorMessage = err.response?.data?.detail || err.response?.data?.error || 'Failed to delete user';
+      alert(`Error: ${errorMessage}`);
+    }
+  };
+
   return (
     <div className="app">
       <Sidebar />
@@ -330,12 +502,61 @@ const Users = () => {
                             </span>
                           </td>
                           <td>
-                            <span className="supervisor-name">{user.supervisor_name || '-'}</span>
+                            <span className="supervisor-name">
+                              {(() => {
+                                // First check locally stored assignments
+                                const localAssignment = supervisorAssignments[user.id];
+                                if (localAssignment && localAssignment.supervisorName) {
+                                  return localAssignment.supervisorName;
+                                }
+                                
+                                // Then check if supervisor_name exists from backend
+                                if (user.supervisor_name) return user.supervisor_name;
+                                
+                                // Try all possible supervisor field names from backend
+                                const supervisorId = user.supervisor || user.supervisor_id || user.assignedSupervisor;
+                                
+                                if (supervisorId) {
+                                  const supervisor = supervisors.find(s => s.id === supervisorId);
+                                  if (supervisor) {
+                                    return `${supervisor.first_name} ${supervisor.last_name}`;
+                                  }
+                                }
+                                
+                                // Only show "-" for non-merchandisers
+                                if (user.role !== 'merchandiser' && user.role !== 'MERCHANDISER') {
+                                  return 'N/A';
+                                }
+                                
+                                return '-';
+                              })()}
+                            </span>
                           </td>
                           <td>
                             <div className="action-buttons">
-                              <button className="action-btn-icon edit" title="Edit">✏️</button>
-                              <button className="action-btn-icon view" title="View">👁️</button>
+                              <button 
+                                className="action-btn-icon delete" 
+                                title="Delete User"
+                                onClick={() => handleDeleteUser(user)}
+                              >
+                                ✏️
+                              </button>
+                              <button 
+                                className="action-btn-icon view" 
+                                title="View"
+                                onClick={() => handleOpenViewModal(user)}
+                              >
+                                👁️
+                              </button>
+                              {(user.role === 'merchandiser' || user.role === 'MERCHANDISER') && (
+                                <button
+                                  className="action-btn-icon assign"
+                                  onClick={() => handleOpenAssignModal(user)}
+                                  title="Assign Supervisor"
+                                >
+                                  👤
+                                </button>
+                              )}
                               <button
                                 className={`action-btn-icon ${user.is_active ? 'delete' : 'activate'}`}
                                 onClick={() => handleToggleActive(user)}
@@ -508,6 +729,184 @@ const Users = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Supervisor Modal */}
+      {showAssignModal && (
+        <div className="modal-overlay" onClick={handleCloseAssignModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Assign Supervisor</h2>
+              <button className="close-btn" onClick={handleCloseAssignModal}>×</button>
+            </div>
+            <form onSubmit={handleAssignSupervisor}>
+              <div className="form-body">
+                {assignError && (
+                  <div className="form-error">{assignError}</div>
+                )}
+                
+                <div className="assign-info">
+                  <p>
+                    <strong>Merchandiser:</strong> {selectedMerchandiser?.first_name} {selectedMerchandiser?.last_name}
+                  </p>
+                  <p>
+                    <strong>Email:</strong> {selectedMerchandiser?.email}
+                  </p>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="supervisor">Select Supervisor *</label>
+                  <select
+                    id="supervisor"
+                    value={selectedSupervisor}
+                    onChange={(e) => setSelectedSupervisor(e.target.value)}
+                    required
+                  >
+                    <option value="">-- Choose a supervisor --</option>
+                    {supervisors.map((sup) => (
+                      <option key={sup.id} value={sup.id}>
+                        {sup.first_name} {sup.last_name} ({sup.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn-cancel" onClick={handleCloseAssignModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-submit" disabled={assigning}>
+                  {assigning ? 'Assigning...' : 'Assign Supervisor'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* View User Modal */}
+      {showViewModal && selectedUser && (
+        <div className="modal-overlay" onClick={handleCloseViewModal}>
+          <div className="modal-content view-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>User Details</h2>
+              <button className="close-btn" onClick={handleCloseViewModal}>×</button>
+            </div>
+            <div className="form-body">
+              <div className="user-detail-card">
+                <div className="user-avatar-large">
+                  <span>{selectedUser.username?.substring(0, 2).toUpperCase() || 'U'}</span>
+                </div>
+                
+                <div className="user-detail-section">
+                  <h3>Personal Information</h3>
+                  <div className="detail-grid">
+                    <div className="detail-item">
+                      <span className="detail-label">Username</span>
+                      <span className="detail-value">{selectedUser.username || '-'}</span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">First Name</span>
+                      <span className="detail-value">{selectedUser.first_name || '-'}</span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">Last Name</span>
+                      <span className="detail-value">{selectedUser.last_name || '-'}</span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">Email</span>
+                      <span className="detail-value">{selectedUser.email || '-'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="user-detail-section">
+                  <h3>Role & Status</h3>
+                  <div className="detail-grid">
+                    <div className="detail-item">
+                      <span className="detail-label">Role</span>
+                      <span className="detail-value">
+                        <span className={`role-badge ${(selectedUser.role || '').toLowerCase()}`}>
+                          {ROLE_LABELS[selectedUser.role] ?? selectedUser.role ?? 'N/A'}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">Status</span>
+                      <span className="detail-value">
+                        <span className={`status-badge ${selectedUser.is_active ? 'active' : 'inactive'}`}>
+                          ● {selectedUser.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">User ID</span>
+                      <span className="detail-value">{selectedUser.id || '-'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {(selectedUser.role === 'merchandiser' || selectedUser.role === 'MERCHANDISER') && (
+                  <div className="user-detail-section">
+                    <h3>Assigned Supervisor</h3>
+                    <div className="detail-grid">
+                      <div className="detail-item full-width">
+                        <span className="detail-label">Supervisor</span>
+                        <span className="detail-value supervisor-info">
+                          {(() => {
+                            // First check locally stored assignments
+                            const localAssignment = supervisorAssignments[selectedUser.id];
+                            if (localAssignment && localAssignment.supervisorName) {
+                              return (
+                                <>
+                                  <span className="supervisor-icon">👤</span>
+                                  {localAssignment.supervisorName}
+                                </>
+                              );
+                            }
+                            
+                            // Check if supervisor_name exists from backend
+                            if (selectedUser.supervisor_name) {
+                              return (
+                                <>
+                                  <span className="supervisor-icon">👤</span>
+                                  {selectedUser.supervisor_name}
+                                </>
+                              );
+                            }
+                            
+                            // Try to find supervisor by ID
+                            if (selectedUser.supervisor) {
+                              const supervisor = supervisors.find(s => s.id === selectedUser.supervisor);
+                              if (supervisor) {
+                                return (
+                                  <>
+                                    <span className="supervisor-icon">👤</span>
+                                    {supervisor.first_name} {supervisor.last_name}
+                                  </>
+                                );
+                              }
+                            }
+                            
+                            // No supervisor assigned
+                            return <span className="no-supervisor">No supervisor assigned</span>;
+                          })()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" className="btn-cancel" onClick={handleCloseViewModal}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

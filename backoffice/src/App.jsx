@@ -5,7 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Users from './pages/Users';
 import Products from './pages/Products';
 import Stores from './pages/Stores';
-import Visits from './pages/Visits';
+import VisitsTracking from './pages/VisitsTracking';
 import Inventory from './pages/Inventory';
 import Notifications from './pages/Notifications';
 import Reports from './pages/Reports';
@@ -36,26 +36,10 @@ function App() {
           }
         />
         <Route
-          path="/products"
+          path="/visits-tracking"
           element={
             <ProtectedRoute>
-              <Products />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/stores"
-          element={
-            <ProtectedRoute>
-              <Stores />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/visits"
-          element={
-            <ProtectedRoute>
-              <Visits />
+              <VisitsTracking />
             </ProtectedRoute>
           }
         />

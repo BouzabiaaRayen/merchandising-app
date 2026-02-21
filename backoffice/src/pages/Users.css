@@ -208,6 +208,10 @@
   animation: slideUp 0.3s ease;
 }
 
+.modal-content.view-modal {
+  max-width: 700px;
+}
+
 @keyframes slideUp {
   from {
     transform: translateY(20px);
@@ -267,6 +271,33 @@
   border-radius: 8px;
   margin-bottom: 1rem;
   font-size: 0.875rem;
+}
+
+.assign-info {
+  padding: 1rem;
+  background-color: #f9fafb;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  border: 1px solid #e5e7eb;
+}
+
+.assign-info p {
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.assign-info p:first-child {
+  margin-top: 0;
+}
+
+.assign-info p:last-child {
+  margin-bottom: 0;
+}
+
+.assign-info strong {
+  color: #1f2937;
+  font-weight: 600;
 }
 
 .form-row {
@@ -557,6 +588,10 @@
   background-color: #f0fdf4;
 }
 
+.action-btn-icon.assign:hover {
+  background-color: #f5f3ff;
+}
+
 /* Pagination */
 .pagination {
   display: flex;
@@ -601,4 +636,91 @@
   background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
   color: white;
   border-color: transparent;
+}
+
+/* View User Modal Styles */
+.user-detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.user-avatar-large {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 2rem;
+  font-weight: 600;
+  margin: 0 auto 1rem;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.user-detail-section {
+  padding: 1.5rem;
+  background-color: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.user-detail-section h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1f2937;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 0.5rem;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.detail-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.detail-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.detail-value {
+  font-size: 0.875rem;
+  color: #1f2937;
+  font-weight: 500;
+}
+
+.supervisor-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background-color: white;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.supervisor-icon {
+  font-size: 1.25rem;
+}
+
+.no-supervisor {
+  color: #9ca3af;
+  font-style: italic;
 }

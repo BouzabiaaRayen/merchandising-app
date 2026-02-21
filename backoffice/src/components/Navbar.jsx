@@ -55,7 +55,7 @@ const Navbar = () => {
     const path = location.pathname;
     if (path.includes('dashboard')) return 'Dashboard Overview';
     if (path.includes('users')) return 'Team Management';
-    if (path.includes('visits')) return 'Visits Control';
+    if (path.includes('visits')) return 'Visits Tracking';
     if (path.includes('reports')) return 'Reporting';
     if (path.includes('settings')) return 'Settings';
     return 'Dashboard';

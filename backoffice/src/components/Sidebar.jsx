@@ -36,12 +36,12 @@ const Sidebar = () => {
           {!isCollapsed && <span>Team Management</span>}
         </NavLink>
         <NavLink
-          to="/visits"
+          to="/visits-tracking"
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
-          title="Visits Control"
+          title="Visits Tracking"
         >
-          <span className="nav-icon">📍</span>
-          {!isCollapsed && <span>Visits Control</span>}
+          <span className="nav-icon">🗺️</span>
+          {!isCollapsed && <span>Visits Tracking</span>}
         </NavLink>
         <NavLink
           to="/reports"
