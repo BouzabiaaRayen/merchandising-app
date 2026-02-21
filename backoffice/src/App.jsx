@@ -36,6 +36,14 @@ function App() {
           }
         />
         <Route
+          path="/stores"
+          element={
+            <ProtectedRoute>
+              <Stores />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/visits-tracking"
           element={
             <ProtectedRoute>

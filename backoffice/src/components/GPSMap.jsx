@@ -1,8 +1,9 @@
-import React from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
+import React, { useEffect, useState } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './GPSMap.css';
+import { storeService } from '../services/apiService';
 
 // Fix for default marker icons in React-Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -12,18 +13,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
 
-// Custom marker icons
-const createIcon = (color) => {
-  return L.divIcon({
-    className: 'custom-marker',
-    html: `<div class="marker-pin ${color}"></div>`,
-    iconSize: [30, 42],
-    iconAnchor: [15, 42],
-    popupAnchor: [0, -42],
-  });
-};
-
-// Store marker icon (different design)
+// Store marker icon
 const createStoreIcon = () => {
   return L.divIcon({
     className: 'store-marker',
@@ -34,57 +24,105 @@ const createStoreIcon = () => {
   });
 };
 
-const activeIcon = createIcon('active');
-const completedIcon = createIcon('completed');
-const alertIcon = createIcon('alert');
 const storeIcon = createStoreIcon();
 
-// Tunisia geographical bounds
-const tunisiaBounds = [
-  [30.2, 7.5],   // Southwest corner
-  [37.5, 11.6]   // Northeast corner
-];
+// Component to auto-fit map bounds to all markers
+const AutoFitBounds = ({ stores }) => {
+  const map = useMap();
 
-const GPSMap = ({ locations = [], stores = [], center = [34.0, 9.0], zoom = 7 }) => {
-  const getIcon = (status) => {
-    switch (status) {
-      case 'active':
-      case 'in_progress':
-        return activeIcon;
-      case 'completed':
-        return completedIcon;
-      case 'alert':
-      case 'delayed':
-        return alertIcon;
-      default:
-        return activeIcon;
+  useEffect(() => {
+    if (stores && stores.length > 0) {
+      const validStores = stores.filter(
+        store => store.latitude && store.longitude
+      );
+
+      if (validStores.length > 0) {
+        const bounds = L.latLngBounds(
+          validStores.map(store => [store.latitude, store.longitude])
+        );
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      }
+    }
+  }, [stores, map]);
+
+  return null;
+};
+
+const GPSMap = ({ externalStores = null }) => {
+  const [stores, setStores] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    // If external stores are provided, use them instead of fetching
+    if (externalStores !== null) {
+      setStores(externalStores);
+      setLoading(false);
+      return;
+    }
+
+    // Otherwise fetch from backend
+    fetchStores();
+  }, [externalStores]);
+
+  const fetchStores = async () => {
+    try {
+      setLoading(true);
+      const data = await storeService.getStores();
+      setStores(data.results ?? []);
+      setError('');
+    } catch (err) {
+      console.error('Error fetching stores for map:', err);
+      setError('Failed to load store locations');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'active':
-      case 'in_progress':
-        return '#10b981'; // green
-      case 'completed':
-        return '#3b82f6'; // blue
-      case 'alert':
-      case 'delayed':
-        return '#ef4444'; // red
-      default:
-        return '#6b7280'; // gray
-    }
+  // Default center for Tunisia
+  const defaultCenter = [34.0, 9.0];
+  const defaultZoom = 7;
+
+  // Helper to convert coordinate to number
+  const toNumber = (val) => {
+    if (typeof val === 'number') return val;
+    const num = parseFloat(val);
+    return isNaN(num) ? null : num;
   };
+
+  // Filter stores that have valid coordinates
+  const validStores = stores.filter(store => {
+    const lat = toNumber(store.latitude);
+    const lng = toNumber(store.longitude);
+    return lat !== null && lng !== null && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+  }).map(store => ({
+    ...store,
+    latitude: toNumber(store.latitude),
+    longitude: toNumber(store.longitude)
+  }));
 
   return (
     <div className="gps-map-wrapper">
+      {loading && (
+        <div className="map-loading">
+          <div>Loading map...</div>
+        </div>
+      )}
+      {error && (
+        <div className="map-error">
+          <div>{error}</div>
+        </div>
+      )}
+      {!loading && validStores.length === 0 && (
+        <div className="map-empty">
+          <div>No stores with coordinates found</div>
+        </div>
+      )}
       <MapContainer
-        center={center}
-        zoom={zoom}
+        center={defaultCenter}
+        zoom={defaultZoom}
         minZoom={6}
         maxZoom={18}
-        maxBounds={tunisiaBounds}
-        maxBoundsViscosity={1.0}
         scrollWheelZoom={true}
         style={{ height: '100%', width: '100%', borderRadius: '8px' }}
       >
@@ -93,47 +131,11 @@ const GPSMap = ({ locations = [], stores = [], center = [34.0, 9.0], zoom = 7 })
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {locations.map((location, index) => (
-          <React.Fragment key={index}>
-            <Marker
-              position={[location.latitude, location.longitude]}
-              icon={getIcon(location.status)}
-            >
-              <Popup>
-                <div className="map-popup">
-                  <h3>{location.name || location.merchandiser_name || 'Unknown'}</h3>
-                  {location.store_name && (
-                    <p><strong>Store:</strong> {location.store_name}</p>
-                  )}
-                  <p><strong>Status:</strong> <span className={`status-${location.status}`}>{location.status}</span></p>
-                  {location.updated_at && (
-                    <p><strong>Last Update:</strong> {new Date(location.updated_at).toLocaleString()}</p>
-                  )}
-                  {location.accuracy && (
-                    <p><strong>Accuracy:</strong> {location.accuracy}m</p>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-
-            {/* Accuracy circle */}
-            {location.accuracy && (
-              <Circle
-                center={[location.latitude, location.longitude]}
-                radius={location.accuracy}
-                pathOptions={{
-                  color: getStatusColor(location.status),
-                  fillColor: getStatusColor(location.status),
-                  fillOpacity: 0.1,
-                  weight: 1,
-                }}
-              />
-            )}
-          </React.Fragment>
-        ))}
+        {/* Auto-fit bounds to show all stores */}
+        <AutoFitBounds stores={validStores} />
 
         {/* Store markers */}
-        {stores.map((store, index) => (
+        {validStores.map((store) => (
           <Marker
             key={`store-${store.id}`}
             position={[store.latitude, store.longitude]}
@@ -142,16 +144,21 @@ const GPSMap = ({ locations = [], stores = [], center = [34.0, 9.0], zoom = 7 })
             <Popup>
               <div className="map-popup store-popup">
                 <h3>🏪 {store.name}</h3>
+                {store.brand && (
+                  <p><strong>Brand:</strong> {store.brand}</p>
+                )}
                 {store.address && (
                   <p><strong>Address:</strong> {store.address}</p>
                 )}
                 {store.city && (
                   <p><strong>City:</strong> {store.city}</p>
                 )}
-                {store.type && (
-                  <p><strong>Type:</strong> {store.type}</p>
+                {store.phone && (
+                  <p><strong>Phone:</strong> {store.phone}</p>
                 )}
-                <p><strong>Status:</strong> <span className={`status-${store.status}`}>{store.status}</span></p>
+                <p className="coordinates">
+                  📍 {typeof store.latitude === 'number' ? store.latitude.toFixed(4) : store.latitude}, {typeof store.longitude === 'number' ? store.longitude.toFixed(4) : store.longitude}
+                </p>
               </div>
             </Popup>
           </Marker>
