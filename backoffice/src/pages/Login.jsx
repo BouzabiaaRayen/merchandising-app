@@ -35,6 +35,10 @@ const Login = () => {
       localStorage.setItem('refreshToken', refresh);
 
       const profile = await authService.getProfile();
+      console.log('=== LOGIN PROFILE DEBUG ===');
+      console.log('Profile after login:', JSON.stringify(profile, null, 2));
+      console.log('Avatar URL:', profile.avatar_url || profile.avatar);
+      console.log('=========================');
       localStorage.setItem('user', JSON.stringify(profile));
 
       navigate('/dashboard');

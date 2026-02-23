@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { notificationService } from '../services/apiService';
+import { notificationService, authService } from '../services/apiService';
 import './Navbar.css';
 
 const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const [user, setUser] = useState(JSON.parse(localStorage.getItem('user') || '{}'));
   const [searchQuery, setSearchQuery] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -28,6 +28,27 @@ const Navbar = () => {
     // Refresh count every 30 seconds
     const interval = setInterval(fetchUnreadCount, 30000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Listen for profile updates (avatar changes from Supabase)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const updatedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      console.log('Navbar: User data updated', updatedUser);
+      console.log('Navbar: Avatar URL:', updatedUser.avatar_url || updatedUser.avatar);
+      setUser(updatedUser);
+    };
+
+    // Listen for storage events from other tabs/windows
+    window.addEventListener('storage', handleStorageChange);
+
+    // Custom event for same-window updates
+    window.addEventListener('profileUpdated', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('profileUpdated', handleStorageChange);
+    };
   }, []);
 
   const fetchUnreadCount = async () => {
@@ -106,8 +127,12 @@ const Navbar = () => {
                 onClick={() => setShowUserMenu(!showUserMenu)}
               >
                 <div className="user-avatar">
-                  {user.avatar ? (
-                    <img src={user.avatar} alt="Avatar" className="user-avatar-image" />
+                  {(user.avatar_url || user.avatar) ? (
+                    <img 
+                      src={(user.avatar_url || user.avatar).trim().replace(/\?$/, '')} 
+                      alt="Avatar" 
+                      className="user-avatar-image" 
+                    />
                   ) : (
                     <span>{user.username ? user.username.substring(0, 2).toUpperCase() : 'AU'}</span>
                   )}

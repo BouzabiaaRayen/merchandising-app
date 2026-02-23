@@ -43,10 +43,61 @@ const Profile = () => {
     loadProfile();
   }, []);
 
+  // Debug avatar preview changes
+  useEffect(() => {
+    console.log('👁️ Avatar preview state changed:', avatarPreview);
+    
+    // Test if the URL is accessible
+    if (avatarPreview) {
+      console.log('🧪 Testing if avatar URL is accessible...');
+      console.log('   Full URL:', avatarPreview);
+      console.log('   URL breakdown:');
+      try {
+        const url = new URL(avatarPreview);
+        console.log('   - Protocol:', url.protocol);
+        console.log('   - Host:', url.hostname);
+        console.log('   - Path:', url.pathname);
+        console.log('   - Search:', url.search);
+      } catch (e) {
+        console.error('   Invalid URL format:', e);
+      }
+      
+      fetch(avatarPreview, { method: 'HEAD', mode: 'cors' })
+        .then(response => {
+          console.log('📡 Avatar URL response:');
+          console.log('   Status:', response.status);
+          console.log('   Status Text:', response.statusText);
+          console.log('   OK:', response.ok);
+          console.log('   Content-Type:', response.headers.get('content-type'));
+          console.log('   Access-Control-Allow-Origin:', response.headers.get('access-control-allow-origin'));
+          if (response.status === 400) {
+            console.error('❌ 400 Bad Request - The URL format or bucket configuration is incorrect');
+            console.error('   Common causes:');
+            console.error('   1. Wrong bucket name (check case sensitivity)');
+            console.error('   2. File does not exist at this path');
+            console.error('   3. Incorrect Supabase Storage URL structure');
+          } else if (!response.ok) {
+            console.error('❌ Avatar URL returned error status:', response.status);
+          }
+        })
+        .catch(error => {
+          console.error('❌ Failed to fetch avatar URL:', error);
+          console.error('   This might be a CORS issue or the URL is not accessible');
+        });
+    }
+  }, [avatarPreview]);
+
   const loadProfile = async () => {
     try {
       setLoading(true);
       const profile = await authService.getProfile();
+      
+      console.log('=== PROFILE DEBUG ===');
+      console.log('Full profile object:', JSON.stringify(profile, null, 2));
+      console.log('profile.avatar:', profile.avatar);
+      console.log('profile.avatar_url:', profile.avatar_url);
+      console.log('All profile keys:', Object.keys(profile));
+      console.log('===================');
       
       setFormData({
         firstName: profile.first_name || '',
@@ -65,12 +116,23 @@ const Profile = () => {
         weeklyReport: profile.weekly_report ?? false,
       });
 
-      if (profile.avatar) {
-        setAvatarPreview(profile.avatar);
+      // Set avatar preview - try both avatar_url and avatar fields
+      let avatarUrl = profile.avatar_url || profile.avatar;
+      if (avatarUrl) {
+        // Clean up the URL - remove trailing ? or other artifacts
+        avatarUrl = avatarUrl.trim().replace(/\?$/, '');
+        console.log('✅ Setting avatar to:', avatarUrl);
+        setAvatarPreview(avatarUrl);
+      } else {
+        console.log('❌ No avatar found in profile data');
+        setAvatarPreview(null);
       }
 
-      // Update localStorage
+      // Update localStorage with profile data (for user info only, not avatar persistence)
       localStorage.setItem('user', JSON.stringify(profile));
+      
+      // Notify other components (like Navbar) that profile was updated
+      window.dispatchEvent(new Event('profileUpdated'));
       
       setLoading(false);
     } catch (error) {
@@ -78,7 +140,7 @@ const Profile = () => {
       setErrorMessage('Failed to load profile data');
       setLoading(false);
       
-      // Try to load from localStorage as fallback
+      // Try to load basic info from localStorage as fallback (but not avatar)
       const cachedUser = JSON.parse(localStorage.getItem('user') || '{}');
       if (cachedUser.username) {
         setFormData(prev => ({
@@ -136,13 +198,21 @@ const Profile = () => {
   const handleAvatarUpload = async () => {
     if (!avatarFile) return;
 
+    let progressInterval = null; // Declare outside try block
+
     try {
       setUploading(true);
       setUploadProgress(0);
       setErrorMessage('');
 
+      console.log('=== STARTING AVATAR UPLOAD ===');
+      console.log('File name:', avatarFile.name);
+      console.log('File type:', avatarFile.type);
+      console.log('File size:', avatarFile.size, 'bytes');
+      console.log('=============================');
+
       // Simulate progress (in real scenario, use axios progress event)
-      const progressInterval = setInterval(() => {
+      progressInterval = setInterval(() => {
         setUploadProgress(prev => {
           if (prev >= 90) {
             clearInterval(progressInterval);
@@ -154,14 +224,38 @@ const Profile = () => {
 
       const updatedProfile = await authService.uploadAvatar(avatarFile);
       
+      console.log('=== UPLOAD RESPONSE DEBUG ===');
+      console.log('Full upload response:', JSON.stringify(updatedProfile, null, 2));
+      console.log('updatedProfile.avatar:', updatedProfile.avatar);
+      console.log('updatedProfile.avatar_url:', updatedProfile.avatar_url);
+      console.log('All response keys:', Object.keys(updatedProfile));
+      console.log('============================');
+      
       clearInterval(progressInterval);
       setUploadProgress(100);
 
-      // Update localStorage
-      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-      localStorage.setItem('user', JSON.stringify({ ...currentUser, avatar: updatedProfile.avatar }));
+      // Update avatar preview - try both avatar_url and avatar fields
+      let avatarUrl = updatedProfile.avatar_url || updatedProfile.avatar;
+      if (avatarUrl) {
+        // Clean up the URL - remove trailing ? or other artifacts
+        avatarUrl = avatarUrl.trim().replace(/\?$/, '');
+        console.log('✅ Setting uploaded avatar to:', avatarUrl);
+        setAvatarPreview(avatarUrl);
+        
+        // Update localStorage and notify other components
+        const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+        const cleanedProfile = {
+          ...currentUser,
+          avatar_url: avatarUrl,
+          avatar: updatedProfile.avatar ? updatedProfile.avatar.trim().replace(/\?$/, '') : null
+        };
+        localStorage.setItem('user', JSON.stringify(cleanedProfile));
+        window.dispatchEvent(new Event('profileUpdated'));
+      } else {
+        console.log('❌ No avatar URL in upload response');
+      }
 
-      setSuccessMessage('Avatar uploaded successfully!');
+      setSuccessMessage('Avatar uploaded to Supabase Storage successfully!');
       setTimeout(() => {
         setSuccessMessage('');
         setUploadProgress(0);
@@ -170,8 +264,29 @@ const Profile = () => {
 
       setUploading(false);
     } catch (error) {
-      console.error('Failed to upload avatar:', error);
-      setErrorMessage(error.response?.data?.avatar?.[0] || 'Failed to upload avatar');
+      clearInterval(progressInterval);
+      console.error('=== UPLOAD ERROR ===');
+      console.error('Error object:', error);
+      console.error('Error message:', error.message);
+      console.error('Error response:', error.response);
+      console.error('Response status:', error.response?.status);
+      console.error('Response data:', error.response?.data);
+      console.error('Response headers:', error.response?.headers);
+      console.error('==================');
+      
+      // Better error messages
+      let errorMsg = 'Failed to upload avatar';
+      if (error.response?.status === 413) {
+        errorMsg = 'File is too large. Please use a smaller image.';
+      } else if (error.response?.status === 400) {
+        errorMsg = error.response?.data?.avatar?.[0] || error.response?.data?.detail || 'Invalid file format or size';
+      } else if (error.response?.status === 500) {
+        errorMsg = 'Server error. Check backend configuration.';
+      } else if (error.response?.data) {
+        errorMsg = error.response.data.avatar?.[0] || error.response.data.detail || error.response.data.message || errorMsg;
+      }
+      
+      setErrorMessage(errorMsg);
       setUploadProgress(0);
       setUploading(false);
     }
@@ -203,10 +318,10 @@ const Profile = () => {
         weekly_report: formData.weeklyReport,
       };
 
-      const updatedProfile = await authService.updateProfile(updateData);
+      await authService.updateProfile(updateData);
       
-      // Update localStorage
-      localStorage.setItem('user', JSON.stringify(updatedProfile));
+      // Reload the complete profile to ensure we have the latest data including avatar
+      await loadProfile();
 
       setSuccessMessage('Profile updated successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
@@ -371,7 +486,27 @@ const Profile = () => {
                     <div className="avatar-container">
                       <div className="avatar-large">
                         {avatarPreview ? (
-                          <img src={avatarPreview} alt="Avatar" className="avatar-image" />
+                          <img 
+                            src={avatarPreview} 
+                            alt="Avatar" 
+                            className="avatar-image"
+                            onLoad={() => {
+                              console.log('✅ Avatar image loaded successfully');
+                              console.log('   URL:', avatarPreview);
+                            }}
+                            onError={(e) => {
+                              console.error('❌ Failed to load avatar image');
+                              console.error('   URL:', avatarPreview);
+                              console.error('   Error type:', e.type);
+                              console.error('   Target:', e.target);
+                              console.log('🔍 Debugging info:');
+                              console.log('   - Check if URL is accessible in new tab');
+                              console.log('   - Check browser Network tab for CORS errors');
+                              console.log('   - Check if Supabase bucket is public');
+                              console.log('   - Try accessing:', avatarPreview);
+                            }}
+                            crossOrigin="anonymous"
+                          />
                         ) : (
                           <span>{getUserInitials()}</span>
                         )}
