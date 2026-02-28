@@ -2,6 +2,16 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService, userService } from '../services/apiService';
 
+// Utility to clear AsyncStorage for debugging or resetting auth state
+export const clearAuthStorage = async () => {
+  try {
+    await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'user']);
+    console.log('Auth storage cleared.');
+  } catch (error) {
+    console.error('Error clearing auth storage:', error);
+  }
+};
+
 const AuthContext = createContext();
 
 export const useAuth = () => {
@@ -46,6 +56,7 @@ export const AuthProvider = ({ children }) => {
 
       return { success: true };
     } catch (error) {
+      console.error('Login error:', error.response?.status, error.response?.data, error.message);
       if (!error.response) {
         return {
           success: false,

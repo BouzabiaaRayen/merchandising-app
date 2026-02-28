@@ -8,6 +8,8 @@ import Constants from 'expo-constants';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl ?? 'http://10.0.2.2:8000/api/v1';
 
+console.log('API_BASE_URL:', API_BASE_URL);
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -35,11 +37,20 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    console.log('API Error:', error.response?.status, error.response?.data, error.message);
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
         const refreshToken = await AsyncStorage.getItem('refreshToken');
+        
+        // Don't attempt refresh if we don't have a refresh token
+        if (!refreshToken) {
+          await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'user']);
+          return Promise.reject(new Error('No refresh token available - please login again'));
+        }
+        
         const response = await axios.post(`${API_BASE_URL}/users/auth/refresh/`, {
           refresh: refreshToken,
         });
