@@ -19,6 +19,21 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
+.stat-card.alert-active {
+  border: 2px solid #ef4444;
+  background: linear-gradient(135deg, #fff 0%, #fef2f2 100%);
+  animation: pulse-alert 2s infinite;
+}
+
+@keyframes pulse-alert {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  }
+  50% {
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
+  }
+}
+
 .stat-header {
   display: flex;
   justify-content: space-between;

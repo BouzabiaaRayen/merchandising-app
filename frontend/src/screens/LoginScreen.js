@@ -27,6 +27,9 @@ export default function LoginScreen({ navigation }) {
 
     if (!result.success) {
       Alert.alert('Login Failed', result.error);
+    } else {
+      // Login successful - Navigation component will handle the redirect
+      console.log('Login successful, navigating to home...');
     }
   };
 

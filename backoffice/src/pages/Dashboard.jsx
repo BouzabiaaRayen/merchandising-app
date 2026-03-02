@@ -29,7 +29,12 @@ const Dashboard = () => {
     
     // Refresh GPS locations every 30 seconds
     const gpsInterval = setInterval(fetchGPSLocations, 30000);
-    return () => clearInterval(gpsInterval);
+    // Refresh stats (including GPS alerts) every 15 seconds
+    const statsInterval = setInterval(fetchStats, 15000);
+    return () => {
+      clearInterval(gpsInterval);
+      clearInterval(statsInterval);
+    };
   }, []);
 
   const fetchStats = async () => {
@@ -61,10 +66,27 @@ const Dashboard = () => {
       ]);
 
       // Fetch GPS alerts (urgent notifications)
-      const alertsRes = await notificationService.getUrgent().catch(err => {
-        console.error('Failed to fetch alerts:', err.response?.data || err.message);
-        return { count: 0 };
+      let alertsRes = await notificationService.getUrgent().catch(err => {
+        console.error('Failed to fetch alerts from urgent endpoint:', err.response?.data || err.message);
+        return null;
       });
+
+      // Fallback: if urgent endpoint fails or returns nothing, filter all notifications
+      if (!alertsRes || (!alertsRes.count && !alertsRes.results?.length)) {
+        console.log('Trying fallback: fetching all notifications and filtering by GPS_ALERT type');
+        const allNotifs = await notificationService.getNotifications().catch(err => {
+          console.error('Failed to fetch notifications:', err.response?.data || err.message);
+          return { results: [] };
+        });
+        const gpsAlerts = (allNotifs.results || []).filter(n => 
+          n.type === 'GPS_ALERT' || n.notification_type === 'GPS_ALERT'
+        );
+        alertsRes = { results: gpsAlerts, count: gpsAlerts.length };
+      }
+
+      // Handle both count and results array formats
+      const gpsAlertsCount = alertsRes?.count || alertsRes?.results?.length || 0;
+      console.log('GPS Alerts response:', alertsRes, 'Count:', gpsAlertsCount);
 
       setStats({
         totalMerchandisers: merchandisersRes.count || 0,
@@ -74,7 +96,7 @@ const Dashboard = () => {
         activeVisits: activeVisitsRes.count || 0,
         completedVisits: completedVisitsRes.count || 0,
         completedVisitsChange: 0, // Calculate from historical data if available
-        gpsAlerts: alertsRes.count || 0,
+        gpsAlerts: gpsAlertsCount,
       });
     } catch (error) {
       console.error('Failed to fetch stats:', error.response?.data || error.message);
@@ -284,10 +306,10 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <div className="stat-card">
+                <div className={`stat-card ${stats.gpsAlerts > 0 ? 'alert-active' : ''}`}>
                   <div className="stat-header">
                     <div className="stat-icon alerts">⚠</div>
-                    <div className="stat-badge">Today</div>
+                    <div className="stat-badge">Live</div>
                   </div>
                   <div className="stat-content">
                     <h3>GPS Alerts</h3>

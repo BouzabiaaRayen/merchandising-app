@@ -6,30 +6,454 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert,
+  RefreshControl
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
+import { useAuth } from '../contexts/AuthContext';
+import { visitService, storeService, notificationService } from '../services/apiService';
+import StoreMap from '../components/StoreMap';
 
 export default function HomeScreen() {
+  const { user } = useAuth();
   const [homeData, setHomeData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [dayStarted, setDayStarted] = useState(false);
+  const [dayStartTime, setDayStartTime] = useState(null);
+  const [elapsedTime, setElapsedTime] = useState('00:00:00');
+  const [todayStores, setTodayStores] = useState([]);
+  const [todayVisits, setTodayVisits] = useState([]);
+  const [gpsActive, setGpsActive] = useState(false);
+  const [location, setLocation] = useState(null);
 
   useEffect(() => {
-    setLoading(true);
-    setTimeout(() => {
-      setHomeData({
-        userName: "Alex",
-        monthlyTargets: 15,
-        monthlyTotal: 20,
-        todayPercent: 75,
-        todayTasks: 3,
-        storesVisited: 4,
-        storesTotal: 10,
-        activeReports: 2
-      });
-      setLoading(false);
-    }, 1000);
+    loadDayStatus();
+    fetchHomeData();
+    checkLocationPermission();
   }, []);
+  
+  // Refresh data when user changes
+  useEffect(() => {
+    if (user) {
+      fetchHomeData();
+    }
+  }, [user?.id]);
+  
+  // Start GPS tracking
+  useEffect(() => {
+    let locationSubscription;
+    let locationCheckInterval;
+    
+    if (gpsActive) {
+      startLocationTracking();
+      
+      // Check location availability every 3 seconds
+      locationCheckInterval = setInterval(async () => {
+        try {
+          const isEnabled = await Location.hasServicesEnabledAsync();
+          if (!isEnabled) {
+            console.log('Location services disabled by user');
+            setGpsActive(false);
+            setLocation(null);
+            
+            // Send GPS alert to backoffice
+            try {
+              await notificationService.createNotification({
+                user: user?.id,
+                title: 'GPS Alert',
+                message: `${user?.first_name || user?.username || 'Merchandiser'} disabled GPS tracking`,
+                type: 'GPS_ALERT',
+                is_urgent: true
+              });
+              console.log('GPS alert sent to backoffice');
+            } catch (notifError) {
+              console.error('Failed to send GPS alert:', notifError.response?.data || notifError.message);
+            }
+            
+            Alert.alert(
+              'GPS Disabled',
+              'Location services have been turned off. GPS tracking stopped.',
+              [{ text: 'OK' }]
+            );
+          }
+        } catch (error) {
+          console.error('Error checking location services:', error);
+        }
+      }, 3000);
+    }
+    
+    return () => {
+      if (locationSubscription) {
+        locationSubscription.remove();
+      }
+      if (locationCheckInterval) {
+        clearInterval(locationCheckInterval);
+      }
+    };
+  }, [gpsActive]);
+  
+  const checkLocationPermission = async () => {
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status === 'granted') {
+        console.log('Location permission already granted');
+        await activateGPS();
+      } else {
+        console.log('Location permission not granted yet');
+      }
+    } catch (error) {
+      console.error('Error checking location permission:', error);
+    }
+  };
+  
+  const requestLocationPermission = async () => {
+    try {
+      console.log('Requesting location permission...');
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      console.log('Permission status:', status);
+      
+      if (status === 'granted') {
+        await activateGPS();
+        Alert.alert('Success', 'GPS tracking enabled!');
+      } else {
+        Alert.alert(
+          'Permission Required',
+          'Location permission is required for GPS tracking. Please enable it in your device settings.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error requesting location permission:', error);
+      Alert.alert('Error', 'Failed to request location permission');
+    }
+  };
+  
+  const activateGPS = async () => {
+    try {
+      setGpsActive(true);
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
+      });
+      setLocation(currentLocation);
+      console.log('GPS activated:', currentLocation.coords);
+    } catch (error) {
+      console.error('Error getting current location:', error);
+      setGpsActive(false);
+    }
+  };
+  
+  const startLocationTracking = async () => {
+    try {
+      await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 10000, // Update every 10 seconds
+          distanceInterval: 10, // Update every 10 meters
+        },
+        (newLocation) => {
+          setLocation(newLocation);
+          console.log('GPS Update:', {
+            latitude: newLocation.coords.latitude,
+            longitude: newLocation.coords.longitude,
+            accuracy: newLocation.coords.accuracy
+          });
+        }
+      );
+    } catch (error) {
+      console.error('Error tracking location:', error);
+      setGpsActive(false);
+    }
+  };
+
+  useEffect(() => {
+    let interval;
+    if (dayStarted && dayStartTime) {
+      interval = setInterval(() => {
+        const elapsed = Date.now() - dayStartTime;
+        setElapsedTime(formatElapsedTime(elapsed));
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [dayStarted, dayStartTime]);
+
+  const loadDayStatus = async () => {
+    try {
+      const startTime = await AsyncStorage.getItem('dayStartTime');
+      const started = await AsyncStorage.getItem('dayStarted');
+      if (started === 'true' && startTime) {
+        setDayStarted(true);
+        setDayStartTime(parseInt(startTime));
+      }
+    } catch (error) {
+      console.error('Error loading day status:', error);
+    }
+  };
+
+  const fetchHomeData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch visits data - DON'T filter by user in API, do it client-side
+      const today = new Date().toISOString().split('T')[0];
+      console.log('=== FETCH HOME DATA START ===');
+      console.log('Today\'s date:', today);
+      console.log('Current user:', JSON.stringify({
+        id: user?.id,
+        username: user?.username,
+        first_name: user?.first_name,
+        role: user?.role
+      }, null, 2));
+      
+      // Fetch ALL visits without filtering to see what we get
+      const visitsParams = { limit: 1000 };
+      console.log('Fetching visits with params:', visitsParams);
+      
+      const visitsResponse = await visitService.getVisits(visitsParams);
+      const allVisits = visitsResponse.results || visitsResponse;
+      
+      console.log(`Fetched ${allVisits.length} visits`);
+      if (allVisits.length > 0) {
+        console.log('Sample visit structure:', JSON.stringify(allVisits[0], null, 2));
+        console.log('All visit dates:', allVisits.map(v => v.scheduled_date));
+      } else {
+        console.log('No visits returned from API!');
+      }
+      
+      // Filter visits for current user if not filtered by API
+      // Check various field names that might reference the user
+      const userVisits = user?.id 
+        ? allVisits.filter(v => {
+            const match = v.merchandiser === user.id || 
+                         v.user === user.id || 
+                         v.merchandiser_id === user.id ||
+                         v.user_id === user.id;
+            if (!match && allVisits.length > 0) {
+              console.log('Visit does not match user:', {
+                visit_merchandiser: v.merchandiser,
+                visit_user: v.user,
+                current_user_id: user.id
+              });
+            }
+            return match;
+          })
+        : allVisits;
+      
+      console.log(`Filtered to ${userVisits.length} user visits (from ${allVisits.length} total)`);
+      if (userVisits.length > 0) {
+        console.log('User visit dates:', userVisits.map(v => v.scheduled_date));
+      } else if (allVisits.length > 0) {
+        console.log('WARNING: No visits matched current user!');
+        console.log('User ID:', user?.id);
+        console.log('Visit user fields:', allVisits.slice(0, 3).map(v => ({
+          merchandiser: v.merchandiser,
+          user: v.user,
+          merchandiser_id: v.merchandiser_id,
+          user_id: v.user_id
+        })));
+      }
+      
+      // Calculate ALL today's visits (scheduled for today) - BEFORE user filtering
+      const allTodayVisits = allVisits.filter(v => {
+        if (!v.scheduled_date) return false;
+        const visitDate = v.scheduled_date.split('T')[0];
+        return visitDate === today;
+      });
+      
+      console.log(`Total scheduled visits for today (${today}):`, allTodayVisits.length);
+      
+      // Calculate today's visits for current user
+      const todayVisits = userVisits.filter(v => {
+        if (!v.scheduled_date) return false;
+        
+        // Handle both date formats: "2026-03-02" and "2026-03-02T00:00:00Z"
+        const visitDate = v.scheduled_date.split('T')[0];
+        console.log('Comparing visit date:', visitDate, 'with today:', today, '- Match:', visitDate === today);
+        return visitDate === today;
+      });
+      
+      console.log(`Today's visits for current user (${today}):`, todayVisits.length);
+      if (todayVisits.length > 0) {
+        console.log('Today\'s visits details:', todayVisits.map(v => ({ 
+          id: v.id, 
+          store: v.store, 
+          scheduled_date: v.scheduled_date,
+          status: v.status 
+        })));
+      }
+      
+      // Store today's visits for later use
+      setTodayVisits(todayVisits);
+      
+      const scheduledTodayVisits = todayVisits.filter(v => v.status === 'scheduled' || v.status === 'in_progress');
+      const completedTodayVisits = todayVisits.filter(v => v.status === 'completed');
+      
+      console.log(`Today breakdown: ${todayTotal} total scheduled, ${todayVisits.length} for user, ${scheduledTodayVisits.length} scheduled/in-progress, ${completedTodayVisits.length} completed`);
+      
+      // Calculate monthly visits (current month)
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      const monthlyVisits = userVisits.filter(v => {
+        const visitDate = new Date(v.scheduled_date);
+        return visitDate.getMonth() === currentMonth && visitDate.getFullYear() === currentYear;
+      });
+      const completedMonthlyVisits = monthlyVisits.filter(v => v.status === 'completed');
+      
+      console.log(`Monthly visits: ${monthlyVisits.length} total, ${completedMonthlyVisits.length} completed`);
+      
+      // Fetch stores data
+      const storesResponse = await storeService.getStores({ limit: 1000 });
+      const stores = storesResponse.results || storesResponse;
+      
+      console.log(`Fetched ${stores.length} stores`);
+      if (stores.length > 0) {
+        console.log('Sample store:', JSON.stringify(stores[0], null, 2));
+      }
+      
+      // Get stores for today's visits
+      const todayStoreIds = todayVisits.map(v => v.store).filter(Boolean);
+      console.log('Today\'s store IDs:', todayStoreIds);
+      
+      const todayStoresList = stores.filter(store => todayStoreIds.includes(store.id));
+      
+      // TEMPORARY: Show all stores if no today visits (for debugging map)
+      const storesToShow = todayStoresList.length > 0 ? todayStoresList : stores;
+      setTodayStores(storesToShow);
+      
+      console.log(`Today's stores: ${todayStoresList.length}`);
+      console.log(`Showing on map: ${storesToShow.length} stores`);
+      if (storesToShow.length > 0) {
+        console.log('Stores with GPS:', storesToShow.filter(s => s.latitude && s.longitude).length);
+      }
+      
+      // Calculate stats
+      const todayTotal = allTodayVisits.length; // Use ALL scheduled visits for today (not filtered by user)
+      const todayCompleted = completedTodayVisits.length;
+      const todayPercent = todayTotal > 0 ? Math.round((todayCompleted / todayTotal) * 100) : 0;
+      const todayRemaining = todayTotal - todayCompleted;
+      
+      const monthlyTotal = monthlyVisits.length;
+      const monthlyCompleted = completedMonthlyVisits.length;
+      
+      // Count active reports (visits in progress)
+      const activeReports = userVisits.filter(v => v.status === 'in_progress').length;
+      
+      const dashboardData = {
+        userName: user?.first_name || user?.username || "User",
+        monthlyTargets: monthlyCompleted,
+        monthlyTotal: monthlyTotal > 0 ? monthlyTotal : 1, // Avoid division by zero
+        todayPercent: todayPercent,
+        todayTasks: todayRemaining,
+        storesVisited: todayCompleted,
+        storesTotal: todayTotal,
+        activeReports: activeReports
+      };
+      
+      console.log('=== DASHBOARD SUMMARY ===');
+      console.log('Today:', today);
+      console.log('All visits fetched:', allVisits.length);
+      console.log('User visits fetched:', userVisits.length);
+      console.log('Today\'s total scheduled visits:', todayTotal);
+      console.log('Today\'s user visits:', todayVisits.length, '(scheduled:', scheduledTodayVisits.length, ', completed:', todayCompleted, ')');
+      console.log('Monthly visits:', monthlyTotal, '(completed:', monthlyCompleted, ')');
+      console.log('Stores today:', todayStoresList.length);
+      console.log('Dashboard data:', dashboardData);
+      console.log('========================');
+      
+      setHomeData(dashboardData);
+      
+    } catch (error) {
+      console.error('Error fetching home data:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      
+      const errorMsg = error.response 
+        ? `Backend error: ${error.response.status}` 
+        : 'Cannot connect to backend. Check if backend is running and API URL is correct.';
+      
+      Alert.alert(
+        'Connection Error', 
+        `${errorMsg}\n\nAPI URL: ${error.config?.baseURL || 'unknown'}\n\nMake sure:\n1. Backend is running\n2. You're using the correct IP address\n3. Phone and computer are on same network`,
+        [{ text: 'OK' }]
+      );
+      
+      // Set default data on error
+      setHomeData({
+        userName: user?.first_name || user?.username || "User",
+        monthlyTargets: 0,
+        monthlyTotal: 1,
+        todayPercent: 0,
+        todayTasks: 0,
+        storesVisited: 0,
+        storesTotal: 0,
+        activeReports: 0
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatElapsedTime = (milliseconds) => {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchHomeData();
+    setRefreshing(false);
+  };
+
+  const handleStartDay = async () => {
+    if (dayStarted) {
+      // End day
+      Alert.alert(
+        'End Day',
+        'Are you sure you want to end your day?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'End Day',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await AsyncStorage.removeItem('dayStartTime');
+                await AsyncStorage.removeItem('dayStarted');
+                setDayStarted(false);
+                setDayStartTime(null);
+                setElapsedTime('00:00:00');
+                Alert.alert('Success', 'Your day has ended');
+              } catch (error) {
+                console.error('Error ending day:', error);
+                Alert.alert('Error', 'Failed to end day');
+              }
+            }
+          }
+        ]
+      );
+    } else {
+      // Start day
+      try {
+        const startTime = Date.now();
+        await AsyncStorage.setItem('dayStartTime', startTime.toString());
+        await AsyncStorage.setItem('dayStarted', 'true');
+        setDayStarted(true);
+        setDayStartTime(startTime);
+        
+        Alert.alert('Success', 'Your day has started!');
+      } catch (error) {
+        console.error('Error starting day:', error);
+        Alert.alert('Error', 'Failed to start day');
+      }
+    }
+  };
 
   if (loading || !homeData) {
     return (
@@ -39,152 +463,358 @@ export default function HomeScreen() {
     );
   }
 
+  // Helper function to get visit status for a store
+  const getStoreVisitStatus = (storeId) => {
+    const visit = todayVisits.find(v => v.store === storeId);
+    if (!visit) return 'PENDING';
+    if (visit.status === 'completed') return 'COMPLETED';
+    if (visit.status === 'in_progress') return 'IN PROGRESS';
+    return 'PENDING';
+  };
+
+  // Get current date formatted
+  const getCurrentDate = () => {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const now = new Date();
+    return `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}`;
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView 
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#2563eb']}
+            tintColor="#2563eb"
+          />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.welcome}>Welcome back, {homeData.userName}</Text>
-            <View style={styles.gpsRow}>
-              <View style={styles.gpsDot} />
-              <Text style={styles.gpsText}>GPS TRACKING ACTIVE</Text>
+          <View style={styles.headerLeft}>
+            <View style={styles.avatar}>
+              <MaterialCommunityIcons name="account" size={24} color="#2563eb" />
+            </View>
+            <View>
+              <Text style={styles.headerTitle}>Merchandiser Dashboard</Text>
+              <Text style={styles.headerDate}>{getCurrentDate()}</Text>
             </View>
           </View>
-          <View style={styles.headerIcons}>
+          <TouchableOpacity>
             <MaterialCommunityIcons name="bell-outline" size={24} color="#222" />
-            <MaterialCommunityIcons name="cog-outline" size={24} color="#222" style={{ marginLeft: 12 }} />
-          </View>
+          </TouchableOpacity>
         </View>
 
-        {/* Monthly Objectives */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Monthly Objectives</Text>
-          <View style={styles.progressBarBg}>
-            <View
-              style={[
-                styles.progressBarFill,
-                {
-                  width: `${Math.round((homeData.monthlyTargets / homeData.monthlyTotal) * 100)}%`
-                }
-              ]}
-            />
+        {/* GPS Status Card */}
+        <TouchableOpacity 
+          style={styles.gpsCard}
+          onPress={!gpsActive ? requestLocationPermission : null}
+          disabled={gpsActive}
+        >
+          <View style={styles.gpsIcon}>
+            <MaterialCommunityIcons name="crosshairs-gps" size={28} color="#fff" />
           </View>
-          <Text style={styles.progressLabel}>
-            {homeData.monthlyTargets}/{homeData.monthlyTotal} targets
-          </Text>
-        </View>
-
-        {/* Today's Objective */}
-        <View style={styles.card}>
-          <View style={styles.rowBetween}>
-            <View>
-              <Text style={styles.cardTitle}>Today's Objective</Text>
-              <Text style={styles.objectiveSub}>
-                {homeData.todayTasks} tasks remaining
+          <View style={styles.gpsContent}>
+            <Text style={styles.gpsLabel}>GPS Status</Text>
+            <View style={styles.gpsStatusRow}>
+              <View style={[styles.gpsStatusDot, gpsActive && styles.gpsStatusDotActive]} />
+              <Text style={[styles.gpsStatusText, gpsActive && styles.gpsStatusTextActive]}>
+                {gpsActive ? 'Signal Active' : 'Tap to Enable'}
               </Text>
             </View>
-            <View style={styles.donutWrap}>
-              <View style={styles.donutBgClean}>
-                <Text style={styles.donutTextLargeClean}>{homeData.todayPercent}<Text style={styles.donutTextSmallClean}>%</Text></Text>
-              </View>
-            </View>
+            {gpsActive && location && (
+              <Text style={styles.gpsCoords}>
+                📍 {location.coords.latitude.toFixed(4)}, {location.coords.longitude.toFixed(4)}
+              </Text>
+            )}
           </View>
-        </View>
-
-        {/* Stats Row */}
-        <View style={styles.statsRow}>
-          <View style={styles.statsCard}>
-            <Text style={styles.statsLabel}>STORES VISITED</Text>
-            <Text style={styles.statsValue}>{homeData.storesVisited} <Text style={styles.statsTotal}>/ {homeData.storesTotal}</Text></Text>
-            <View style={styles.statsBarBg}>
-              <View style={[styles.statsBarFill, { width: `${Math.round((homeData.storesVisited / homeData.storesTotal) * 100)}%` }]} />
-            </View>
-          </View>
-          <View style={styles.statsCard}>
-            <Text style={styles.statsLabel}>ACTIVE REPORTS</Text>
-            <Text style={styles.statsValue}>{homeData.activeReports}</Text>
-            <Text style={styles.statsSync}>Last synced: 10m ago</Text>
-          </View>
-        </View>
-
-        {/* Today's Stores Row - moved above map */}
-        <View style={styles.storesRow}>
-          <Text style={styles.storesTitle}>Today's Stores</Text>
-          <Text style={styles.viewMore}>View More</Text>
-        </View>
-        {/* No store pills, just the row */}
-
-        {/* Map Placeholder */}
-        <View style={styles.mapCard}>
-          <View style={styles.mapPlaceholder}>
-            <MaterialCommunityIcons name="map-marker-radius-outline" size={48} color="#bbb" />
-          </View>
-        </View>
-
-        {/* Start Day Button */}
-        <TouchableOpacity style={styles.startBtn}>
-          <Text style={styles.startBtnText}>Start Day</Text>
         </TouchableOpacity>
+        
+        {/* Store Map */}
+        <View style={styles.mapContainer}>
+          <StoreMap stores={todayStores} height={200} />
+        </View>
+
+        {/* Ready to Begin Card */}
+        {!dayStarted && (
+          <View style={styles.readyCard}>
+            <Text style={styles.readyTitle}>Ready to begin?</Text>
+            <Text style={styles.readyText}>
+              Start your shift to track mileage and store visits for your assigned route.
+            </Text>
+            <TouchableOpacity style={styles.startWorkdayBtn} onPress={handleStartDay}>
+              <MaterialCommunityIcons name="play" size={18} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.startWorkdayText}>Start Workday</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Daily Progress */}
+        <View style={styles.progressSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Daily Progress</Text>
+            <View style={styles.progressBadge}>
+              <Text style={styles.progressBadgeText}>{homeData.todayPercent}% Complete</Text>
+            </View>
+          </View>
+
+          <View style={styles.progressItem}>
+            <Text style={styles.progressLabel}>Store Visits</Text>
+            <Text style={styles.progressValue}>
+              {homeData.storesVisited} / {homeData.storesTotal} Stores
+            </Text>
+          </View>
+
+          {dayStarted && (
+            <View style={styles.progressItem}>
+              <MaterialCommunityIcons name="clock-outline" size={16} color="#666" />
+              <Text style={styles.estimatedTime}>Estimated finish: {elapsedTime}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Today's Route */}
+        <View style={styles.routeSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Today's Route</Text>
+            <TouchableOpacity onPress={onRefresh}>
+              <Text style={styles.viewMapLink}>View Map</Text>
+            </TouchableOpacity>
+          </View>
+
+          {todayStores.length > 0 ? (
+            todayStores.slice(0, 3).map((store, index) => {
+              const status = getStoreVisitStatus(store.id);
+              const statusStyle = status === 'COMPLETED' ? styles.routeStatusCompleted : 
+                                 status === 'IN PROGRESS' ? styles.routeStatusInProgress : 
+                                 styles.routeStatusPending;
+              
+              return (
+                <View key={store.id} style={styles.routeItem}>
+                  <View style={styles.routeIconWrapper}>
+                    <MaterialCommunityIcons name="store" size={20} color="#2563eb" />
+                  </View>
+                  <View style={styles.routeInfo}>
+                    <Text style={styles.routeName} numberOfLines={1}>{store.name}</Text>
+                    <Text style={styles.routeAddress} numberOfLines={1}>
+                      {store.address || store.city}
+                    </Text>
+                  </View>
+                  <View style={[styles.routeStatus, statusStyle]}>
+                    <Text style={styles.routeStatusText}>{status}</Text>
+                  </View>
+                </View>
+              );
+            })
+          ) : (
+            <View style={styles.emptyRoute}>
+              <MaterialCommunityIcons name="map-marker-off" size={32} color="#ccc" />
+              <Text style={styles.emptyRouteText}>No stores assigned for today</Text>
+            </View>
+          )}
+        </View>
+
+        {/* End Day Button (shown when day is started) */}
+        {dayStarted && (
+          <TouchableOpacity style={styles.endDayBtn} onPress={handleStartDay}>
+            <MaterialCommunityIcons name="stop-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.endDayText}>End Workday</Text>
+          </TouchableOpacity>
+        )}
+
+        <View style={{ height: 20 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f7f8fa' },
-  container: { padding: 20 },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  welcome: { fontSize: 20, fontWeight: 'bold', color: '#222' },
-  gpsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  gpsDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#7bb661', marginRight: 6 },
-  gpsText: { fontSize: 12, color: '#7bb661', fontWeight: 'bold' },
-  headerIcons: { flexDirection: 'row' },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 },
-  progressBarBg: { height: 8, backgroundColor: '#e0e0e0', borderRadius: 4, marginVertical: 8 },
-  progressBarFill: { height: 8, backgroundColor: '#2563eb', borderRadius: 4 },
-  progressLabel: { fontSize: 12, color: '#888' },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  objectiveSub: { fontSize: 14, color: '#888' },
-  donutWrap: { alignItems: 'center', justifyContent: 'center' },
-  donutBgClean: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#f3f6fb',
+  safe: { flex: 1, backgroundColor: '#fff' },
+  container: { paddingHorizontal: 16, paddingTop: 12 },
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
+  
+  // Header
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginBottom: 16,
+    paddingVertical: 8
+  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  avatar: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    backgroundColor: '#e8f0fe', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    marginRight: 12
+  },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#222' },
+  headerDate: { fontSize: 13, color: '#666', marginTop: 2 },
+
+  // GPS Card
+  gpsCard: {
+    backgroundColor: '#4285f4',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: '#4285f4',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4
+  },
+  gpsIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12
+  },
+  gpsContent: { flex: 1 },
+  gpsLabel: { fontSize: 13, color: '#fff', marginBottom: 4, fontWeight: '500' },
+  gpsStatusRow: { flexDirection: 'row', alignItems: 'center' },
+  gpsStatusDot: { 
+    width: 8, 
+    height: 8, 
+    borderRadius: 4, 
+    backgroundColor: '#f59e0b',
+    marginRight: 6 
+  },
+  gpsStatusDotActive: { backgroundColor: '#10b981' },
+  gpsStatusText: { fontSize: 14, color: '#fff', fontWeight: 'bold' },
+  gpsStatusTextActive: { color: '#fff' },
+  gpsCoords: { fontSize: 11, color: 'rgba(255, 255, 255, 0.8)', marginTop: 4 },
+
+  // Map
+  mapContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3
+  },
+
+  // Ready to Begin Card
+  readyCard: {
+    backgroundColor: '#f8f9fc',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e8eaed'
+  },
+  readyTitle: { fontSize: 20, fontWeight: 'bold', color: '#222', marginBottom: 8 },
+  readyText: { fontSize: 14, color: '#666', lineHeight: 20, marginBottom: 16 },
+  startWorkdayBtn: {
+    backgroundColor: '#4285f4',
+    borderRadius: 8,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  startWorkdayText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+
+  // Sections
+  progressSection: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e8eaed'
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12
+  },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#222' },
+  progressBadge: {
+    backgroundColor: '#e8f0fe',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4
+  },
+  progressBadgeText: { fontSize: 12, color: '#4285f4', fontWeight: '600' },
+  progressItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8
+  },
+  progressLabel: { fontSize: 14, color: '#666' },
+  progressValue: { fontSize: 14, fontWeight: '600', color: '#222' },
+  estimatedTime: { fontSize: 13, color: '#666', marginLeft: 6 },
+
+  // Route Section
+  routeSection: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e8eaed'
+  },
+  viewMapLink: { fontSize: 14, color: '#4285f4', fontWeight: '600' },
+  routeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0'
+  },
+  routeIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#e8f0fe',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12
+  },
+  routeInfo: { flex: 1 },
+  routeName: { fontSize: 14, fontWeight: '600', color: '#222', marginBottom: 2 },
+  routeAddress: { fontSize: 12, color: '#666' },
+  routeStatus: {
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4
+  },
+  routeStatusCompleted: { backgroundColor: '#10b981' },
+  routeStatusInProgress: { backgroundColor: '#f59e0b' },
+  routeStatusPending: { backgroundColor: '#6b7280' },
+  routeStatusText: { fontSize: 10, color: '#fff', fontWeight: 'bold' },
+  emptyRoute: {
+    alignItems: 'center',
+    paddingVertical: 24
+  },
+  emptyRouteText: { fontSize: 14, color: '#999', marginTop: 8 },
+
+  // End Day Button
+  endDayBtn: {
+    backgroundColor: '#dc2626',
+    borderRadius: 8,
+    paddingVertical: 14,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 16
   },
-  donutTextLargeClean: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2563eb',
-    textAlign: 'center',
-    lineHeight: 30,
-  },
-  donutTextSmallClean: {
-    fontSize: 14,
-    color: '#2563eb',
-    fontWeight: 'bold',
-    marginLeft: 1,
-  },
-  storesList: { flexDirection: 'row', gap: 12, marginBottom: 8 },
-  storeItem: { backgroundColor: '#f0f4fa', color: '#2563eb', fontWeight: 'bold', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, marginRight: 8 },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  statsCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 12, marginRight: 8, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  statsLabel: { fontSize: 12, color: '#888', marginBottom: 2, fontWeight: 'bold' },
-  statsValue: { fontSize: 18, fontWeight: 'bold', color: '#222', marginBottom: 2 },
-  statsTotal: { fontSize: 14, color: '#888', fontWeight: 'normal' },
-  statsBarBg: { height: 6, backgroundColor: '#e0e0e0', borderRadius: 3, marginBottom: 2 },
-  statsBarFill: { height: 6, backgroundColor: '#2563eb', borderRadius: 3 },
-  statsSync: { fontSize: 11, color: '#aaa', marginTop: 2 },
-  mapCard: { backgroundColor: '#fff', borderRadius: 12, padding: 0, marginBottom: 12, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  mapPlaceholder: { height: 110, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f0f4fa' },
-  storesRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  storesTitle: { fontSize: 16, fontWeight: 'bold', color: '#222' },
-  viewMore: { fontSize: 14, color: '#2563eb', fontWeight: 'bold' },
-  startBtn: { backgroundColor: '#2563eb', borderRadius: 24, paddingVertical: 14, alignItems: 'center', marginBottom: 10 },
-  startBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }
+  endDayText: { color: '#fff', fontSize: 16, fontWeight: '600' }
 });

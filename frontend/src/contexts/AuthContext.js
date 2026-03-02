@@ -46,13 +46,18 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     try {
+      console.log('Attempting login for:', username);
       const data = await authService.login(username, password);
+      console.log('Login API response received');
       await AsyncStorage.setItem('accessToken', data.access);
       await AsyncStorage.setItem('refreshToken', data.refresh);
 
+      console.log('Fetching user profile...');
       const profile = await authService.getProfile();
+      console.log('User profile received:', profile);
       await AsyncStorage.setItem('user', JSON.stringify(profile));
       setUser(profile);
+      console.log('User state updated, should redirect now');
 
       return { success: true };
     } catch (error) {
