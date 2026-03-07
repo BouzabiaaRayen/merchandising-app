@@ -54,7 +54,7 @@ const Navbar = () => {
   const fetchUnreadCount = async () => {
     try {
       const data = await notificationService.getUnreadCount();
-      setUnreadCount(data.count || 0);
+      setUnreadCount(data.count ?? data.unread_count ?? 0);
     } catch (error) {
       console.error('Failed to fetch unread notifications:', error);
       // Don't show error to user, just keep previous count
@@ -79,6 +79,7 @@ const Navbar = () => {
     if (path.includes('stores')) return 'Stores Management';
     if (path.includes('visits')) return 'Visits Tracking';
     if (path.includes('reports')) return 'Reporting';
+    if (path.includes('leave-requests')) return 'Leave Requests';
     if (path.includes('settings')) return 'Settings';
     return 'Dashboard';
   };

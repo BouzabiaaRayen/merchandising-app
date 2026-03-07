@@ -10,7 +10,7 @@ import {
   RefreshControl
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { visitService, storeService } from '../services/apiService';
 
@@ -28,6 +28,13 @@ export default function PlanningScreen() {
     generateWeekDays();
     fetchPlanningData();
   }, [selectedDate]);
+
+  // Refresh data when screen comes into focus (e.g., after checkout)
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchPlanningData();
+    }, [selectedDate])
+  );
 
   const generateWeekDays = () => {
     const days = [];
@@ -50,7 +57,7 @@ export default function PlanningScreen() {
       const selectedDateStr = selectedDate.toISOString().split('T')[0];
       
       // Fetch all visits
-      const visitsResponse = await visitService.getVisits({ limit: 1000 });
+      const visitsResponse = await visitService.getVisits({ page_size: 1000 });
       const allVisits = visitsResponse.results || visitsResponse;
       
       // Filter visits for current user and selected date
@@ -80,7 +87,7 @@ export default function PlanningScreen() {
       setVisits(dateVisits);
       
       // Fetch stores
-      const storesResponse = await storeService.getStores({ limit: 1000 });
+      const storesResponse = await storeService.getStores({ page_size: 1000 });
       const storesData = storesResponse.results || storesResponse;
       
       const storesMap = {};
@@ -318,11 +325,6 @@ export default function PlanningScreen() {
             )}
           </View>
         </ScrollView>
-
-        {/* Add Visit Button */}
-        <TouchableOpacity style={styles.addButton}>
-          <MaterialCommunityIcons name="plus" size={24} color="#fff" />
-        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -556,21 +558,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#fff',
-  },
-  addButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#2563eb',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#2563eb',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
 });

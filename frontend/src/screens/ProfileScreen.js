@@ -12,10 +12,12 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/apiService';
 
 export default function ProfileScreen() {
+  const navigation = useNavigation();
   const { user, logout } = useAuth();
   const [avatarUri, setAvatarUri] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -256,6 +258,13 @@ export default function ProfileScreen() {
               subtitle="View assigned routes"
               iconColor="#f59e0b"
               onPress={() => Alert.alert('Coming Soon', 'Routes will be available soon')}
+            />
+            <MenuItem
+              icon="calendar-month-outline"
+              title="Congés"
+              subtitle="Faire une demande et voir l'historique"
+              iconColor="#2563eb"
+              onPress={() => navigation.navigate('Conge')}
             />
           </View>
         </View>

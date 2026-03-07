@@ -45,8 +45,8 @@ const VisitsTracking = () => {
       setLoading(true);
       const [visitsData, merchandisersData, storesData] = await Promise.all([
         visitService.getVisits({ page: currentPage, page_size: itemsPerPage }),
-        userService.getUsers({ role: 'merchandiser' }),
-        storeService.getStores(),
+        userService.getUsers({ role: 'merchandiser', page_size: 1000 }),
+        storeService.getStores({ page_size: 1000 }),
       ]);
 
       setVisits(visitsData.results ?? []);
@@ -376,7 +376,7 @@ const VisitsTracking = () => {
                     <option value="">-- Select a store --</option>
                     {stores.map((store) => (
                       <option key={store.id} value={store.id}>
-                        {store.name} - {store.location || store.address}
+                        [{store.code || store.id}] {store.name} - {store.address}
                       </option>
                     ))}
                   </select>

@@ -285,3 +285,55 @@ export const notificationService = {
   getUrgent: () =>
     api.get('/merchandising/notifications/urgent/').then(r => r.data),
 };
+
+// ---------------------------------------------------------------------------
+// Documents
+// ---------------------------------------------------------------------------
+export const documentService = {
+  getDocuments: (params = {}) =>
+    api.get('/merchandising/documents/', { params }).then(r => r.data),
+
+  getDocument: (id) =>
+    api.get(`/merchandising/documents/${id}/`).then(r => r.data),
+
+  deleteDocument: (id) =>
+    api.delete(`/merchandising/documents/${id}/`).then(r => r.data),
+};
+
+// ---------------------------------------------------------------------------
+// Leave Requests
+// ---------------------------------------------------------------------------
+export const leaveRequestService = {
+  getLeaveRequests: async (params = {}) => {
+    try {
+      return await api.get('/merchandising/leaves/', { params }).then(r => r.data);
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        return api.get('/merchandising/leave-requests/', { params }).then(r => r.data);
+      }
+      throw error;
+    }
+  },
+
+  approveLeaveRequest: async (id) => {
+    try {
+      return await api.post(`/merchandising/leaves/${id}/approve/`).then(r => r.data);
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        return api.post(`/merchandising/leave-requests/${id}/approve/`).then(r => r.data);
+      }
+      throw error;
+    }
+  },
+
+  rejectLeaveRequest: async (id) => {
+    try {
+      return await api.post(`/merchandising/leaves/${id}/reject/`).then(r => r.data);
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        return api.post(`/merchandising/leave-requests/${id}/reject/`).then(r => r.data);
+      }
+      throw error;
+    }
+  },
+};

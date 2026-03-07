@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,8 @@ export default function HomeScreen() {
   const [todayVisits, setTodayVisits] = useState([]);
   const [gpsActive, setGpsActive] = useState(false);
   const [location, setLocation] = useState(null);
+  const locationSubscriptionRef = useRef(null);
+  const locationCheckIntervalRef = useRef(null);
 
   useEffect(() => {
     loadDayStatus();
@@ -45,18 +47,27 @@ export default function HomeScreen() {
   
   // Start GPS tracking
   useEffect(() => {
-    let locationSubscription;
-    let locationCheckInterval;
-    
+    const stopTrackingResources = () => {
+      if (locationSubscriptionRef.current) {
+        locationSubscriptionRef.current.remove();
+        locationSubscriptionRef.current = null;
+      }
+      if (locationCheckIntervalRef.current) {
+        clearInterval(locationCheckIntervalRef.current);
+        locationCheckIntervalRef.current = null;
+      }
+    };
+
     if (gpsActive) {
       startLocationTracking();
       
       // Check location availability every 3 seconds
-      locationCheckInterval = setInterval(async () => {
+      locationCheckIntervalRef.current = setInterval(async () => {
         try {
           const isEnabled = await Location.hasServicesEnabledAsync();
           if (!isEnabled) {
             console.log('Location services disabled by user');
+            stopTrackingResources();
             setGpsActive(false);
             setLocation(null);
             
@@ -84,17 +95,14 @@ export default function HomeScreen() {
           console.error('Error checking location services:', error);
         }
       }, 3000);
+    } else {
+      stopTrackingResources();
     }
     
     return () => {
-      if (locationSubscription) {
-        locationSubscription.remove();
-      }
-      if (locationCheckInterval) {
-        clearInterval(locationCheckInterval);
-      }
+      stopTrackingResources();
     };
-  }, [gpsActive]);
+  }, [gpsActive, user]);
   
   const checkLocationPermission = async () => {
     try {
@@ -145,10 +153,58 @@ export default function HomeScreen() {
       setGpsActive(false);
     }
   };
+
+  const deactivateGPS = async () => {
+    try {
+      if (locationSubscriptionRef.current) {
+        locationSubscriptionRef.current.remove();
+        locationSubscriptionRef.current = null;
+      }
+      if (locationCheckIntervalRef.current) {
+        clearInterval(locationCheckIntervalRef.current);
+        locationCheckIntervalRef.current = null;
+      }
+
+      setGpsActive(false);
+      setLocation(null);
+
+      try {
+        await notificationService.createNotification({
+          user: user?.id,
+          title: 'GPS Alert',
+          message: `${user?.first_name || user?.username || 'Merchandiser'} disabled GPS tracking`,
+          type: 'GPS_ALERT',
+          is_urgent: true
+        });
+      } catch (notifError) {
+        console.error('Failed to send GPS alert:', notifError.response?.data || notifError.message);
+      }
+
+      Alert.alert('GPS Disabled', 'GPS tracking has been turned off.');
+    } catch (error) {
+      console.error('Error disabling GPS:', error);
+    }
+  };
+
+  const handleGpsStatusPress = async () => {
+    if (gpsActive) {
+      Alert.alert(
+        'Turn Off GPS',
+        'Do you want to turn off GPS tracking?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Turn Off', style: 'destructive', onPress: deactivateGPS },
+        ]
+      );
+      return;
+    }
+
+    await requestLocationPermission();
+  };
   
   const startLocationTracking = async () => {
     try {
-      await Location.watchPositionAsync(
+      const subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
           timeInterval: 10000, // Update every 10 seconds
@@ -163,6 +219,7 @@ export default function HomeScreen() {
           });
         }
       );
+      locationSubscriptionRef.current = subscription;
     } catch (error) {
       console.error('Error tracking location:', error);
       setGpsActive(false);
@@ -307,7 +364,7 @@ export default function HomeScreen() {
       console.log(`Monthly visits: ${monthlyVisits.length} total, ${completedMonthlyVisits.length} completed`);
       
       // Fetch stores data
-      const storesResponse = await storeService.getStores({ limit: 1000 });
+      const storesResponse = await storeService.getStores({ page_size: 1000 });
       const stores = storesResponse.results || storesResponse;
       
       console.log(`Fetched ${stores.length} stores`);
@@ -512,8 +569,7 @@ export default function HomeScreen() {
         {/* GPS Status Card */}
         <TouchableOpacity 
           style={styles.gpsCard}
-          onPress={!gpsActive ? requestLocationPermission : null}
-          disabled={gpsActive}
+          onPress={handleGpsStatusPress}
         >
           <View style={styles.gpsIcon}>
             <MaterialCommunityIcons name="crosshairs-gps" size={28} color="#fff" />
@@ -523,7 +579,7 @@ export default function HomeScreen() {
             <View style={styles.gpsStatusRow}>
               <View style={[styles.gpsStatusDot, gpsActive && styles.gpsStatusDotActive]} />
               <Text style={[styles.gpsStatusText, gpsActive && styles.gpsStatusTextActive]}>
-                {gpsActive ? 'Signal Active' : 'Tap to Enable'}
+                {gpsActive ? 'Signal Active • Tap to Disable' : 'Tap to Enable'}
               </Text>
             </View>
             {gpsActive && location && (

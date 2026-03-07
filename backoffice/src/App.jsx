@@ -9,6 +9,7 @@ import VisitsTracking from './pages/VisitsTracking';
 import Inventory from './pages/Inventory';
 import Notifications from './pages/Notifications';
 import Reports from './pages/Reports';
+import LeaveRequests from './pages/LeaveRequests';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -72,6 +73,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Reports />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/leave-requests"
+          element={
+            <ProtectedRoute>
+              <LeaveRequests />
             </ProtectedRoute>
           }
         />

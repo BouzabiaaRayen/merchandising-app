@@ -52,7 +52,7 @@ const Visits = () => {
 
   const fetchStores = async () => {
     try {
-      const data = await storeService.getStores();
+      const data = await storeService.getStores({ page_size: 1000 });
       setStores(data.results ?? []);
     } catch (err) {
       console.error('Error fetching stores:', err);
@@ -61,7 +61,7 @@ const Visits = () => {
 
   const fetchMerchandisers = async () => {
     try {
-      const data = await userService.getUsers({ role: 'merchandiser' });
+      const data = await userService.getUsers({ role: 'merchandiser', page_size: 1000 });
       setMerchandisers(data.results ?? []);
     } catch (err) {
       console.error('Error fetching merchandisers:', err);
@@ -322,7 +322,7 @@ const Visits = () => {
                     <option value="">-- Select a store --</option>
                     {stores.map((store) => (
                       <option key={store.id} value={store.id}>
-                        {store.name} - {store.location || store.address}
+                        [{store.code || store.id}] {store.name} - {store.address}
                       </option>
                     ))}
                   </select>

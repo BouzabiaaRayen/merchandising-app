@@ -21,6 +21,9 @@ module.exports = {
     ...appJson.expo,
     extra: {
       apiUrl: getApiUrl(),
+      // Supabase configuration for document storage
+      supabaseUrl: process.env.SUPABASE_URL || 'https://izaioowthzcghkerrpmk.supabase.co',
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6YWlvb3d0YnpjZ2hrZXJycG1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2ODc1MDUsImV4cCI6MjA4NjI2MzUwNX0.y2DeJBoqkSXc7_Jx3dcenPrFKBHv_iH3yT_8uFRb5Dw',
     },
   },
 };

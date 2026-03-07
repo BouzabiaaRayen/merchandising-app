@@ -17,7 +17,17 @@
         "NSLocationWhenInUseUsageDescription": "This app needs access to your location for GPS tracking during merchandising visits.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location for GPS tracking during merchandising visits.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photos to allow you to change your profile picture.",
-        "NSCameraUsageDescription": "This app needs access to your camera to take profile pictures."
+        "NSCameraUsageDescription": "This app needs access to your camera to take profile pictures.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSExceptionDomains": {
+            "supabase.co": {
+              "NSExceptionAllowsInsecureHTTPLoads": false,
+              "NSExceptionRequiresForwardSecrecy": false,
+              "NSIncludesSubdomains": true
+            }
+          }
+        }
       },
       "config": {
         "googleMapsApiKey": "YOUR_GOOGLE_MAPS_IOS_API_KEY"

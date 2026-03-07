@@ -246,3 +246,75 @@ export const notificationService = {
   getUrgent: () =>
     api.get('/merchandising/notifications/urgent/').then(r => r.data),
 };
+
+// ---------------------------------------------------------------------------
+// Documents
+// ---------------------------------------------------------------------------
+export const documentService = {
+  getDocuments: (params = {}) =>
+    api.get('/merchandising/documents/', { params }).then(r => r.data),
+
+  getDocument: (id) =>
+    api.get(`/merchandising/documents/${id}/`).then(r => r.data),
+
+  uploadDocument: (file, metadata = {}) => {
+    const formData = new FormData();
+    formData.append('file', {
+      uri: file.uri,
+      type: file.type || 'application/pdf',
+      name: file.name || `report_${Date.now()}.pdf`,
+    });
+    
+    // Add metadata fields
+    if (metadata.title) formData.append('title', metadata.title);
+    if (metadata.description) formData.append('description', metadata.description);
+    if (metadata.document_type) formData.append('document_type', metadata.document_type);
+    if (metadata.merchandiser) formData.append('merchandiser', metadata.merchandiser);
+    
+    return api.post('/merchandising/documents/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    }).then(r => r.data);
+  },
+
+  deleteDocument: (id) =>
+    api.delete(`/merchandising/documents/${id}/`).then(r => r.data),
+};
+
+// ---------------------------------------------------------------------------
+// Leaves
+// ---------------------------------------------------------------------------
+export const leaveService = {
+  getLeaves: async (params = {}) => {
+    try {
+      return await api.get('/merchandising/leaves/', { params }).then(r => r.data);
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        return api.get('/merchandising/leave-requests/', { params }).then(r => r.data);
+      }
+      throw error;
+    }
+  },
+
+  createLeave: async (data) => {
+    try {
+      const config = data instanceof FormData
+        ? { headers: { 'Content-Type': 'multipart/form-data' } }
+        : undefined;
+
+      return await api.post('/merchandising/leaves/', data, config).then(r => r.data);
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        const fallbackConfig = data instanceof FormData
+          ? { headers: { 'Content-Type': 'multipart/form-data' } }
+          : undefined;
+        return api.post('/merchandising/leave-requests/', data, fallbackConfig).then(r => r.data);
+      }
+      throw error;
+    }
+  },
+
+  getLeave: (id) =>
+    api.get(`/merchandising/leaves/${id}/`).then(r => r.data),
+};

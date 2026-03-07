@@ -60,6 +60,14 @@ const Sidebar = () => {
           {!isCollapsed && <span>Reporting</span>}
         </NavLink>
         <NavLink
+          to="/leave-requests"
+          className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
+          title="Leave Requests"
+        >
+          <span className="nav-icon">🗓️</span>
+          {!isCollapsed && <span>Leave Requests</span>}
+        </NavLink>
+        <NavLink
           to="/settings"
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
           title="Settings"

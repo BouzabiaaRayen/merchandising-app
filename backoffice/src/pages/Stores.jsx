@@ -20,6 +20,7 @@ const Stores = () => {
   const [viewingStore, setViewingStore] = useState(null);
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'map'
   const [formData, setFormData] = useState({
+    code: '',
     name: '',
     address: '',
     city: '',
@@ -79,6 +80,7 @@ const Stores = () => {
   const handleOpenEditModal = (store) => {
     setEditingStore(store);
     setFormData({
+      code: store.code || '',
       name: store.name || '',
       address: store.address || '',
       city: store.city || '',
@@ -108,21 +110,43 @@ const Stores = () => {
     setFormError('');
     setSubmitting(true);
 
-    if (!formData.name || !formData.address) {
-      setFormError('Name and Address are required');
+    if (!formData.code || !formData.name || !formData.address) {
+      setFormError('Code, Name and Address are required');
       setSubmitting(false);
       return;
     }
 
     try {
       const payload = {
-        name: formData.name,
-        address: formData.address,
-        city: formData.city || null,
-        phone: formData.phone || null,
-        latitude: formData.latitude ? parseFloat(formData.latitude) : null,
-        longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+        code: formData.code.trim(),
+        name: formData.name.trim(),
+        address: formData.address.trim(),
       };
+
+      // Only add optional fields if they have values
+      if (formData.city && formData.city.trim()) {
+        payload.city = formData.city.trim();
+      }
+      
+      if (formData.phone && formData.phone.trim()) {
+        payload.phone = formData.phone.trim();
+      }
+      
+      if (formData.latitude && formData.latitude.toString().trim()) {
+        const lat = parseFloat(formData.latitude);
+        if (!isNaN(lat) && lat >= -90 && lat <= 90) {
+          payload.latitude = lat;
+        }
+      }
+      
+      if (formData.longitude && formData.longitude.toString().trim()) {
+        const lng = parseFloat(formData.longitude);
+        if (!isNaN(lng) && lng >= -180 && lng <= 180) {
+          payload.longitude = lng;
+        }
+      }
+
+      console.log('Sending payload:', payload);
 
       if (editingStore) {
         await storeService.updateStore(editingStore.id, payload);
@@ -137,7 +161,28 @@ const Stores = () => {
       await fetchStores();
     } catch (err) {
       console.error('Error saving store:', err);
-      setFormError(err.response?.data?.detail || 'Failed to save store');
+      console.error('Error response:', err.response?.data);
+      console.error('Error status:', err.response?.status);
+      
+      // Extract detailed error message
+      let errorMessage = 'Failed to save store';
+      if (err.response?.data) {
+        if (typeof err.response.data === 'string') {
+          errorMessage = err.response.data;
+        } else if (err.response.data.detail) {
+          errorMessage = err.response.data.detail;
+        } else if (err.response.data.message) {
+          errorMessage = err.response.data.message;
+        } else {
+          // Show field-specific errors
+          const fieldErrors = Object.entries(err.response.data)
+            .map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`)
+            .join('; ');
+          if (fieldErrors) errorMessage = fieldErrors;
+        }
+      }
+      
+      setFormError(errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -219,6 +264,7 @@ const Stores = () => {
                   <thead>
                     <tr>
                       <th>ID</th>
+                      <th>Code</th>
                       <th>Name</th>
                       <th>Address</th>
                       <th>City</th>
@@ -230,7 +276,7 @@ const Stores = () => {
                   <tbody>
                     {stores.length === 0 ? (
                       <tr>
-                        <td colSpan="7" className="no-data">
+                        <td colSpan="8" className="no-data">
                           No stores found. Click "Add Store" to create one.
                         </td>
                       </tr>
@@ -238,6 +284,7 @@ const Stores = () => {
                       stores.map((store) => (
                         <tr key={store.id}>
                           <td>{store.id}</td>
+                          <td>{store.code || 'N/A'}</td>
                           <td>{store.name}</td>
                           <td>{store.address || 'N/A'}</td>
                           <td>{store.city || 'N/A'}</td>
@@ -317,6 +364,19 @@ const Stores = () => {
                   <div className="form-error">{formError}</div>
                 )}
                 
+                <div className="form-group">
+                  <label htmlFor="code">Store Code *</label>
+                  <input
+                    type="text"
+                    id="code"
+                    name="code"
+                    value={formData.code}
+                    onChange={handleInputChange}
+                    placeholder="Enter store code (e.g., ST001)"
+                    required
+                  />
+                </div>
+
                 <div className="form-group">
                   <label htmlFor="name">Store Name *</label>
                   <input
@@ -425,6 +485,10 @@ const Stores = () => {
               <div className="detail-row">
                 <span className="detail-label">ID:</span>
                 <span className="detail-value">{viewingStore.id}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Code:</span>
+                <span className="detail-value">{viewingStore.code || 'N/A'}</span>
               </div>
               <div className="detail-row">
                 <span className="detail-label">Name:</span>
