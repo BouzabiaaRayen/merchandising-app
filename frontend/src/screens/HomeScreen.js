@@ -14,7 +14,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useAuth } from '../contexts/AuthContext';
-import { visitService, storeService, notificationService } from '../services/apiService';
+import { visitService, storeService, notificationService, gpsService, userService } from '../services/apiService';
 import StoreMap from '../components/StoreMap';
 
 export default function HomeScreen() {
@@ -31,6 +31,34 @@ export default function HomeScreen() {
   const [location, setLocation] = useState(null);
   const locationSubscriptionRef = useRef(null);
   const locationCheckIntervalRef = useRef(null);
+  const lastGpsSendRef = useRef(0); // timestamp of last server send
+
+  // Sends a GPS-off alert notification to every supervisor/admin in the system.
+  const notifyGPSOffToSupervisors = async () => {
+    try {
+      const name = user?.first_name || user?.username || 'Merchandiser';
+      const supervisorsResp = await userService.getUsers({ role: 'supervisor', page_size: 50 });
+      const adminsResp = await userService.getUsers({ role: 'admin', page_size: 50 });
+      const targets = [
+        ...(Array.isArray(supervisorsResp) ? supervisorsResp : supervisorsResp.results ?? []),
+        ...(Array.isArray(adminsResp) ? adminsResp : adminsResp.results ?? []),
+      ];
+      await Promise.allSettled(
+        targets.map((sup) =>
+          notificationService.createNotification({
+            user: sup.id,
+            title: '📍 GPS Turned Off',
+            message: `${name} has disabled their GPS tracking.`,
+            notification_type: 'system',
+            priority: 'urgent',
+          })
+        )
+      );
+      console.log(`GPS-off alert sent to ${targets.length} supervisor(s)/admin(s).`);
+    } catch (err) {
+      console.warn('Failed to notify supervisors of GPS off:', err.message);
+    }
+  };
 
   useEffect(() => {
     loadDayStatus();
@@ -70,20 +98,14 @@ export default function HomeScreen() {
             stopTrackingResources();
             setGpsActive(false);
             setLocation(null);
-            
-            // Send GPS alert to backoffice
-            try {
-              await notificationService.createNotification({
-                user: user?.id,
-                title: 'GPS Alert',
-                message: `${user?.first_name || user?.username || 'Merchandiser'} disabled GPS tracking`,
-                type: 'GPS_ALERT',
-                is_urgent: true
-              });
-              console.log('GPS alert sent to backoffice');
-            } catch (notifError) {
-              console.error('Failed to send GPS alert:', notifError.response?.data || notifError.message);
+
+            // Mark user as GPS inactive on the server
+            if (user?.id) {
+              userService.patchUser(user?.id, { gps_active: false }).catch(() => {});
             }
+
+            // Send GPS-off alert to all supervisors/admins
+            await notifyGPSOffToSupervisors();
             
             Alert.alert(
               'GPS Disabled',
@@ -148,6 +170,15 @@ export default function HomeScreen() {
       });
       setLocation(currentLocation);
       console.log('GPS activated:', currentLocation.coords);
+
+      // Mark user as GPS active on the server immediately
+      if (user?.id) {
+        userService.patchUser(user.id, { gps_active: true }).catch(() => {});
+      }
+
+      // Send initial ping immediately so the supervisor sees active status right away
+      lastGpsSendRef.current = Date.now();
+      await sendGpsToServer(currentLocation.coords);
     } catch (error) {
       console.error('Error getting current location:', error);
       setGpsActive(false);
@@ -168,21 +199,49 @@ export default function HomeScreen() {
       setGpsActive(false);
       setLocation(null);
 
-      try {
-        await notificationService.createNotification({
-          user: user?.id,
-          title: 'GPS Alert',
-          message: `${user?.first_name || user?.username || 'Merchandiser'} disabled GPS tracking`,
-          type: 'GPS_ALERT',
-          is_urgent: true
-        });
-      } catch (notifError) {
-        console.error('Failed to send GPS alert:', notifError.response?.data || notifError.message);
+      // Mark user as GPS inactive on the server immediately
+      if (user?.id) {
+        userService.patchUser(user.id, { gps_active: false }).catch(() => {});
       }
+
+      // Send GPS-off alert to all supervisors/admins
+      await notifyGPSOffToSupervisors();
 
       Alert.alert('GPS Disabled', 'GPS tracking has been turned off.');
     } catch (error) {
       console.error('Error disabling GPS:', error);
+    }
+  };
+
+  // Send a GPS position to the server.
+  // Tries /gps/track/ first; falls back to POST /gps/ on any failure.
+  const sendGpsToServer = async (coords) => {
+    const payload = {
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      accuracy: coords.accuracy ?? null,
+      altitude: coords.altitude ?? null,
+      speed: coords.speed ?? null,
+      heading: coords.heading ?? null,
+    };
+    try {
+      const result = await gpsService.track(payload);
+      console.log('GPS ping sent via /track/ ✓', result?.id ?? '');
+    } catch (trackErr) {
+      const status = trackErr.response?.status;
+      const detail = JSON.stringify(trackErr.response?.data ?? trackErr.message);
+      console.warn(`GPS /track/ failed (${status}):`, detail);
+      // Fall back for ANY failure (400 = missing field, 404 = endpoint missing, etc.)
+      try {
+        const result = await gpsService.createLocation(payload);
+        console.log('GPS ping sent via /gps/ (fallback) ✓', result?.id ?? '');
+      } catch (createErr) {
+        console.error(
+          'GPS fallback /gps/ also failed:',
+          createErr.response?.status,
+          JSON.stringify(createErr.response?.data ?? createErr.message)
+        );
+      }
     }
   };
 
@@ -210,13 +269,20 @@ export default function HomeScreen() {
           timeInterval: 10000, // Update every 10 seconds
           distanceInterval: 10, // Update every 10 meters
         },
-        (newLocation) => {
+        async (newLocation) => {
           setLocation(newLocation);
           console.log('GPS Update:', {
             latitude: newLocation.coords.latitude,
             longitude: newLocation.coords.longitude,
             accuracy: newLocation.coords.accuracy
           });
+
+          // Send to server at most once every 30 seconds
+          const now = Date.now();
+          if (now - lastGpsSendRef.current >= 30000) {
+            lastGpsSendRef.current = now;
+            await sendGpsToServer(newLocation.coords);
+          }
         }
       );
       locationSubscriptionRef.current = subscription;
@@ -486,6 +552,10 @@ export default function HomeScreen() {
                 setDayStarted(false);
                 setDayStartTime(null);
                 setElapsedTime('00:00:00');
+                // Notify supervisor dashboard
+                if (user?.id) {
+                  userService.patchUser(user.id, { day_started: false, day_start_time: null }).catch(() => {});
+                }
                 Alert.alert('Success', 'Your day has ended');
               } catch (error) {
                 console.error('Error ending day:', error);
@@ -503,7 +573,13 @@ export default function HomeScreen() {
         await AsyncStorage.setItem('dayStarted', 'true');
         setDayStarted(true);
         setDayStartTime(startTime);
-        
+        // Notify supervisor dashboard
+        if (user?.id) {
+          userService.patchUser(user.id, {
+            day_started: true,
+            day_start_time: new Date(startTime).toISOString(),
+          }).catch(() => {});
+        }
         Alert.alert('Success', 'Your day has started!');
       } catch (error) {
         console.error('Error starting day:', error);
