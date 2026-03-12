@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/apiService';
+import { getAvatarUrl } from '../services/supabaseClient';
 import './Login.css';
 
 const Login = () => {
@@ -37,9 +38,10 @@ const Login = () => {
       const profile = await authService.getProfile();
       console.log('=== LOGIN PROFILE DEBUG ===');
       console.log('Profile after login:', JSON.stringify(profile, null, 2));
-      console.log('Avatar URL:', profile.avatar_url || profile.avatar);
+      const avatarUrl = getAvatarUrl(profile.avatar_url || profile.avatar);
+      console.log('Avatar URL (avatars bucket):', avatarUrl);
       console.log('=========================');
-      localStorage.setItem('user', JSON.stringify(profile));
+      localStorage.setItem('user', JSON.stringify({ ...profile, avatar_url: avatarUrl }));
 
       navigate('/dashboard');
     } catch (err) {

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { notificationService, authService } from '../services/apiService';
+import { getAvatarUrl } from '../services/supabaseClient';
 import './Navbar.css';
 
 const Navbar = () => {
@@ -128,9 +129,9 @@ const Navbar = () => {
                 onClick={() => setShowUserMenu(!showUserMenu)}
               >
                 <div className="user-avatar">
-                  {(user.avatar_url || user.avatar) ? (
+                  {getAvatarUrl(user.avatar_url || user.avatar) ? (
                     <img 
-                      src={(user.avatar_url || user.avatar).trim().replace(/\?$/, '')} 
+                      src={getAvatarUrl(user.avatar_url || user.avatar)} 
                       alt="Avatar" 
                       className="user-avatar-image" 
                     />

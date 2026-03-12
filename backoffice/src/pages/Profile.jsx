@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import { authService } from '../services/apiService';
+import { getAvatarUrl } from '../services/supabaseClient';
 import './Profile.css';
 
 const Profile = () => {
@@ -116,20 +117,19 @@ const Profile = () => {
         weeklyReport: profile.weekly_report ?? false,
       });
 
-      // Set avatar preview - try both avatar_url and avatar fields
-      let avatarUrl = profile.avatar_url || profile.avatar;
+      // Set avatar preview from the 'avatars' storage bucket
+      const rawAvatar = profile.avatar_url || profile.avatar;
+      const avatarUrl = getAvatarUrl(rawAvatar);
       if (avatarUrl) {
-        // Clean up the URL - remove trailing ? or other artifacts
-        avatarUrl = avatarUrl.trim().replace(/\?$/, '');
-        console.log('✅ Setting avatar to:', avatarUrl);
+        console.log('✅ Setting avatar from avatars bucket:', avatarUrl);
         setAvatarPreview(avatarUrl);
       } else {
         console.log('❌ No avatar found in profile data');
         setAvatarPreview(null);
       }
 
-      // Update localStorage with profile data (for user info only, not avatar persistence)
-      localStorage.setItem('user', JSON.stringify(profile));
+      // Update localStorage with profile data including resolved avatar URL
+      localStorage.setItem('user', JSON.stringify({ ...profile, avatar_url: avatarUrl }));
       
       // Notify other components (like Navbar) that profile was updated
       window.dispatchEvent(new Event('profileUpdated'));
@@ -234,12 +234,11 @@ const Profile = () => {
       clearInterval(progressInterval);
       setUploadProgress(100);
 
-      // Update avatar preview - try both avatar_url and avatar fields
-      let avatarUrl = updatedProfile.avatar_url || updatedProfile.avatar;
+      // Update avatar preview from the 'avatars' storage bucket
+      const rawAvatar = updatedProfile.avatar_url || updatedProfile.avatar;
+      const avatarUrl = getAvatarUrl(rawAvatar);
       if (avatarUrl) {
-        // Clean up the URL - remove trailing ? or other artifacts
-        avatarUrl = avatarUrl.trim().replace(/\?$/, '');
-        console.log('✅ Setting uploaded avatar to:', avatarUrl);
+        console.log('✅ Setting uploaded avatar from avatars bucket:', avatarUrl);
         setAvatarPreview(avatarUrl);
         
         // Update localStorage and notify other components
@@ -247,7 +246,7 @@ const Profile = () => {
         const cleanedProfile = {
           ...currentUser,
           avatar_url: avatarUrl,
-          avatar: updatedProfile.avatar ? updatedProfile.avatar.trim().replace(/\?$/, '') : null
+          avatar: updatedProfile.avatar || null
         };
         localStorage.setItem('user', JSON.stringify(cleanedProfile));
         window.dispatchEvent(new Event('profileUpdated'));
