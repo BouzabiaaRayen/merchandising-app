@@ -137,6 +137,11 @@ function SupervisorStack() {
         component={SupervisorNotificationsScreen}
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="Conge"
+        component={CongeScreen}
+        options={{ headerShown: false }}
+      />
     </Stack.Navigator>
   );
 }

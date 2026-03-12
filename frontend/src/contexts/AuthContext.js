@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService, userService } from '../services/apiService';
+import { getAvatarUrl } from '../services/supabaseClient';
 
 // Utility to clear AsyncStorage for debugging or resetting auth state
 export const clearAuthStorage = async () => {
@@ -55,8 +56,11 @@ export const AuthProvider = ({ children }) => {
       console.log('Fetching user profile...');
       const profile = await authService.getProfile();
       console.log('User profile received:', profile);
-      await AsyncStorage.setItem('user', JSON.stringify(profile));
-      setUser(profile);
+      // Resolve avatar URL from the 'avatars' bucket
+      const avatarUrl = getAvatarUrl(profile.avatar_url || profile.avatar);
+      const profileWithAvatar = { ...profile, avatar_url: avatarUrl };
+      await AsyncStorage.setItem('user', JSON.stringify(profileWithAvatar));
+      setUser(profileWithAvatar);
       console.log('User state updated, should redirect now');
 
       return { success: true };

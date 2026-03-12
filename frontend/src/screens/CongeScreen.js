@@ -111,10 +111,16 @@ export default function CongeScreen({ navigation }) {
       if (reason.trim()) formData.append('reason', reason.trim());
 
       if (selectedDocument?.uri) {
+        let docName = selectedDocument.name || `leave-doc-${Date.now()}`;
+        // Truncate filename to fit Django's 100 char limit (keep extension)
+        if (docName.length > 80) {
+          const ext = docName.substring(docName.lastIndexOf('.'));
+          docName = docName.substring(0, 80 - ext.length) + ext;
+        }
         formData.append('supporting_document', {
           uri: selectedDocument.uri,
           type: selectedDocument.mimeType || 'application/octet-stream',
-          name: selectedDocument.name || `leave-doc-${Date.now()}`,
+          name: docName,
         });
       }
 
@@ -126,7 +132,12 @@ export default function CongeScreen({ navigation }) {
       await fetchHistory();
     } catch (error) {
       console.error('Failed to submit leave request:', error);
-      Alert.alert('Erreur', 'Impossible d\'envoyer la demande de congé.');
+      console.error('Response status:', error.response?.status);
+      console.error('Response data:', JSON.stringify(error.response?.data));
+      const detail = error.response?.data
+        ? JSON.stringify(error.response.data)
+        : error.message;
+      Alert.alert('Erreur', `Impossible d'envoyer la demande: ${detail}`);
     } finally {
       setSubmitting(false);
     }

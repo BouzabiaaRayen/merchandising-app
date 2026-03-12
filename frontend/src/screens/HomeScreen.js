@@ -444,14 +444,11 @@ export default function HomeScreen() {
       
       const todayStoresList = stores.filter(store => todayStoreIds.includes(store.id));
       
-      // TEMPORARY: Show all stores if no today visits (for debugging map)
-      const storesToShow = todayStoresList.length > 0 ? todayStoresList : stores;
-      setTodayStores(storesToShow);
+      setTodayStores(todayStoresList);
       
       console.log(`Today's stores: ${todayStoresList.length}`);
-      console.log(`Showing on map: ${storesToShow.length} stores`);
-      if (storesToShow.length > 0) {
-        console.log('Stores with GPS:', storesToShow.filter(s => s.latitude && s.longitude).length);
+      if (todayStoresList.length > 0) {
+        console.log('Stores with GPS:', todayStoresList.filter(s => s.latitude && s.longitude).length);
       }
       
       // Calculate stats

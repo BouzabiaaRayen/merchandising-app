@@ -15,6 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/apiService';
+import { getAvatarUrl } from '../services/supabaseClient';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
@@ -23,12 +24,16 @@ export default function ProfileScreen() {
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    // Load avatar from user profile
-    if (user?.avatar_url) {
-      console.log('Loading avatar from:', user.avatar_url);
-      setAvatarUri(user.avatar_url);
+    // Load avatar from the 'avatars' storage bucket
+    const raw = user?.avatar_url || user?.avatar;
+    const resolved = getAvatarUrl(raw);
+    if (resolved) {
+      console.log('Loading avatar from avatars bucket:', resolved);
+      setAvatarUri(resolved);
+    } else {
+      setAvatarUri(null);
     }
-  }, [user?.avatar_url]);
+  }, [user?.avatar_url, user?.avatar]);
 
   const pickImage = async () => {
     try {
@@ -91,14 +96,17 @@ export default function ProfileScreen() {
         fileName: image.fileName || `avatar_${Date.now()}.jpg`,
       };
 
-      console.log('Uploading avatar:', file);
+      console.log('Uploading avatar:', JSON.stringify(file));
 
       const updatedProfile = await authService.uploadAvatar(file);
 
-      console.log('Upload response:', updatedProfile);
+      console.log('Upload response:', JSON.stringify(updatedProfile));
 
-      // Update local avatar
-      const newAvatarUrl = updatedProfile.avatar_url || updatedProfile.avatar;
+      // Update local avatar from the 'avatars' bucket
+      const rawUrl = updatedProfile.avatar_url || updatedProfile.avatar;
+      console.log('Raw avatar URL from API:', rawUrl);
+      const newAvatarUrl = getAvatarUrl(rawUrl);
+      console.log('Resolved avatar URL:', newAvatarUrl);
       if (newAvatarUrl) {
         setAvatarUri(newAvatarUrl);
         Alert.alert('Success', 'Profile picture updated successfully!');
