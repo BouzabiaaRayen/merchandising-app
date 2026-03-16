@@ -296,6 +296,9 @@ export const documentService = {
   getDocument: (id) =>
     api.get(`/merchandising/documents/${id}/`).then(r => r.data),
 
+  uploadDocument: (formData) =>
+    api.post('/merchandising/documents/', formData).then(r => r.data),
+
   deleteDocument: (id) =>
     api.delete(`/merchandising/documents/${id}/`).then(r => r.data),
 };
@@ -335,5 +338,15 @@ export const leaveRequestService = {
       }
       throw error;
     }
+  },
+};
+
+export const complaintService = {
+  getComplaints: async (params = {}) => {
+    return api.get('/merchandising/complaints/', { params }).then(r => r.data);
+  },
+
+  respondToComplaint: async (id, data) => {
+    return api.post(`/merchandising/complaints/${id}/respond/`, data).then(r => r.data);
   },
 };

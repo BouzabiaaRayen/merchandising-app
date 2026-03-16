@@ -278,6 +278,9 @@ export const documentService = {
     }).then(r => r.data);
   },
 
+  markDownloaded: (id) =>
+    api.post(`/merchandising/documents/${id}/mark_downloaded/`).then(r => r.data),
+
   deleteDocument: (id) =>
     api.delete(`/merchandising/documents/${id}/`).then(r => r.data),
 };

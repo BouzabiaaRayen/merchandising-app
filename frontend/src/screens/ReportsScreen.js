@@ -303,8 +303,8 @@ const ReportsScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Mes Rapports</Text>
-        <MaterialCommunityIcons name="calendar" size={28} color="#6366f1" />
+        <Text style={styles.title}>Reports</Text>
+        <MaterialCommunityIcons name="clipboard-text" size={28} color="#6366f1" />
       </View>
 
       {loading ? (

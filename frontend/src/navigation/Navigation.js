@@ -13,7 +13,10 @@ import PlanningScreen from '../screens/PlanningScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import VisitExecutionScreen from '../screens/VisitExecutionScreen';
 import ReportsScreen from '../screens/ReportsScreen';
+import DocumentsHistoryScreen from '../screens/DocumentsHistoryScreen';
 import CongeScreen from '../screens/CongeScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
+import ComplaintScreen from '../screens/ComplaintScreen';
 
 // Supervisor screens
 import SupervisorOverviewScreen from '../screens/supervisor/SupervisorOverviewScreen';
@@ -38,17 +41,17 @@ function AuthStack() {
 }
 
 const MAIN_TABS = [
-  { name: 'Home',     label: 'Home',     icon: 'home-variant',     iconActive: 'home-variant',      color: '#4285f4' },
-  { name: 'Planning', label: 'Planning', icon: 'calendar-month-outline', iconActive: 'calendar-check', color: '#8b5cf6' },
-  { name: 'Reports',  label: 'Reports',  icon: 'file-document-outline', iconActive: 'file-document',   color: '#f97316' },
-  { name: 'Profile',  label: 'Profile',  icon: 'account-outline',  iconActive: 'account-circle',    color: '#22c55e' },
+  { name: 'Home',      label: 'Home',      icon: 'home-variant',           iconActive: 'home-variant',       color: '#4285f4' },
+  { name: 'Planning',  label: 'Planning',  icon: 'calendar-month-outline', iconActive: 'calendar-check',     color: '#8b5cf6' },
+  { name: 'Reports',   label: 'Reports',   icon: 'clipboard-text-outline',   iconActive: 'clipboard-text',     color: '#06b6d4' },
+  { name: 'Profile',   label: 'Profile',   icon: 'account-outline',        iconActive: 'account-circle',     color: '#22c55e' },
 ];
 
 const SUPERVISOR_TABS = [
   { name: 'SupervisorOverview', label: 'Overview', icon: 'view-dashboard-outline', iconActive: 'view-dashboard',    color: '#4285f4' },
-  { name: 'SupervisorTeam',     label: 'Team',     icon: 'account-group-outline',  iconActive: 'account-group',     color: '#8b5cf6' },
+  { name: 'SupervisorTeam',     label: 'Team',     icon: 'account-group-outline',  iconActive: 'account-group',    color: '#8b5cf6' },
   { name: 'SupervisorMap',      label: 'Map',      icon: 'map-marker-outline',     iconActive: 'map-marker-radius', color: '#f97316' },
-  { name: 'SupervisorProfile',  label: 'Profile',  icon: 'account-outline',        iconActive: 'account-circle',    color: '#22c55e' },
+  { name: 'SupervisorProfile',  label: 'Profile',  icon: 'account-outline',        iconActive: 'account-circle',   color: '#22c55e' },
 ];
 
 function CustomTabBar({ state, descriptors, navigation, tabConfig }) {
@@ -142,6 +145,16 @@ function SupervisorStack() {
         component={CongeScreen}
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="DocumentsHistory"
+        component={DocumentsHistoryScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="Complaint"
+        component={ComplaintScreen}
+        options={{ headerShown: false }}
+      />
     </Stack.Navigator>
   );
 }
@@ -164,6 +177,21 @@ function MainStack() {
       <Stack.Screen 
         name="Conge" 
         component={CongeScreen} 
+        options={{ headerShown: false }} 
+      />
+      <Stack.Screen 
+        name="DocumentsHistory" 
+        component={DocumentsHistoryScreen} 
+        options={{ headerShown: false }} 
+      />
+      <Stack.Screen 
+        name="Notifications" 
+        component={NotificationsScreen} 
+        options={{ headerShown: false }} 
+      />
+      <Stack.Screen 
+        name="Complaint" 
+        component={ComplaintScreen} 
         options={{ headerShown: false }} 
       />
     </Stack.Navigator>

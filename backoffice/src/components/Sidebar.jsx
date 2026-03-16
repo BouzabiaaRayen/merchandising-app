@@ -52,6 +52,14 @@ const Sidebar = () => {
           {!isCollapsed && <span>Visits Tracking</span>}
         </NavLink>
         <NavLink
+          to="/documents"
+          className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
+          title="Documents"
+        >
+          <span className="nav-icon">📄</span>
+          {!isCollapsed && <span>Documents</span>}
+        </NavLink>
+        <NavLink
           to="/reports"
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
           title="Reporting"
@@ -66,6 +74,14 @@ const Sidebar = () => {
         >
           <span className="nav-icon">🗓️</span>
           {!isCollapsed && <span>Leave Requests</span>}
+        </NavLink>
+        <NavLink
+          to="/complaints"
+          className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
+          title="Complaints"
+        >
+          <span className="nav-icon">⚠️</span>
+          {!isCollapsed && <span>Complaints</span>}
         </NavLink>
         <NavLink
           to="/settings"

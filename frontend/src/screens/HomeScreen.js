@@ -8,17 +8,22 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Alert,
-  RefreshControl
+  RefreshControl,
+  Image
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useAuth } from '../contexts/AuthContext';
-import { visitService, storeService, notificationService, gpsService, userService } from '../services/apiService';
+import { visitService, storeService, notificationService, gpsService, userService, documentService } from '../services/apiService';
 import StoreMap from '../components/StoreMap';
+import { useNavigation } from '@react-navigation/native';
+import * as Print from 'expo-print';
+import { shareAsync } from 'expo-sharing';
 
 export default function HomeScreen() {
   const { user } = useAuth();
+  const navigation = useNavigation();
   const [homeData, setHomeData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -29,6 +34,7 @@ export default function HomeScreen() {
   const [todayVisits, setTodayVisits] = useState([]);
   const [gpsActive, setGpsActive] = useState(false);
   const [location, setLocation] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const locationSubscriptionRef = useRef(null);
   const locationCheckIntervalRef = useRef(null);
   const lastGpsSendRef = useRef(0); // timestamp of last server send
@@ -486,6 +492,14 @@ export default function HomeScreen() {
       console.log('========================');
       
       setHomeData(dashboardData);
+
+      // Fetch unread notifications count
+      try {
+        const countResp = await notificationService.getUnreadCount();
+        setUnreadCount(countResp?.unread_count ?? 0);
+      } catch (e) {
+        console.warn('Could not fetch unread count:', e);
+      }
       
     } catch (error) {
       console.error('Error fetching home data:', error);
@@ -531,6 +545,132 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
+  const generateEndOfDayPDF = async (completedVisits, startTime) => {
+    try {
+      // Fetch store details for completed visits
+      const storesData = [];
+      for (const visit of completedVisits) {
+        if (visit.store) {
+          try {
+            const store = await storeService.getStore(visit.store);
+            let timeSpent = 'N/A';
+            if (visit.check_in_time && visit.check_out_time) {
+              const checkIn = new Date(visit.check_in_time);
+              const checkOut = new Date(visit.check_out_time);
+              const diff = Math.floor((checkOut - checkIn) / 1000);
+              const hours = Math.floor(diff / 3600);
+              const minutes = Math.floor((diff % 3600) / 60);
+              timeSpent = `${hours}h ${minutes}m`;
+            }
+            storesData.push({
+              name: store.name,
+              address: store.address,
+              checkInTime: visit.check_in_time || visit.checked_in_at,
+              checkOutTime: visit.check_out_time,
+              timeSpent,
+              notes: visit.notes || 'No notes',
+            });
+          } catch (e) {
+            console.error('Error fetching store:', e);
+          }
+        }
+      }
+
+      // Calculate hours worked
+      let hoursWorked = '0h 0m';
+      if (startTime) {
+        const elapsed = Date.now() - startTime;
+        const hours = Math.floor(elapsed / (1000 * 60 * 60));
+        const minutes = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
+        hoursWorked = `${hours}h ${minutes}m`;
+      }
+
+      const dateStr = new Date().toLocaleDateString('fr-FR', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      });
+      const dayStartStr = startTime ? new Date(startTime).toLocaleTimeString('fr-FR') : null;
+
+      const storesHTML = storesData.map((store, i) => `
+        <div style="margin-bottom: 15px; padding: 12px; background: #f8f9fa; border-radius: 8px;">
+          <div style="font-weight: bold; color: #2563eb; margin-bottom: 5px;">${i + 1}. ${store.name}</div>
+          <div style="font-size: 12px; color: #6b7280; margin-bottom: 3px;">${store.address}</div>
+          <div style="font-size: 11px; color: #9ca3af;">
+            Check-in: ${store.checkInTime ? new Date(store.checkInTime).toLocaleTimeString('fr-FR') : 'N/A'} |
+            Check-out: ${store.checkOutTime ? new Date(store.checkOutTime).toLocaleTimeString('fr-FR') : 'N/A'} |
+            Duration: ${store.timeSpent}
+          </div>
+          ${store.notes !== 'No notes' ? `<div style="font-size: 11px; color: #475569; margin-top: 4px;">Notes: ${store.notes}</div>` : ''}
+        </div>
+      `).join('');
+
+      const html = `
+        <!DOCTYPE html>
+        <html><head><meta charset="utf-8">
+        <style>
+          body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 30px; color: #1e293b; }
+          .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #2563eb; padding-bottom: 20px; }
+          .title { font-size: 24px; font-weight: bold; color: #2563eb; margin-bottom: 10px; }
+          .subtitle { font-size: 14px; color: #64748b; }
+          .summary { display: flex; justify-content: space-around; margin: 30px 0; padding: 20px; background: #f1f5f9; border-radius: 10px; }
+          .summary-item { text-align: center; }
+          .summary-value { font-size: 28px; font-weight: bold; color: #2563eb; margin-bottom: 5px; }
+          .summary-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+          .section-title { font-size: 16px; font-weight: bold; color: #1e293b; margin: 25px 0 15px 0; border-left: 4px solid #2563eb; padding-left: 10px; }
+          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+        </style></head>
+        <body>
+          <div class="header">
+            <div class="title">DAILY REPORT</div>
+            <div class="subtitle">${dateStr}</div>
+            <div class="subtitle" style="margin-top: 8px;">Merchandiser: ${user?.first_name || ''} ${user?.last_name || user?.username || ''}</div>
+          </div>
+          <div class="summary">
+            <div class="summary-item">
+              <div class="summary-value">${completedVisits.length}</div>
+              <div class="summary-label">Stores Visited</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-value">${hoursWorked}</div>
+              <div class="summary-label">Hours Worked</div>
+            </div>
+          </div>
+          ${dayStartStr ? `<div style="text-align: center; margin: 20px 0; padding: 12px; background: #d1fae5; border-radius: 8px;">
+            <span style="font-weight: bold; color: #065f46;">Day started at:</span>
+            <span style="color: #047857; margin-left: 8px;">${dayStartStr}</span>
+          </div>` : ''}
+          <div class="section-title">Visit Details</div>
+          ${storesData.length > 0 ? storesHTML : '<div style="text-align: center; color: #94a3b8; padding: 20px;">No visit details available</div>'}
+          <div class="footer">Report generated on ${new Date().toLocaleString('fr-FR')}<br/>Merchandising App © 2026</div>
+        </body></html>
+      `;
+
+      const { uri } = await Print.printToFileAsync({ html });
+
+      // Upload to backend
+      try {
+        const fileName = `rapport_${user?.username || 'merchandiser'}_${new Date().toISOString().split('T')[0]}.pdf`;
+        await documentService.uploadDocument(
+          { uri, type: 'application/pdf', name: fileName },
+          {
+            title: `Daily Report - ${dateStr}`,
+            description: `${user?.first_name || user?.username || 'Merchandiser'} - ${completedVisits.length} stores visited, ${hoursWorked} worked`,
+            document_type: 'daily_report',
+            merchandiser: user?.id,
+          }
+        );
+        console.log('PDF uploaded to backend');
+      } catch (uploadErr) {
+        console.error('PDF upload failed:', uploadErr);
+      }
+
+      // Open share sheet
+      await shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+    } catch (error) {
+      console.error('Error generating end-of-day PDF:', error);
+      Alert.alert('Error', 'Failed to generate PDF report');
+    }
+  };
+
   const handleStartDay = async () => {
     if (dayStarted) {
       // End day
@@ -544,8 +684,15 @@ export default function HomeScreen() {
             style: 'destructive',
             onPress: async () => {
               try {
+                // Check if all visits are completed
+                const totalVisits = todayVisits.length;
+                const completedVisits = todayVisits.filter(v => v.status === 'completed');
+                const allCompleted = totalVisits > 0 && completedVisits.length === totalVisits;
+
+                // End the day
                 await AsyncStorage.removeItem('dayStartTime');
                 await AsyncStorage.removeItem('dayStarted');
+                const savedStartTime = dayStartTime;
                 setDayStarted(false);
                 setDayStartTime(null);
                 setElapsedTime('00:00:00');
@@ -553,7 +700,19 @@ export default function HomeScreen() {
                 if (user?.id) {
                   userService.patchUser(user.id, { day_started: false, day_start_time: null }).catch(() => {});
                 }
-                Alert.alert('Success', 'Your day has ended');
+
+                if (allCompleted) {
+                  // Generate PDF report automatically
+                  Alert.alert('Day Ended', 'All visits completed! Generating your report...');
+                  await generateEndOfDayPDF(completedVisits, savedStartTime);
+                } else if (totalVisits === 0) {
+                  Alert.alert('Day Ended', 'Your day has ended. No visits were scheduled.');
+                } else {
+                  Alert.alert(
+                    'Day Ended',
+                    `Your day has ended.\n${completedVisits.length}/${totalVisits} visits completed.\nPDF report is only generated when all visits are completed.`
+                  );
+                }
               } catch (error) {
                 console.error('Error ending day:', error);
                 Alert.alert('Error', 'Failed to end day');
@@ -578,6 +737,7 @@ export default function HomeScreen() {
           }).catch(() => {});
         }
         Alert.alert('Success', 'Your day has started!');
+        navigation.navigate('Planning');
       } catch (error) {
         console.error('Error starting day:', error);
         Alert.alert('Error', 'Failed to start day');
@@ -626,16 +786,25 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <View style={styles.avatar}>
-              <MaterialCommunityIcons name="account" size={24} color="#2563eb" />
-            </View>
+            {user?.avatar_url ? (
+              <Image source={{ uri: user.avatar_url }} style={styles.avatarImg} />
+            ) : (
+              <View style={styles.avatar}>
+                <MaterialCommunityIcons name="account" size={24} color="#2563eb" />
+              </View>
+            )}
             <View>
-              <Text style={styles.headerTitle}>Merchandiser Dashboard</Text>
+              <Text style={styles.headerTitle}>{[user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username || 'User'}</Text>
               <Text style={styles.headerDate}>{getCurrentDate()}</Text>
             </View>
           </View>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('Notifications')} style={{ position: 'relative' }}>
             <MaterialCommunityIcons name="bell-outline" size={24} color="#222" />
+            {unreadCount > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -775,6 +944,25 @@ const styles = StyleSheet.create({
     paddingVertical: 8
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  bellBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -8,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  bellBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
   avatar: { 
     width: 40, 
     height: 40, 
@@ -783,6 +971,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center', 
     alignItems: 'center',
     marginRight: 12
+  },
+  avatarImg: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
   },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#222' },
   headerDate: { fontSize: 13, color: '#666', marginTop: 2 },

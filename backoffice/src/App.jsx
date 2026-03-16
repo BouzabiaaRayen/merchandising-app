@@ -8,8 +8,10 @@ import Stores from './pages/Stores';
 import VisitsTracking from './pages/VisitsTracking';
 import Inventory from './pages/Inventory';
 import Notifications from './pages/Notifications';
+import Documents from './pages/Documents';
 import Reports from './pages/Reports';
 import LeaveRequests from './pages/LeaveRequests';
+import Complaints from './pages/Complaints';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -69,6 +71,14 @@ function App() {
           }
         />
         <Route
+          path="/documents"
+          element={
+            <ProtectedRoute>
+              <Documents />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/reports"
           element={
             <ProtectedRoute>
@@ -81,6 +91,14 @@ function App() {
           element={
             <ProtectedRoute>
               <LeaveRequests />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/complaints"
+          element={
+            <ProtectedRoute>
+              <Complaints />
             </ProtectedRoute>
           }
         />

@@ -12,9 +12,9 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { notificationService } from '../../services/apiService';
+import { notificationService } from '../services/apiService';
 
-export default function SupervisorNotificationsScreen() {
+export default function NotificationsScreen() {
   const navigation = useNavigation();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,14 +26,16 @@ export default function SupervisorNotificationsScreen() {
       const raw = Array.isArray(resp) ? resp : (resp.results ?? []);
       setNotifications(raw);
     } catch (err) {
-      console.warn('Notifications fetch err:', err);
+      console.warn('Notifications fetch error:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const markAllRead = async () => {
     try {
@@ -47,7 +49,9 @@ export default function SupervisorNotificationsScreen() {
   const markOne = async (id) => {
     try {
       await notificationService.markRead(id);
-      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+      );
     } catch (_) {}
   };
 
@@ -67,17 +71,24 @@ export default function SupervisorNotificationsScreen() {
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <MaterialCommunityIcons name="arrow-left" size={22} color="#333" />
+          <MaterialCommunityIcons name="arrow-left" size={24} color="#1a1a2e" />
         </TouchableOpacity>
-        <Text style={styles.title}>Notifications {unread > 0 ? `(${unread})` : ''}</Text>
-        {unread > 0 ? (
-          <TouchableOpacity onPress={markAllRead}>
-            <Text style={styles.markAll}>Mark all read</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 70 }} />
+        <Text style={styles.title}>Notifications</Text>
+        {unread > 0 && (
+          <View style={styles.badgeContainer}>
+            <Text style={styles.badge}>{unread}</Text>
+          </View>
         )}
       </View>
+
+      {unread > 0 && (
+        <View style={styles.toolbar}>
+          <TouchableOpacity onPress={markAllRead} style={styles.markAllBtn}>
+            <MaterialCommunityIcons name="check-all" size={16} color="#4285f4" />
+            <Text style={styles.markAllText}>Mark all read</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <FlatList
         data={notifications}
@@ -88,7 +99,12 @@ export default function SupervisorNotificationsScreen() {
             onPress={() => markOne(item.id)}
             activeOpacity={0.75}
           >
-            <View style={[styles.notifIcon, { backgroundColor: typeColor(item.type) + '22' }]}>
+            <View
+              style={[
+                styles.notifIcon,
+                { backgroundColor: typeColor(item.type) + '22' },
+              ]}
+            >
               <MaterialCommunityIcons
                 name={typeIcon(item.type)}
                 size={20}
@@ -97,9 +113,13 @@ export default function SupervisorNotificationsScreen() {
             </View>
             <View style={styles.notifBody}>
               <Text style={styles.notifTitle}>{item.title}</Text>
-              <Text style={styles.notifMsg} numberOfLines={2}>{item.message}</Text>
+              <Text style={styles.notifMsg} numberOfLines={2}>
+                {item.message}
+              </Text>
               <Text style={styles.notifTime}>
-                {item.created_at ? formatRelativeTime(new Date(item.created_at)) : ''}
+                {item.created_at
+                  ? formatRelativeTime(new Date(item.created_at))
+                  : ''}
               </Text>
             </View>
             {!item.is_read && <View style={styles.unreadDot} />}
@@ -108,14 +128,21 @@ export default function SupervisorNotificationsScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); fetchData(); }}
+            onRefresh={() => {
+              setRefreshing(true);
+              fetchData();
+            }}
             colors={['#4285f4']}
           />
         }
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <MaterialCommunityIcons name="bell-outline" size={52} color="#ccc" />
+            <MaterialCommunityIcons
+              name="bell-outline"
+              size={52}
+              color="#ccc"
+            />
             <Text style={styles.emptyText}>No notifications</Text>
           </View>
         }
@@ -129,7 +156,8 @@ function typeIcon(type) {
   if (t.includes('DOCUMENT')) return 'file-document';
   if (t.includes('GPS')) return 'map-marker-off';
   if (t.includes('VISIT')) return 'store-check';
-  if (t.includes('LEAVE') || t.includes('CONGE')) return 'calendar-remove';
+  if (t.includes('LEAVE') || t.includes('CONGE'))
+    return 'calendar-remove';
   if (t.includes('ALERT')) return 'alert-circle';
   return 'bell';
 }
@@ -161,16 +189,50 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 14,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e8eaed',
+    gap: 12,
   },
-  backBtn: { padding: 4 },
-  title: { fontSize: 17, fontWeight: '700', color: '#1a1a2e' },
-  markAll: { fontSize: 13, color: '#4285f4', fontWeight: '600' },
+  backBtn: {
+    padding: 4,
+  },
+  title: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a2e',
+  },
+  badgeContainer: {
+    backgroundColor: '#4285f4',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  badge: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  toolbar: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e8eaed',
+    backgroundColor: '#fafbfc',
+  },
+  markAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  markAllText: {
+    fontSize: 13,
+    color: '#4285f4',
+    fontWeight: '600',
+  },
   listContent: { padding: 12, gap: 8 },
   notifCard: {
     backgroundColor: '#fff',
@@ -184,7 +246,11 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 1,
   },
-  notifUnread: { borderLeftWidth: 3, borderLeftColor: '#4285f4' },
+  notifUnread: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#4285f4',
+    backgroundColor: '#f0f7ff',
+  },
   notifIcon: {
     width: 40,
     height: 40,
@@ -194,17 +260,38 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   notifBody: { flex: 1 },
-  notifTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a2e' },
-  notifMsg: { fontSize: 12, color: '#666', marginTop: 2, lineHeight: 17 },
-  notifTime: { fontSize: 11, color: '#aaa', marginTop: 5 },
+  notifTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1a1a2e',
+  },
+  notifMsg: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+    lineHeight: 17,
+  },
+  notifTime: {
+    fontSize: 11,
+    color: '#aaa',
+    marginTop: 5,
+  },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: '#4285f4',
-    marginTop: 4,
-    flexShrink: 0,
+    marginTop: 6,
   },
-  empty: { alignItems: 'center', marginTop: 80 },
-  emptyText: { color: '#bbb', marginTop: 12, fontSize: 15 },
+  empty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+  },
 });

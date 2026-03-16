@@ -269,10 +269,24 @@ export default function ProfileScreen() {
             />
             <MenuItem
               icon="calendar-month-outline"
-              title="Congés"
-              subtitle="Faire une demande et voir l'historique"
+              title="Leave Requests"
+              subtitle="Request and view leave history"
               iconColor="#2563eb"
               onPress={() => navigation.navigate('Conge')}
+            />
+            <MenuItem
+              icon="alert-circle-outline"
+              title="Complaints"
+              subtitle="Report a problem to admin"
+              iconColor="#ef4444"
+              onPress={() => navigation.navigate('Complaint')}
+            />
+            <MenuItem
+              icon="file-document-outline"
+              title="Documents"
+              subtitle="View shared documents"
+              iconColor="#f3730b"
+              onPress={() => navigation.navigate('DocumentsHistory')}
             />
           </View>
         </View>
