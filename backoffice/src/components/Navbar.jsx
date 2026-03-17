@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { Search, Bell, Settings, User, LogOut, ChevronDown } from 'lucide-react';
 import { notificationService, authService } from '../services/apiService';
 import { getAvatarUrl } from '../services/supabaseClient';
 import './Navbar.css';
@@ -108,7 +109,7 @@ const Navbar = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="search-input"
             />
-            <span className="search-icon">🔍</span>
+            <span className="search-icon"><Search size={16} /></span>
           </div>
           
           <div className="navbar-actions">
@@ -117,7 +118,7 @@ const Navbar = () => {
               title="Notifications"
               onClick={handleNotificationClick}
             >
-              <span className="icon">🔔</span>
+              <span className="icon"><Bell size={18} /></span>
               {unreadCount > 0 && (
                 <span className="notification-badge">{unreadCount}</span>
               )}
@@ -147,22 +148,22 @@ const Navbar = () => {
                   </span>
                   <span className="user-role">{user.role || 'Global Supervisor'}</span>
                 </div>
-                <span className="dropdown-arrow">▼</span>
+                <span className="dropdown-arrow"><ChevronDown size={14} /></span>
               </div>
               
               {showUserMenu && (
                 <div className="user-dropdown-menu">
                   <div className="dropdown-item" onClick={() => navigate('/settings')}>
-                    <span className="dropdown-icon">⚙️</span>
+                    <span className="dropdown-icon"><Settings size={15} /></span>
                     <span>Settings</span>
                   </div>
                   <div className="dropdown-item" onClick={() => navigate('/profile')}>
-                    <span className="dropdown-icon">👤</span>
+                    <span className="dropdown-icon"><User size={15} /></span>
                     <span>Profile</span>
                   </div>
                   <div className="dropdown-divider"></div>
                   <div className="dropdown-item logout-item" onClick={handleLogout}>
-                    <span className="dropdown-icon">🚪</span>
+                    <span className="dropdown-icon"><LogOut size={15} /></span>
                     <span>Logout</span>
                   </div>
                 </div>

@@ -3,6 +3,7 @@ import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import { authService } from '../services/apiService';
 import { getAvatarUrl } from '../services/supabaseClient';
+import { Lock, Calendar } from 'lucide-react';
 import './Profile.css';
 
 const Profile = () => {
@@ -579,7 +580,7 @@ const Profile = () => {
                             value={formData.email}
                             onChange={handleInputChange}
                           />
-                          <span className="input-icon">🔒</span>
+                          <span className="input-icon"><Lock size={15} /></span>
                         </div>
                       </div>
                       <div className="form-group-profile">
@@ -658,7 +659,7 @@ const Profile = () => {
                         onChange={handleInputChange}
                         disabled
                       />
-                      <span className="input-icon">📅</span>
+                      <span className="input-icon"><Calendar size={15} /></span>
                     </div>
                   </div>
                 </div>

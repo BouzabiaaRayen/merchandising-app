@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import { userService } from '../services/apiService';
+import { Search, SlidersHorizontal, Pencil, Eye, UserPlus, Trash2, CheckCircle2, User } from 'lucide-react';
 import './Users.css';
 
 const ROLE_LABELS = {
@@ -444,7 +445,7 @@ const Users = () => {
 
                 <div className="filter-actions">
                   <div className="search-box">
-                    <span className="search-icon">🔍</span>
+                    <span className="search-icon"><Search size={15} /></span>
                     <input
                       type="text"
                       placeholder="Search by name, email or ID..."
@@ -454,7 +455,7 @@ const Users = () => {
                     />
                   </div>
                   <button className="filter-btn" title="More Filters">
-                    <span>⚙️</span> More Filters
+                    <SlidersHorizontal size={15} /> More Filters
                   </button>
                 </div>
               </div>
@@ -536,17 +537,17 @@ const Users = () => {
                             <div className="action-buttons">
                               <button 
                                 className="action-btn-icon delete" 
-                                title="Delete User"
+                                title="Edit User"
                                 onClick={() => handleDeleteUser(user)}
                               >
-                                ✏️
+                                <Pencil size={14} />
                               </button>
                               <button 
                                 className="action-btn-icon view" 
                                 title="View"
                                 onClick={() => handleOpenViewModal(user)}
                               >
-                                👁️
+                                <Eye size={14} />
                               </button>
                               {(user.role === 'merchandiser' || user.role === 'MERCHANDISER') && (
                                 <button
@@ -554,7 +555,7 @@ const Users = () => {
                                   onClick={() => handleOpenAssignModal(user)}
                                   title="Assign Supervisor"
                                 >
-                                  👤
+                                  <UserPlus size={14} />
                                 </button>
                               )}
                               <button
@@ -562,7 +563,7 @@ const Users = () => {
                                 onClick={() => handleToggleActive(user)}
                                 title={user.is_active ? 'Deactivate' : 'Activate'}
                               >
-                                {user.is_active ? '🗑️' : '✅'}
+                                {user.is_active ? <Trash2 size={14} /> : <CheckCircle2 size={14} />}
                               </button>
                             </div>
                           </td>
@@ -862,7 +863,7 @@ const Users = () => {
                             if (localAssignment && localAssignment.supervisorName) {
                               return (
                                 <>
-                                  <span className="supervisor-icon">👤</span>
+                                  <span className="supervisor-icon"><User size={14} /></span>
                                   {localAssignment.supervisorName}
                                 </>
                               );
@@ -872,7 +873,7 @@ const Users = () => {
                             if (selectedUser.supervisor_name) {
                               return (
                                 <>
-                                  <span className="supervisor-icon">👤</span>
+                                  <span className="supervisor-icon"><User size={14} /></span>
                                   {selectedUser.supervisor_name}
                                 </>
                               );
@@ -884,7 +885,7 @@ const Users = () => {
                               if (supervisor) {
                                 return (
                                   <>
-                                    <span className="supervisor-icon">👤</span>
+                                    <span className="supervisor-icon"><User size={14} /></span>
                                     {supervisor.first_name} {supervisor.last_name}
                                   </>
                                 );

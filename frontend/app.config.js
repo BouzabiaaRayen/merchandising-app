@@ -6,14 +6,17 @@ const appJson = require('./app.json');
 // For Web: http://localhost:8000/api/v1
 
 const getApiUrl = () => {
-  // Check if environment variable is set
+  // Prefer explicit API URL from environment
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+
   if (process.env.API_URL) {
     return process.env.API_URL;
   }
-  
-  // Default to your PC IP on 4G hotspot
-  // Change this to your current IP if testing on real device
-  return 'http://172.20.10.7:8000/api/v1';
+
+  // No static default here; runtime code in src/services/api.js resolves device/emulator host.
+  return undefined;
 };
 
 module.exports = {

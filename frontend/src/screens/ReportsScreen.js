@@ -45,6 +45,7 @@ const ReportsScreen = () => {
       // Get work day start time from AsyncStorage
       const dayStartTime = await AsyncStorage.getItem('dayStartTime');
       const dayStarted = await AsyncStorage.getItem('dayStarted');
+      const isDayInProgress = dayStarted === 'true' && !!dayStartTime;
       
       // Get today's date
       const today = new Date().toISOString().split('T')[0];
@@ -121,7 +122,11 @@ const ReportsScreen = () => {
         storesVisited: completedVisits.length,
         hoursWorked,
         stores: storesData,
-        dayStartTime: dayStartTime ? new Date(parseInt(dayStartTime)).toLocaleTimeString('fr-FR') : null
+        dayStartTime: dayStartTime ? new Date(parseInt(dayStartTime)).toLocaleTimeString('fr-FR') : null,
+        reportStatus: isDayInProgress ? 'En cours' : 'Closed',
+        reportStatusIcon: isDayInProgress ? 'clock-outline' : 'check-circle',
+        reportStatusTextColor: isDayInProgress ? '#f59e0b' : '#10b981',
+        reportStatusBgColor: isDayInProgress ? '#fef3c7' : '#d1fae5',
       });
       
     } catch (error) {
@@ -327,9 +332,15 @@ const ReportsScreen = () => {
             >
               <View style={styles.reportHeader}>
                 <Text style={styles.dateText}>{todayData.date}</Text>
-                <View style={styles.statusBadge}>
-                  <MaterialCommunityIcons name="check-circle" size={14} color="#10b981" />
-                  <Text style={styles.statusText}>En cours</Text>
+                <View style={[styles.statusBadge, { backgroundColor: todayData.reportStatusBgColor || '#d1fae5' }]}>
+                  <MaterialCommunityIcons
+                    name={todayData.reportStatusIcon || 'check-circle'}
+                    size={14}
+                    color={todayData.reportStatusTextColor || '#10b981'}
+                  />
+                  <Text style={[styles.statusText, { color: todayData.reportStatusTextColor || '#10b981' }]}> 
+                    {todayData.reportStatus || 'Closed'}
+                  </Text>
                 </View>
               </View>
 
@@ -409,6 +420,12 @@ const ReportsScreen = () => {
                         <Text style={styles.modalSummaryValue}>{todayData.dayStartTime}</Text>
                       </View>
                     )}
+                    <View style={styles.modalSummaryRow}>
+                      <Text style={styles.modalSummaryLabel}>Statut:</Text>
+                      <Text style={[styles.modalSummaryValue, { color: todayData.reportStatusTextColor || '#10b981' }]}>
+                        {todayData.reportStatus || 'Closed'}
+                      </Text>
+                    </View>
                     <View style={styles.modalSummaryRow}>
                       <Text style={styles.modalSummaryLabel}>Heures travaillées:</Text>
                       <Text style={[styles.modalSummaryValue, { color: '#f59e0b' }]}>{todayData.hoursWorked}</Text>

@@ -1,14 +1,14 @@
 .unread-row {
-  background-color: #f0f7ff;
+  background-color: #eef2ff;
 }
 
 .unread-row:hover {
-  background-color: #e3f0fc;
+  background-color: #e0e7ff;
 }
 
 .unread-count {
-  color: #d32f2f;
-  font-weight: 600;
+  color: #b91c1c;
+  font-weight: 700;
 }
 
 .notif-message {
@@ -16,29 +16,30 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text-secondary);
 }
 
 .notif-type-badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 500;
+  padding: 0.25rem 0.72rem;
+  border-radius: 999px;
+  font-size: 0.71rem;
+  font-weight: 700;
   text-transform: uppercase;
-  background-color: #e8eaf6;
-  color: #3949ab;
+  background-color: #e0e7ff;
+  color: #4338ca;
 }
 
 .notif-type-badge.urgent {
-  background-color: #ffebee;
-  color: #c62828;
+  background-color: #fee2e2;
+  color: #b91c1c;
 }
 
 .notif-type-badge.info {
-  background-color: #e3f2fd;
-  color: #1565c0;
+  background-color: #dbeafe;
+  color: #1d4ed8;
 }
 
 .notif-type-badge.warning {
-  background-color: #fff8e1;
-  color: #f57f17;
+  background-color: #fef3c7;
+  color: #b45309;
 }

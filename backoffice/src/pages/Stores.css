@@ -2,43 +2,44 @@
 .view-toggle {
   display: flex;
   gap: 0;
-  background: #f3f4f6;
+  background: #eef2ff;
   padding: 0.25rem;
-  border-radius: 8px;
+  border-radius: 10px;
+  border: 1px solid #c7d2fe;
 }
 
 .toggle-btn {
   padding: 0.5rem 1rem;
   border: none;
   background: transparent;
-  color: #6b7280;
+  color: #475569;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 8px;
   transition: all 0.2s;
   white-space: nowrap;
 }
 
 .toggle-btn:hover {
-  color: #374151;
+  color: #1e293b;
 }
 
 .toggle-btn.active {
   background: white;
-  color: #3b82f6;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  color: #4338ca;
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.18);
 }
 
 /* Map view container */
 .map-view-container {
   height: 600px;
   width: 100%;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background: var(--bg-surface);
+  border-radius: 16px;
+  box-shadow: var(--shadow-soft);
   overflow: hidden;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--border-soft);
 }
 
 /* Form row for lat/lng */
@@ -50,7 +51,7 @@
 
 .form-hint {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--text-secondary);
   margin-top: 0.5rem;
   display: flex;
   align-items: center;

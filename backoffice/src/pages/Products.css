@@ -1,24 +1,27 @@
 .table-actions {
-  padding: 1rem;
+  padding: 0.95rem 1rem;
   display: flex;
   justify-content: flex-end;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-surface-soft);
 }
 
 .btn-primary {
-  padding: 0.625rem 1.25rem;
-  background-color: #4caf50;
+  padding: 0.62rem 1.05rem;
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 10px;
   cursor: pointer;
-  font-size: 0.875rem;
-  font-weight: 500;
-  transition: background-color 0.2s;
+  font-size: 0.84rem;
+  font-weight: 600;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 8px 16px rgba(79, 70, 229, 0.25);
 }
 
 .btn-primary:hover {
-  background-color: #45a049;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 22px rgba(79, 70, 229, 0.3);
 }
 
 .stock-badge {

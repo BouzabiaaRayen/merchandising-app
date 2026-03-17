@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import { documentService } from '../services/apiService';
+import { FileSpreadsheet, Calendar, User, Download, Trash2, FileX } from 'lucide-react';
 import '../App.css';
+import './Reports.css';
 
 const Reports = () => {
   const [documents, setDocuments] = useState([]);
@@ -92,196 +94,84 @@ const Reports = () => {
       <Sidebar />
       <div className="main-content">
         <Navbar />
-        <div className="page-container">
+        <div className="page-container reports-page">
           <div className="page-header">
             <div>
               <h1>Documents & Rapports</h1>
               <p>Rapports journaliers des merchandisers</p>
             </div>
-            <button 
-              onClick={fetchDocuments}
-              style={{
-                padding: '10px 20px',
-                background: '#6366f1',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: '600'
-              }}
-            >
-              🔄 Actualiser
-            </button>
+            <div className="reports-actions">
+              <button onClick={fetchDocuments} className="refresh-btn">
+                🔄 Actualiser
+              </button>
+            </div>
           </div>
 
-          {/* Filter Tabs */}
-          <div style={{
-            display: 'flex',
-            gap: '10px',
-            marginBottom: '20px',
-            background: 'white',
-            padding: '15px',
-            borderRadius: '12px'
-          }}>
-            {['all', 'today', 'week', 'month'].map(f => (
+          <div className="filters-bar">
+            {['all', 'today', 'week', 'month'].map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                style={{
-                  padding: '8px 16px',
-                  background: filter === f ? '#6366f1' : '#f1f5f9',
-                  color: filter === f ? 'white' : '#64748b',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  textTransform: 'capitalize'
-                }}
+                className={`filter-chip ${filter === f ? 'active' : ''}`}
               >
                 {f === 'all' ? 'Tous' : f === 'today' ? "Aujourd'hui" : f === 'week' ? 'Cette semaine' : 'Ce mois'}
               </button>
             ))}
-            <div style={{ marginLeft: 'auto', color: '#64748b', fontSize: '14px', alignSelf: 'center' }}>
-              {filteredDocuments.length} document(s)
-            </div>
+            <div className="filters-count">{filteredDocuments.length} document(s)</div>
           </div>
 
-          {/* Documents List */}
-          <div style={{ background: 'white', padding: '2rem', borderRadius: '12px' }}>
+          <div className="reports-list-card">
             {loading ? (
-              <div style={{ textAlign: 'center', padding: '3rem' }}>
-                <div style={{ fontSize: '14px', color: '#64748b' }}>Chargement...</div>
-              </div>
+              <div className="reports-loading">Chargement...</div>
             ) : error ? (
-              <div style={{ textAlign: 'center', padding: '3rem' }}>
-                <div style={{ fontSize: '48px', marginBottom: '1rem' }}>⚠️</div>
-                <div style={{ fontSize: '16px', color: '#ef4444', marginBottom: '1rem' }}>{error}</div>
-                <div style={{ 
-                  fontSize: '13px', 
-                  color: '#64748b',
-                  maxWidth: '500px',
-                  margin: '0 auto',
-                  lineHeight: '1.6'
-                }}>
+              <div className="reports-error">
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⚠️</div>
+                <div className="reports-error-title">{error}</div>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                   Vérifiez que le backend Django est démarré et accessible.
                 </div>
               </div>
             ) : filteredDocuments.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '3rem' }}>
-                <div style={{ fontSize: '48px', marginBottom: '1rem' }}>📄</div>
-                <div style={{ fontSize: '16px', color: '#64748b', marginBottom: '0.5rem' }}>
+              <div className="reports-empty">
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}><FileX size={40} strokeWidth={1.2} /></div>
+                <div style={{ fontSize: '0.94rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
                   Aucun document disponible
                 </div>
-                <div style={{ fontSize: '14px', color: '#94a3b8' }}>
+                <div style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
                   Les rapports générés par les merchandisers apparaîtront ici
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
                 {filteredDocuments.map((doc) => (
-                  <div
-                    key={doc.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '16px',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                      transition: 'all 0.2s',
-                      cursor: 'pointer'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = '#f8fafc';
-                      e.currentTarget.style.borderColor = '#6366f1';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'white';
-                      e.currentTarget.style.borderColor = '#e2e8f0';
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
-                      <div style={{
-                        width: '48px',
-                        height: '48px',
-                        background: '#fee2e2',
-                        borderRadius: '8px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '24px'
-                      }}>
-                        📑
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ 
-                          fontSize: '15px', 
-                          fontWeight: '600', 
-                          color: '#1e293b',
-                          marginBottom: '4px'
-                        }}>
-                          {doc.title || 'Rapport Journalier'}
-                        </div>
-                        <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '4px' }}>
-                          {doc.description || 'Aucune description'}
-                        </div>
-                        <div style={{ 
-                          fontSize: '12px', 
-                          color: '#94a3b8',
-                          display: 'flex',
-                          gap: '12px',
-                          alignItems: 'center'
-                        }}>
+                  <div key={doc.id} className="report-item">
+                    <div className="report-main">
+                      <div className="report-icon"><FileSpreadsheet size={22} strokeWidth={1.5} /></div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="report-title">{doc.title || 'Rapport Journalier'}</div>
+                        <div className="report-description">{doc.description || 'Aucune description'}</div>
+                        <div className="report-meta">
                           <span>
-                            📅 {new Date(doc.created_at || doc.uploaded_at).toLocaleDateString('fr-FR', {
+                          <Calendar size={13} /> {new Date(doc.created_at || doc.uploaded_at).toLocaleDateString('fr-FR', {
                               year: 'numeric',
                               month: 'long',
                               day: 'numeric',
                               hour: '2-digit',
-                              minute: '2-digit'
+                              minute: '2-digit',
                             })}
                           </span>
                           {(doc.merchandiser_details?.username || doc.merchandiser_name) && (
-                            <span>👤 {doc.merchandiser_details?.username || doc.merchandiser_name}</span>
+                            <span><User size={13} /> {doc.merchandiser_details?.username || doc.merchandiser_name}</span>
                           )}
                         </div>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        onClick={() => handleDownload(doc)}
-                        style={{
-                          padding: '8px 16px',
-                          background: '#6366f1',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '13px',
-                          fontWeight: '600',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}
-                      >
-                        📥 Télécharger
+                    <div className="report-actions">
+                      <button onClick={() => handleDownload(doc)} className="report-download">
+                        <Download size={14} /> Télécharger
                       </button>
-                      <button
-                        onClick={() => handleDelete(doc)}
-                        style={{
-                          padding: '8px 12px',
-                          background: '#fee2e2',
-                          color: '#dc2626',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '13px',
-                          fontWeight: '600'
-                        }}
-                      >
-                        🗑️
+                      <button onClick={() => handleDelete(doc)} className="report-delete">
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>

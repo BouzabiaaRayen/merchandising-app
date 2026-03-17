@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import {
+  LayoutDashboard, Users, Store, MapPin, FileText,
+  BarChart3, CalendarDays, AlertTriangle, Settings,
+  ChevronLeft, ChevronRight, Zap,
+} from 'lucide-react';
 import './Sidebar.css';
 
 const Sidebar = () => {
@@ -9,7 +14,7 @@ const Sidebar = () => {
     <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
         <div className="logo-container">
-          <div className="logo-icon">📊</div>
+          <div className="logo-icon"><Zap size={22} /></div>
           {!isCollapsed && (
             <div className="logo-text">
               <h1>MerchAdmin</h1>
@@ -24,7 +29,7 @@ const Sidebar = () => {
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
           title="Dashboard"
         >
-          <span className="nav-icon">📊</span>
+          <span className="nav-icon"><LayoutDashboard size={18} /></span>
           {!isCollapsed && <span>Dashboard</span>}
         </NavLink>
         <NavLink 
@@ -32,7 +37,7 @@ const Sidebar = () => {
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
           title="Team Management"
         >
-          <span className="nav-icon">👥</span>
+          <span className="nav-icon"><Users size={18} /></span>
           {!isCollapsed && <span>Team Management</span>}
         </NavLink>
         <NavLink
@@ -40,7 +45,7 @@ const Sidebar = () => {
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
           title="Stores"
         >
-          <span className="nav-icon">🏪</span>
+          <span className="nav-icon"><Store size={18} /></span>
           {!isCollapsed && <span>Stores</span>}
         </NavLink>
         <NavLink
@@ -48,7 +53,7 @@ const Sidebar = () => {
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
           title="Visits Tracking"
         >
-          <span className="nav-icon">🗺️</span>
+          <span className="nav-icon"><MapPin size={18} /></span>
           {!isCollapsed && <span>Visits Tracking</span>}
         </NavLink>
         <NavLink
@@ -56,7 +61,7 @@ const Sidebar = () => {
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
           title="Documents"
         >
-          <span className="nav-icon">📄</span>
+          <span className="nav-icon"><FileText size={18} /></span>
           {!isCollapsed && <span>Documents</span>}
         </NavLink>
         <NavLink
@@ -64,7 +69,7 @@ const Sidebar = () => {
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
           title="Reporting"
         >
-          <span className="nav-icon">📈</span>
+          <span className="nav-icon"><BarChart3 size={18} /></span>
           {!isCollapsed && <span>Reporting</span>}
         </NavLink>
         <NavLink
@@ -72,7 +77,7 @@ const Sidebar = () => {
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
           title="Leave Requests"
         >
-          <span className="nav-icon">🗓️</span>
+          <span className="nav-icon"><CalendarDays size={18} /></span>
           {!isCollapsed && <span>Leave Requests</span>}
         </NavLink>
         <NavLink
@@ -80,7 +85,7 @@ const Sidebar = () => {
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
           title="Complaints"
         >
-          <span className="nav-icon">⚠️</span>
+          <span className="nav-icon"><AlertTriangle size={18} /></span>
           {!isCollapsed && <span>Complaints</span>}
         </NavLink>
         <NavLink
@@ -88,7 +93,7 @@ const Sidebar = () => {
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
           title="Settings"
         >
-          <span className="nav-icon">⚙️</span>
+          <span className="nav-icon"><Settings size={18} /></span>
           {!isCollapsed && <span>Settings</span>}
         </NavLink>
       </nav>
@@ -98,7 +103,7 @@ const Sidebar = () => {
           onClick={() => setIsCollapsed(!isCollapsed)}
           title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
         >
-          <span className="collapse-icon">{isCollapsed ? '→' : '←'}</span>
+          <span className="collapse-icon">{isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</span>
           {!isCollapsed && <span>Collapse Sidebar</span>}
         </button>
       </div>

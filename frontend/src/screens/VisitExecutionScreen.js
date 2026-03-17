@@ -19,6 +19,169 @@ import * as ImagePicker from 'expo-image-picker';
 import { visitService, storeService, notificationService } from '../services/apiService';
 import { useAuth } from '../contexts/AuthContext';
 
+const FAKE_ARTICLES = [
+  {
+    id: 'art-1',
+    name: 'Warda Bidha Spaghetti N°3',
+    meta: '500g • Semoule dure',
+    price: '2.450 TND',
+    status: 'rupture',
+    color: '#f4d48e',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-2',
+    name: 'Warda Bidha Spaghetti N°5',
+    meta: '500g • Cuisson rapide',
+    price: '2.600 TND',
+    status: 'rupture-active',
+    color: '#efbc71',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-3',
+    name: 'Warda Bidha Penne Rigate',
+    meta: '400g • Format familial',
+    price: '2.950 TND',
+    status: 'rupture',
+    color: '#e2c68c',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-4',
+    name: 'Warda Bidha Coquillettes',
+    meta: '500g • Pates fines',
+    price: '2.300 TND',
+    status: 'rupture',
+    color: '#f6e3bb',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-5',
+    name: 'Warda Bidha Farfalle',
+    meta: '400g • Qualite premium',
+    price: '3.100 TND',
+    status: 'rupture',
+    color: '#f2d69a',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-6',
+    name: 'Warda Bidha Linguine',
+    meta: '500g • Long format',
+    price: '2.850 TND',
+    status: 'rupture',
+    color: '#f0cc84',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-7',
+    name: 'Warda Bidha Macaroni',
+    meta: '500g • Tube court',
+    price: '2.700 TND',
+    status: 'rupture',
+    color: '#ebc47a',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-8',
+    name: 'Warda Bidha Vermicelle',
+    meta: '250g • Soupe et dessert',
+    price: '1.950 TND',
+    status: 'rupture-active',
+    color: '#f7dfad',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-9',
+    name: 'Warda Bidha Nouilles Fines',
+    meta: '500g • Texture legere',
+    price: '2.550 TND',
+    status: 'rupture',
+    color: '#f3d8a2',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-10',
+    name: 'Warda Bidha Tagliatelle',
+    meta: '400g • Rubans larges',
+    price: '3.450 TND',
+    status: 'rupture',
+    color: '#e7c27f',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-11',
+    name: 'Warda Bidha Fusilli',
+    meta: '500g • Helicoidal',
+    price: '2.990 TND',
+    status: 'rupture',
+    color: '#f0ce8e',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-12',
+    name: 'Warda Bidha Lasagnes',
+    meta: '500g • Feuilles pretes',
+    price: '4.200 TND',
+    status: 'rupture',
+    color: '#dcb476',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-13',
+    name: 'Warda Bidha Cannelloni',
+    meta: '250g • Pates a farcir',
+    price: '3.850 TND',
+    status: 'rupture',
+    color: '#e9c988',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-14',
+    name: 'Warda Bidha Cheveux d\'Ange',
+    meta: '250g • Coupe extra fine',
+    price: '2.100 TND',
+    status: 'rupture-active',
+    color: '#f5ddac',
+    icon: 'pasta',
+  },
+  {
+    id: 'art-15',
+    name: 'Warda Bidha Mini Penne',
+    meta: '400g • Format enfant',
+    price: '2.650 TND',
+    status: 'rupture',
+    color: '#efd095',
+    icon: 'pasta',
+  },
+];
+
+const parseTndPrice = (priceText) => {
+  const parsed = Number(String(priceText).replace(/[^\d.]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const formatTndPrice = (value) => `${Number(value || 0).toFixed(3)} TND`;
+const DEFAULT_FACING_ROWS = 4;
+const DEFAULT_FACING_COLUMNS = 6;
+const MIN_STACK_DEPTH = 1;
+const MAX_STACK_DEPTH = 20;
+
+const createGridCells = (rows, columns, fill = true) =>
+  Array.from({ length: rows * columns }, () => fill);
+const createSlotAssignments = (rows, columns) =>
+  Array.from({ length: rows * columns }, () => ({ productId: null, depth: 0 }));
+const getExpectedTargetsFromGrid = (products, totalSlots) => {
+  if (!products.length || totalSlots <= 0) return {};
+  const targets = {};
+  for (let i = 0; i < totalSlots; i += 1) {
+    const product = products[i % products.length];
+    targets[product.id] = (targets[product.id] || 0) + 1;
+  }
+  return targets;
+};
+
 export default function VisitExecutionScreen({ route, navigation }) {
   const { visitId } = route.params;
   const { user } = useAuth();
@@ -34,16 +197,41 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const [locationChecked, setLocationChecked] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
+  const [showPriceModal, setShowPriceModal] = useState(false);
+  const [showSlotAssignModal, setShowSlotAssignModal] = useState(false);
   const [stockUpdateCompleted, setStockUpdateCompleted] = useState(false);
+  const [priceComparisonCompleted, setPriceComparisonCompleted] = useState(false);
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
-  const [stockItems, setStockItems] = useState([
-    { id: 1, sku: 'SKU001', name: 'Product A - Brand X', currentStock: 20, newStock: null, status: 'in-stock' },
-    { id: 2, sku: 'SKU002', name: 'Product B - Brand Y', currentStock: 15, newStock: null, status: 'in-stock' },
-    { id: 3, sku: 'SKU003', name: 'Product C - Brand Z', currentStock: 0, newStock: null, status: 'out-of-stock' },
-    { id: 4, sku: 'SKU004', name: 'Product D - Brand A', currentStock: 8, newStock: null, status: 'in-stock' },
-    { id: 5, sku: 'SKU005', name: 'Product E - Brand B', currentStock: 25, newStock: null, status: 'in-stock' },
-    { id: 6, sku: 'SKU006', name: 'Product F - Brand C', currentStock: 12, newStock: null, status: 'in-stock' },
-  ]);
+  const [activeTab, setActiveTab] = useState('events');
+  const [articleQuery, setArticleQuery] = useState('');
+  const [competitorName, setCompetitorName] = useState('Concurrent A');
+  const [articles, setArticles] = useState(() =>
+    FAKE_ARTICLES.map((article) => ({
+      ...article,
+      isRupture: article.status === 'rupture-active',
+    }))
+  );
+  const [priceComparisons, setPriceComparisons] = useState(() =>
+    FAKE_ARTICLES.slice(0, 8).map((article) => ({
+      id: article.id,
+      name: article.name,
+      ourPrice: parseTndPrice(article.price),
+      competitorPrice: '',
+    }))
+  );
+  const [facingGridRows, setFacingGridRows] = useState(String(DEFAULT_FACING_ROWS));
+  const [facingGridColumns, setFacingGridColumns] = useState(String(DEFAULT_FACING_COLUMNS));
+  const [facingGridCells, setFacingGridCells] = useState(() =>
+    createGridCells(DEFAULT_FACING_ROWS, DEFAULT_FACING_COLUMNS, true)
+  );
+  const [slotAssignments, setSlotAssignments] = useState(() =>
+    createSlotAssignments(DEFAULT_FACING_ROWS, DEFAULT_FACING_COLUMNS)
+  );
+  const [activeSlotIndex, setActiveSlotIndex] = useState(null);
+  const [activeSlotDepthInput, setActiveSlotDepthInput] = useState('1');
+  const [facingProofPhoto, setFacingProofPhoto] = useState(null);
+  const facingProducts = articles.slice(0, 8);
+  const expectedTargetsFromGrid = getExpectedTargetsFromGrid(facingProducts, facingGridCells.length);
 
   useEffect(() => {
     fetchVisitData();
@@ -354,51 +542,273 @@ export default function VisitExecutionScreen({ route, navigation }) {
     setShowStockModal(true);
   };
 
-  const handleStockQuantityChange = (itemId, value) => {
-    setStockItems(prevItems =>
-      prevItems.map(item =>
-        item.id === itemId
-          ? { ...item, newStock: value }
-          : item
-      )
-    );
+  const handleFacingDimensionChange = (field, value) => {
+    const normalized = value.replace(/[^\d]/g, '');
+    const nextRows = Number(field === 'rows' ? normalized || 0 : facingGridRows || 0);
+    const nextColumns = Number(field === 'columns' ? normalized || 0 : facingGridColumns || 0);
+
+    if (field === 'rows') setFacingGridRows(normalized);
+    if (field === 'columns') setFacingGridColumns(normalized);
+
+    if (nextRows <= 0 || nextColumns <= 0) {
+      setFacingGridCells([]);
+      setSlotAssignments([]);
+      return;
+    }
+
+    const nextCells = createGridCells(nextRows, nextColumns, true);
+    setFacingGridCells(nextCells);
+    setSlotAssignments(createSlotAssignments(nextRows, nextColumns));
   };
 
-  const handleToggleStockStatus = (itemId) => {
-    setStockItems(prevItems =>
-      prevItems.map(item =>
-        item.id === itemId
-          ? { 
-              ...item, 
-              status: item.status === 'in-stock' ? 'out-of-stock' : 'in-stock',
-              newStock: item.status === 'in-stock' ? '0' : item.currentStock.toString()
-            }
-          : item
-      )
-    );
+  const handleToggleFacingCellVisibility = (cellIndex) => {
+    setFacingGridCells((current) => current.map((cell, index) => (index === cellIndex ? !cell : cell)));
+  };
+
+  const handleOpenSlotAssignment = (cellIndex) => {
+    const currentDepth = Number(slotAssignments[cellIndex]?.depth || 0);
+    setActiveSlotIndex(cellIndex);
+    setActiveSlotDepthInput(String(currentDepth > 0 ? currentDepth : MIN_STACK_DEPTH));
+    setShowSlotAssignModal(true);
+  };
+
+  const handleActiveSlotDepthInput = (value) => {
+    const normalized = value.replace(/[^\d]/g, '');
+    setActiveSlotDepthInput(normalized);
+  };
+
+  const getNormalizedDepth = () => {
+    const parsed = Number(activeSlotDepthInput || 0);
+    if (!Number.isFinite(parsed) || parsed <= 0) return MIN_STACK_DEPTH;
+    return Math.max(MIN_STACK_DEPTH, Math.min(MAX_STACK_DEPTH, parsed));
+  };
+
+  const handleIncreaseActiveDepth = () => {
+    const next = Math.min(MAX_STACK_DEPTH, getNormalizedDepth() + 1);
+    setActiveSlotDepthInput(String(next));
+  };
+
+  const handleDecreaseActiveDepth = () => {
+    const next = Math.max(MIN_STACK_DEPTH, getNormalizedDepth() - 1);
+    setActiveSlotDepthInput(String(next));
+  };
+
+  const handleAssignProductToSlot = (productId) => {
+    if (activeSlotIndex === null) return;
+    const depth = getNormalizedDepth();
+
+    setFacingGridCells((current) => current.map((cell, index) => (index === activeSlotIndex ? true : cell)));
+    setSlotAssignments((current) => current.map((assigned, index) => (
+      index === activeSlotIndex
+        ? { productId, depth }
+        : assigned
+    )));
+    setShowSlotAssignModal(false);
+  };
+
+  const handleClearSlotAssignment = () => {
+    if (activeSlotIndex === null) return;
+
+    setFacingGridCells((current) => current.map((cell, index) => (index === activeSlotIndex ? false : cell)));
+    setSlotAssignments((current) => current.map((assigned, index) => (
+      index === activeSlotIndex
+        ? { productId: null, depth: 0 }
+        : assigned
+    )));
+    setShowSlotAssignModal(false);
+  };
+
+  const getShelfProductForIndex = (index) => {
+    if (!facingProducts.length) return null;
+    return facingProducts[index % facingProducts.length];
+  };
+
+  const getAssignedProductForIndex = (index) => {
+    const productId = slotAssignments[index]?.productId;
+    if (!productId) return null;
+    return articles.find((article) => article.id === productId) || null;
+  };
+
+  const getAssignedDepthForIndex = (index) => Number(slotAssignments[index]?.depth || 0);
+
+  const getProductSlotLabel = (productName = '') => {
+    const shortName = productName.replace(/^Warda Bidha\s+/i, '').trim().split(' ')[0] || 'Pasta';
+    return shortName.slice(0, 3).toUpperCase();
+  };
+
+  const getFacingCompliance = () => {
+    const expected = facingGridCells.length;
+    if (!expected) return 0;
+
+    const matchedSlots = facingGridCells.reduce((count, isVisible, index) => {
+      if (!isVisible) return count;
+      const expectedProduct = getShelfProductForIndex(index);
+      const assignedProductId = slotAssignments[index]?.productId;
+      if (!assignedProductId || assignedProductId !== expectedProduct?.id) return count;
+      return count + 1;
+    }, 0);
+
+    return Math.round((matchedSlots / expected) * 100);
+  };
+
+  const getFacingMismatchCount = () => {
+    let mismatchCount = 0;
+
+    for (let i = 0; i < facingGridCells.length; i += 1) {
+      if (!facingGridCells[i]) continue;
+      const expectedProduct = getShelfProductForIndex(i);
+      const assignedProductId = slotAssignments[i]?.productId;
+      if (!assignedProductId || assignedProductId !== expectedProduct?.id) mismatchCount += 1;
+    }
+
+    return mismatchCount;
+  };
+
+  const getObservedCountForProduct = (productId) =>
+    slotAssignments.reduce((count, assignment, index) => {
+      if (!facingGridCells[index]) return count;
+      return assignment?.productId === productId ? count + Number(assignment?.depth || 0) : count;
+    }, 0);
+
+  const getTotalObservedUnits = () =>
+    slotAssignments.reduce((total, assignment, index) => {
+      if (!facingGridCells[index]) return total;
+      return total + Number(assignment?.depth || 0);
+    }, 0);
+
+  const handleAssignProductFromSummary = (productId) => {
+    const expected = Number(expectedTargetsFromGrid[productId] || 0);
+    const observed = getObservedCountForProduct(productId);
+    let remaining = Math.max(expected - observed, 0);
+
+    if (!remaining) {
+      Alert.alert('Already Complete', 'Observed quantity already meets expected target for this product.');
+      return;
+    }
+
+    const visibleSlots = facingGridCells
+      .map((isVisible, index) => (isVisible ? index : null))
+      .filter((index) => index !== null);
+
+    if (!visibleSlots.length) {
+      Alert.alert('No Visible Slots', 'Mark at least one slot as visible before assigning products.');
+      return;
+    }
+
+    const nextAssignments = slotAssignments.map((assignment) => ({
+      productId: assignment?.productId || null,
+      depth: Number(assignment?.depth || 0),
+    }));
+
+    for (let i = 0; i < visibleSlots.length && remaining > 0; i += 1) {
+      const slotIndex = visibleSlots[i];
+      const slot = nextAssignments[slotIndex];
+      if (slot.productId !== productId) continue;
+      const canAdd = Math.max(0, MAX_STACK_DEPTH - Number(slot.depth || 0));
+      if (!canAdd) continue;
+      const toAdd = Math.min(canAdd, remaining);
+      slot.depth = Number(slot.depth || 0) + toAdd;
+      remaining -= toAdd;
+    }
+
+    for (let i = 0; i < visibleSlots.length && remaining > 0; i += 1) {
+      const slotIndex = visibleSlots[i];
+      const slot = nextAssignments[slotIndex];
+      if (slot.productId) continue;
+      const toPlace = Math.min(MAX_STACK_DEPTH, remaining);
+      nextAssignments[slotIndex] = { productId, depth: toPlace };
+      remaining -= toPlace;
+    }
+
+    setSlotAssignments(nextAssignments);
+
+    if (remaining > 0) {
+      Alert.alert('Partial Assignment', `Assigned what fits in visible slots. ${remaining} unit(s) still not placed.`);
+      return;
+    }
+
+    Alert.alert('Assigned', 'Observed grid updated for this product.');
+  };
+
+  const handleTakeFacingProofPhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera permission is required');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]) {
+        setFacingProofPhoto(result.assets[0]);
+      }
+    } catch (error) {
+      console.error('Facing proof photo error:', error);
+      Alert.alert('Error', 'Failed to capture expected aisle photo');
+    }
   };
 
   const handleSaveStockUpdates = () => {
-    const updatedItems = stockItems.filter(item => item.newStock !== null && item.newStock !== '');
+    const hasMissingCells = facingGridCells.some((cell) => !cell);
+    const changedDimensions = Number(facingGridRows || 0) !== DEFAULT_FACING_ROWS
+      || Number(facingGridColumns || 0) !== DEFAULT_FACING_COLUMNS;
+    const hasUpdates = hasMissingCells || changedDimensions;
+    const visibleSlots = facingGridCells
+      .map((isVisible, index) => (isVisible ? index : null))
+      .filter((index) => index !== null);
+    const unassignedVisibleCount = visibleSlots.filter((index) => !slotAssignments[index]?.productId).length;
     
-    if (updatedItems.length === 0) {
-      Alert.alert('No Changes', 'No stock updates to save');
+    if (!hasUpdates) {
+      Alert.alert('No Changes', 'No facing updates to save');
+      return;
+    }
+
+    if (unassignedVisibleCount > 0) {
+      Alert.alert('Missing Assignments', `Assign products to all visible slots (${unassignedVisibleCount} remaining).`);
+      return;
+    }
+
+    if (!facingProofPhoto) {
+      Alert.alert('Proof Photo Required', 'Capture one photo of the entire expected aisle before saving facing.');
       return;
     }
 
     Alert.alert(
-      'Save Stock Updates',
-      `Save ${updatedItems.length} stock update(s)?`,
+      'Save Facing Updates',
+      `Save facing grid update (${facingGridRows || 0} x ${facingGridColumns || 0})?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Save',
           onPress: () => {
-            // TODO: Send stock updates to backend
-            console.log('Stock updates to save:', updatedItems);
+            console.log('Facing grid saved:', {
+              rows: Number(facingGridRows || 0),
+              columns: Number(facingGridColumns || 0),
+              cells: facingGridCells,
+              slotAssignments,
+              totalObservedUnits: getTotalObservedUnits(),
+              proofPhotoUri: facingProofPhoto?.uri || null,
+              productSummary: articles.slice(0, 8).map((product) => {
+                const expected = Number(expectedTargetsFromGrid[product.id] || 0);
+                const observed = getObservedCountForProduct(product.id);
+                return {
+                  productId: product.id,
+                  productName: product.name,
+                  expected,
+                  observed,
+                  gap: observed - expected,
+                };
+              }),
+            });
             setStockUpdateCompleted(true);
             setShowStockModal(false);
-            Alert.alert('Success', 'Stock updates saved!');
+            Alert.alert('Success', 'Facing updates saved!');
           }
         }
       ]
@@ -448,7 +858,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
   const calculateCompletionPercentage = () => {
     let completed = 0;
-    let total = 3; // Check-in, Photos, Stock Update (Notes are optional)
+    let total = 3; // Check-in, Photos, Facing Update (Notes are optional)
 
     if (checkInTime) completed++;
     if (photos.length >= 4) completed++;
@@ -484,6 +894,42 @@ export default function VisitExecutionScreen({ route, navigation }) {
     return { text: `GPS ACTIVE: ${distance}M FROM STORE`, color: '#3b82f6' };
   };
 
+  const handleCompetitorPrices = () => {
+    if (!checkInTime) return;
+    setShowPriceModal(true);
+  };
+
+  const handleCompetitorPriceChange = (itemId, value) => {
+    const normalizedValue = value.replace(',', '.').replace(/[^\d.]/g, '');
+    setPriceComparisons((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? { ...item, competitorPrice: normalizedValue }
+          : item
+      )
+    );
+  };
+
+  const handleSavePriceComparison = () => {
+    setPriceComparisonCompleted(true);
+    setShowPriceModal(false);
+    Alert.alert('Saved', 'Price comparison has been recorded for this visit.');
+  };
+
+  const handleAddProduct = () => {
+    Alert.alert('Add Product', 'Product addition is not connected yet. Facing entry remains available from Saisi Facing.');
+  };
+
+  const handleToggleArticleRupture = (articleId) => {
+    setArticles((currentArticles) =>
+      currentArticles.map((article) =>
+        article.id === articleId
+          ? { ...article, isRupture: !article.isRupture }
+          : article
+      )
+    );
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -499,23 +945,290 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const isCheckedIn = !!checkInTime;
   const isVisitCompleted = visit?.status === 'completed';
   const canCheckOut = completionPercentage >= 100 && isCheckedIn && !isVisitCompleted;
+  const scheduleLabel = visit?.scheduled_date ? formatTime(visit.scheduled_date) : 'Not scheduled';
+  const visitStatusConfig = isVisitCompleted
+    ? { label: 'VISITE TERMINEE', color: '#16a34a', bg: '#dcfce7' }
+    : isCheckedIn
+      ? { label: 'VISITE ACTIVE', color: '#ffffff', bg: '#ff1f1f' }
+      : { label: 'VISITE PLANIFIEE', color: '#1d4ed8', bg: '#dbeafe' };
+  const quickActions = [
+    {
+      key: 'photo',
+      title: 'Anomalie Photo',
+      icon: 'camera-outline',
+      accent: '#ff3b30',
+      background: '#fff1f1',
+      onPress: handleOpenPhotoModal,
+      disabled: !isCheckedIn || isVisitCompleted,
+      completed: photos.length > 0,
+    },
+    {
+      key: 'facing',
+      title: 'Saisi Facing',
+      icon: 'view-grid-plus-outline',
+      accent: '#ff3b30',
+      background: '#fff1f1',
+      onPress: handleOpenStockModal,
+      disabled: !isCheckedIn || isVisitCompleted,
+      completed: stockUpdateCompleted,
+    },
+    {
+      key: 'pricing',
+      title: 'Prix Concurrents',
+      icon: 'tag-outline',
+      accent: '#ff3b30',
+      background: '#fff6ef',
+      onPress: handleCompetitorPrices,
+      disabled: !isCheckedIn || isVisitCompleted,
+      completed: priceComparisonCompleted,
+    },
+    {
+      key: 'product',
+      title: 'Ajout Produit',
+      icon: 'plus-circle-outline',
+      accent: '#ff3b30',
+      background: '#fff1f1',
+      onPress: handleAddProduct,
+      disabled: !isCheckedIn || isVisitCompleted,
+    },
+    {
+      key: 'alert',
+      title: 'Alerte Concurrent',
+      icon: 'bell-alert-outline',
+      accent: '#ff3b30',
+      background: '#fff1f1',
+      onPress: () => navigation.navigate('Complaint'),
+      disabled: !isCheckedIn || isVisitCompleted,
+    },
+    {
+      key: 'other',
+      title: 'Autre',
+      icon: 'dots-horizontal',
+      accent: '#cbd5e1',
+      background: '#f8fafc',
+      onPress: null,
+      disabled: true,
+    },
+  ];
+  const recentActivities = [
+    isCheckedIn && {
+      key: 'checkin',
+      title: 'Visite demarree',
+      subtitle: `${store?.name || visit?.store_name || 'Magasin'} • ${formatTime(checkInTime)}`,
+      icon: 'play-circle-outline',
+      iconColor: '#10b981',
+      iconBackground: '#e8fbf2',
+    },
+    stockUpdateCompleted && {
+      key: 'facing',
+      title: 'Facing valide',
+      subtitle: `Grille ${facingGridRows || 0} x ${facingGridColumns || 0} • ${facingGridCells.filter(Boolean).length}/${facingGridCells.length} visibles`,
+      icon: 'check-circle-outline',
+      iconColor: '#10b981',
+      iconBackground: '#e8fbf2',
+    },
+    photos.length > 0 && {
+      key: 'photos',
+      title: 'Anomalie Photo',
+      subtitle: `${store?.name || visit?.store_name || 'Magasin'} • ${photos.length} photo${photos.length > 1 ? 's' : ''}`,
+      icon: 'camera-outline',
+      iconColor: '#ff5a52',
+      iconBackground: '#fff1f1',
+    },
+    notes?.trim() && {
+      key: 'notes',
+      title: 'Infos magasin',
+      subtitle: 'Notes de visite mises a jour',
+      icon: 'text-box-outline',
+      iconColor: '#f59e0b',
+      iconBackground: '#fff8e8',
+    },
+  ].filter(Boolean);
+
+  const renderEventsTab = () => (
+    <>
+      <View style={styles.quickGrid}>
+        {quickActions.map((action) => (
+          <TouchableOpacity
+            key={action.key}
+            style={[
+              styles.quickActionCard,
+              action.disabled && styles.quickActionCardDisabled,
+            ]}
+            activeOpacity={0.85}
+            disabled={action.disabled || !action.onPress}
+            onPress={action.onPress || undefined}
+          >
+            <View style={[styles.quickActionIconWrap, { backgroundColor: action.background }]}>
+              <MaterialCommunityIcons name={action.icon} size={26} color={action.accent} />
+            </View>
+            <Text style={[styles.quickActionTitle, action.disabled && styles.quickActionTitleDisabled]}>
+              {action.title}
+            </Text>
+            {action.completed && (
+              <View style={styles.quickActionDoneBadge}>
+                <MaterialCommunityIcons name="check" size={12} color="#16a34a" />
+              </View>
+            )}
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={styles.activitySection}>
+        <Text style={styles.sectionEyebrow}>ACTIVITES RECENTES</Text>
+        {recentActivities.length === 0 ? (
+          <View style={styles.emptyActivityCard}>
+            <Text style={styles.emptyActivityText}>Aucune activite enregistree pour le moment.</Text>
+          </View>
+        ) : (
+          recentActivities.map((activity) => (
+            <View key={activity.key} style={styles.activityCard}>
+              <View style={[styles.activityIconWrap, { backgroundColor: activity.iconBackground }]}>
+                <MaterialCommunityIcons name={activity.icon} size={18} color={activity.iconColor} />
+              </View>
+              <View style={styles.activityContent}>
+                <Text style={styles.activityTitle}>{activity.title}</Text>
+                <Text style={styles.activitySubtitle}>{activity.subtitle}</Text>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+    </>
+  );
+
+  const renderArticlesTab = () => (
+    <View style={styles.tabPanel}>
+      <View style={styles.articleToolbar}>
+        <View style={styles.searchBox}>
+          <MaterialCommunityIcons name="magnify" size={18} color="#c0c6d4" />
+          <TextInput
+            style={styles.searchInput}
+            value={articleQuery}
+            onChangeText={setArticleQuery}
+            placeholder="Rechercher un produit..."
+            placeholderTextColor="#a0a8b8"
+          />
+        </View>
+        <TouchableOpacity style={styles.filterButton} activeOpacity={0.85}>
+          <MaterialCommunityIcons name="tune-variant" size={20} color="#7b8798" />
+        </TouchableOpacity>
+      </View>
+
+      {filteredArticles.map((article) => {
+        const isActive = article.isRupture;
+
+        return (
+          <TouchableOpacity
+            key={article.id}
+            style={[styles.articleCard, isActive && styles.articleCardActive]}
+            activeOpacity={0.9}
+          >
+            <View style={[styles.articleThumb, { backgroundColor: article.color }]}>
+              <MaterialCommunityIcons name={article.icon} size={28} color="#ffffff" />
+            </View>
+
+            <View style={styles.articleDetails}>
+              <Text style={styles.articleName} numberOfLines={1}>{article.name}</Text>
+              <Text style={styles.articleMeta}>{article.meta}</Text>
+              <Text style={styles.articlePrice}>{article.price}</Text>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.ruptureBadge, isActive && styles.ruptureBadgeActive]}
+              activeOpacity={0.85}
+              onPress={() => handleToggleArticleRupture(article.id)}
+            >
+              <Text style={[styles.ruptureBadgeText, isActive && styles.ruptureBadgeTextActive]}>
+                {isActive ? 'RUPTURE' : 'EN STOCK'}
+              </Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        );
+      })}
+
+      {filteredArticles.length === 0 && (
+        <View style={styles.emptyArticleState}>
+          <MaterialCommunityIcons name="package-variant-closed" size={40} color="#c8cfdb" />
+          <Text style={styles.emptyArticleText}>Aucun article ne correspond a votre recherche.</Text>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderStoreInfoTab = () => (
+    <View style={styles.tabPanel}>
+      <View style={styles.infoCard}>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Heure prevue</Text>
+          <Text style={styles.infoValue}>{scheduleLabel}</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>GPS</Text>
+          <Text style={[styles.infoValue, { color: gpsStatus.color }]}>{gpsStatus.text}</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Progression</Text>
+          <Text style={styles.infoValue}>{completionPercentage}%</Text>
+        </View>
+      </View>
+
+      <Text style={styles.sectionEyebrow}>INFOS MAGASIN</Text>
+      <TextInput
+        style={styles.notesInput}
+        value={notes}
+        onChangeText={setNotes}
+        placeholder="Ajouter des observations sur le magasin..."
+        placeholderTextColor="#9ca3af"
+        multiline
+        numberOfLines={6}
+        textAlignVertical="top"
+        editable={!isVisitCompleted}
+      />
+
+      <TouchableOpacity
+        style={[styles.secondaryButton, isVisitCompleted && styles.secondaryButtonDisabled]}
+        onPress={handleSubmitVisit}
+        disabled={isVisitCompleted}
+      >
+        <MaterialCommunityIcons name="content-save-outline" size={18} color={isVisitCompleted ? '#94a3b8' : '#111827'} />
+        <Text style={[styles.secondaryButtonText, isVisitCompleted && styles.secondaryButtonTextDisabled]}>Enregistrer les notes</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderActiveTab = () => {
+    if (activeTab === 'articles') return renderArticlesTab();
+    if (activeTab === 'store-info') return renderStoreInfoTab();
+    return renderEventsTab();
+  };
+
+  const footerButtonLabel = isVisitCompleted
+    ? 'VISITE CLOTUREE'
+    : isCheckedIn
+      ? 'CLOTURER LA VISITE'
+      : 'DEMARRER LA VISITE';
+  const footerButtonDisabled = isVisitCompleted || (isCheckedIn && !canCheckOut);
+  const footerButtonHandler = isCheckedIn ? handleCheckOut : handleCheckIn;
+  const filteredArticles = articles.filter((article) => {
+    const haystack = `${article.name} ${article.meta}`.toLowerCase();
+    return haystack.includes(articleQuery.trim().toLowerCase());
+  });
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
             <MaterialCommunityIcons name="chevron-left" size={28} color="#111" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Visit Execution</Text>
+          <Text style={styles.headerTitle}>Visit Store</Text>
           <TouchableOpacity style={styles.headerButton}>
             <MaterialCommunityIcons name="dots-vertical" size={24} color="#111" />
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.content}>
-          {/* Completed Visit Banner */}
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
           {isVisitCompleted && (
             <View style={styles.completedBanner}>
               <MaterialCommunityIcons name="check-circle" size={24} color="#10b981" />
@@ -528,198 +1241,82 @@ export default function VisitExecutionScreen({ route, navigation }) {
             </View>
           )}
 
-          {/* Store Info Card */}
-          <View style={styles.storeCard}>
-            <View style={styles.storeIcon}>
-              <MaterialCommunityIcons name="store" size={32} color="#2563eb" />
+          <View style={styles.heroCard}>
+            <View style={styles.heroTopRow}>
+              <View style={styles.heroTextWrap}>
+                <Text style={styles.storeName}>
+                  {store?.name || visit?.store_name || 'Unknown Store'}
+                </Text>
+                <View style={styles.addressRow}>
+                  <MaterialCommunityIcons name="map-marker-outline" size={14} color="#6b7280" />
+                  <Text style={styles.storeAddress}>
+                    {store?.address || store?.location || 'Address not available'}
+                  </Text>
+                </View>
+              </View>
+              <View style={[styles.visitStatusChip, { backgroundColor: visitStatusConfig.bg }]}>
+                <Text style={[styles.visitStatusChipText, { color: visitStatusConfig.color }]}>
+                  {visitStatusConfig.label}
+                </Text>
+              </View>
             </View>
-            <View style={styles.storeInfo}>
-              <Text style={styles.storeName}>
-                {store?.name || visit?.store_name || 'Unknown Store'}
-              </Text>
-              <Text style={styles.storeAddress}>
-                {store?.address || store?.location || 'Address not available'}
-              </Text>
-            </View>
-            <View style={[styles.gpsStatusBadge, { backgroundColor: gpsStatus.color }]}>
-              <MaterialCommunityIcons name="map-marker-check" size={16} color="#fff" />
-              <Text style={styles.gpsStatusText}>{gpsStatus.text}</Text>
+
+            <View style={styles.heroMetaRow}>
+              <View style={styles.timerBox}>
+                <Text style={styles.timerValue}>{isCheckedIn ? elapsedTime : scheduleLabel}</Text>
+                <Text style={styles.timerLabel}>{isCheckedIn ? 'Temps sur place' : 'Heure prevue'}</Text>
+              </View>
+              <View style={styles.progressBox}>
+                <Text style={styles.progressValue}>{completionPercentage}%</Text>
+                <Text style={styles.progressLabel}>Execution</Text>
+              </View>
             </View>
           </View>
 
-          {/* Visit Status */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Visit Status</Text>
-            <View style={styles.statusRow}>
-              <Text style={styles.statusLabel}>Overall Completion</Text>
-              <Text style={styles.statusValue}>
-                {completionPercentage}% ({Math.round(completionPercentage / 33.33)}/3 Tasks)
-              </Text>
-            </View>
-            {checkInTime && (
-              <View style={[styles.statusRow, { marginTop: 12 }]}>
-                <View style={styles.timeTrackerLabel}>
-                  <MaterialCommunityIcons name="clock-time-four-outline" size={16} color="#2563eb" />
-                  <Text style={styles.statusLabel}>Time in Store</Text>
-                </View>
-                <Text style={styles.timeTrackerValue}>{elapsedTime}</Text>
-              </View>
-            )}
+          <View style={styles.tabBar}>
+            {[
+              { key: 'articles', label: 'Articles' },
+              { key: 'events', label: 'Evenements' },
+              { key: 'store-info', label: 'Infos Magasin' },
+            ].map((tab) => (
+              <TouchableOpacity
+                key={tab.key}
+                style={[styles.tabButton, activeTab === tab.key && styles.tabButtonActive]}
+                onPress={() => setActiveTab(tab.key)}
+              >
+                <Text style={[styles.tabButtonText, activeTab === tab.key && styles.tabButtonTextActive]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
-          {/* Execution Actions */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Execution Actions</Text>
+          {renderActiveTab()}
 
-            {/* Check-in */}
-            <TouchableOpacity
-              style={[styles.actionCard, isCheckedIn && styles.actionCardCompleted]}
-              onPress={!isCheckedIn && !isVisitCompleted ? handleCheckIn : null}
-              disabled={isCheckedIn || isVisitCompleted}
-            >
-              <View style={[styles.actionIcon, isCheckedIn && styles.actionIconCompleted]}>
-                <MaterialCommunityIcons 
-                  name="login" 
-                  size={24} 
-                  color={isCheckedIn ? "#fff" : "#2563eb"} 
-                />
-              </View>
-              <View style={styles.actionContent}>
-                <Text style={styles.actionTitle}>Check-in</Text>
-                <Text style={styles.actionSubtitle}>
-                  {isCheckedIn ? `Completed at ${formatTime(checkInTime)}` : 'Tap to check in'}
-                </Text>
-              </View>
-              {isCheckedIn && (
-                <View style={styles.completedBadge}>
-                  <MaterialCommunityIcons name="check-circle" size={24} color="#10b981" />
-                </View>
-              )}
-            </TouchableOpacity>
-
-            {/* Before/After Photos */}
-            <TouchableOpacity
-              style={[styles.actionCard, photos.length >= 4 && styles.actionCardCompleted]}
-              onPress={handleOpenPhotoModal}
-              disabled={!isCheckedIn || isVisitCompleted}
-            >
-              <View style={[styles.actionIcon, (!isCheckedIn || isVisitCompleted) && styles.actionIconDisabled, photos.length >= 4 && styles.actionIconCompleted]}>
-                <MaterialCommunityIcons 
-                  name="camera" 
-                  size={24} 
-                  color={!isCheckedIn || isVisitCompleted ? "#9ca3af" : photos.length >= 4 ? "#fff" : "#2563eb"} 
-                />
-              </View>
-              <View style={styles.actionContent}>
-                <Text style={[styles.actionTitle, (!isCheckedIn || isVisitCompleted) && styles.actionTitleDisabled]}>
-                  Before / After Photos
-                </Text>
-                <Text style={styles.actionSubtitle}>
-                  {photos.length >= 4 ? 'Completed' : `${photos.length} of 4 photos uploaded`}
-                </Text>
-              </View>
-              {photos.length >= 4 && (
-                <View style={styles.completedBadge}>
-                  <MaterialCommunityIcons name="check-circle" size={24} color="#10b981" />
-                </View>
-              )}
-            </TouchableOpacity>
-
-            {/* Stock Update */}
-            <TouchableOpacity
-              style={[styles.actionCard, stockUpdateCompleted && styles.actionCardCompleted]}
-              onPress={handleOpenStockModal}
-              disabled={!isCheckedIn || isVisitCompleted}
-            >
-              <View style={[styles.actionIcon, (!isCheckedIn || isVisitCompleted) && styles.actionIconDisabled, stockUpdateCompleted && styles.actionIconCompleted]}>
-                <MaterialCommunityIcons 
-                  name="package-variant" 
-                  size={24} 
-                  color={!isCheckedIn || isVisitCompleted ? "#9ca3af" : stockUpdateCompleted ? "#fff" : "#2563eb"} 
-                />
-              </View>
-              <View style={styles.actionContent}>
-                <Text style={[styles.actionTitle, (!isCheckedIn || isVisitCompleted) && styles.actionTitleDisabled]}>
-                  Stock Update
-                </Text>
-                <Text style={styles.actionSubtitle}>
-                  {stockUpdateCompleted ? 'Completed' : `${stockItems.length} SKUs to review`}
-                </Text>
-              </View>
-              {stockUpdateCompleted && (
-                <View style={styles.completedBadge}>
-                  <MaterialCommunityIcons name="check-circle" size={24} color="#10b981" />
-                </View>
-              )}
-            </TouchableOpacity>
-
-            {/* Check-out */}
-            <TouchableOpacity
-              style={[
-                styles.actionCard, 
-                isVisitCompleted && styles.actionCardCompleted,
-                !canCheckOut && !isVisitCompleted && styles.actionCardDisabled
-              ]}
-              onPress={canCheckOut ? handleCheckOut : null}
-              disabled={!canCheckOut || isVisitCompleted}
-            >
-              <View style={[
-                styles.actionIcon, 
-                isVisitCompleted && styles.actionIconCompleted,
-                !canCheckOut && !isVisitCompleted && styles.actionIconDisabled
-              ]}>
-                <MaterialCommunityIcons 
-                  name="logout" 
-                  size={24} 
-                  color={isVisitCompleted ? "#fff" : !canCheckOut ? "#9ca3af" : "#2563eb"} 
-                />
-              </View>
-              <View style={styles.actionContent}>
-                <Text style={[styles.actionTitle, !canCheckOut && !isVisitCompleted && styles.actionTitleDisabled]}>
-                  Check-out
-                </Text>
-                <Text style={styles.actionSubtitle}>
-                  {isVisitCompleted ? 'Completed' : canCheckOut ? 'Tap to check out' : 'Finish all tasks to unlock'}
-                </Text>
-              </View>
-              {isVisitCompleted && (
-                <View style={styles.completedBadge}>
-                  <MaterialCommunityIcons name="check-circle" size={24} color="#10b981" />
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {/* Visit Notes */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>VISIT NOTES</Text>
-            <TextInput
-              style={styles.notesInput}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Add any observations or issues here..."
-              placeholderTextColor="#9ca3af"
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              editable={!isVisitCompleted}
-            />
-          </View>
-
-          {/* Sync Status */}
           <View style={styles.syncStatus}>
             <MaterialCommunityIcons name="cloud-sync" size={16} color="#2563eb" />
             <Text style={styles.syncText}>CLOUD SYNC ACTIVE</Text>
           </View>
-
-          {/* Submit Button */}
-          <TouchableOpacity 
-            style={styles.submitButton}
-            onPress={handleSubmitVisit}
-          >
-            <Text style={styles.submitButtonText}>Submit Visit Data</Text>
-          </TouchableOpacity>
         </ScrollView>
+
+        <View style={styles.footerCtaWrap}>
+          <TouchableOpacity
+            style={[styles.footerCtaButton, footerButtonDisabled && styles.footerCtaButtonDisabled]}
+            onPress={footerButtonHandler}
+            disabled={footerButtonDisabled}
+            activeOpacity={0.9}
+          >
+            <MaterialCommunityIcons
+              name={isCheckedIn ? 'logout-variant' : 'login-variant'}
+              size={20}
+              color="#fff"
+            />
+            <Text style={styles.footerCtaText}>{footerButtonLabel}</Text>
+          </TouchableOpacity>
+          {isCheckedIn && !canCheckOut && !isVisitCompleted && (
+            <Text style={styles.footerHelperText}>Complete photo capture and facing update before checkout.</Text>
+          )}
+        </View>
       </View>
 
       {/* Photo Modal */}
@@ -777,7 +1374,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
         </SafeAreaView>
       </Modal>
 
-      {/* Stock Update Modal */}
+      {/* Facing Update Modal */}
       <Modal
         visible={showStockModal}
         animationType="slide"
@@ -789,78 +1386,208 @@ export default function VisitExecutionScreen({ route, navigation }) {
             <TouchableOpacity onPress={() => setShowStockModal(false)}>
               <MaterialCommunityIcons name="close" size={28} color="#111" />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Stock Update</Text>
+            <Text style={styles.modalTitle}>Saisi Facing</Text>
             <View style={{ width: 28 }} />
           </View>
 
-          <FlatList
-            data={stockItems}
-            keyExtractor={(item) => item.id.toString()}
-            contentContainerStyle={styles.stockList}
-            renderItem={({ item }) => (
-              <View style={styles.stockItem}>
-                <View style={styles.stockItemHeader}>
-                  <View style={styles.stockItemInfo}>
-                    <Text style={styles.stockSku}>{item.sku}</Text>
-                    <Text style={styles.stockName}>{item.name}</Text>
+          <View style={styles.facingSummaryBox}>
+            <Text style={styles.facingSummaryLabel}>Facing Compliance</Text>
+            <Text style={styles.facingSummaryValue}>
+              {getFacingCompliance()}
+              %
+            </Text>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            <View style={styles.unifiedFacingCard}>
+              <Text style={styles.comparisonLabel}>EXPECTED GRID</Text>
+
+              <Text style={styles.unifiedFacingHint}>Tap slot to assign product. Long press slot to toggle missing/visible.</Text>
+
+              <View style={styles.facingProofRow}>
+                <TouchableOpacity style={styles.facingProofButton} onPress={handleTakeFacingProofPhoto}>
+                  <MaterialCommunityIcons name="camera-outline" size={16} color="#1d4ed8" />
+                  <Text style={styles.facingProofButtonText}>
+                    {facingProofPhoto ? 'Retake Expected Aisle Photo' : 'Capture Expected Aisle Photo'}
+                  </Text>
+                </TouchableOpacity>
+                {facingProofPhoto && (
+                  <Image source={{ uri: facingProofPhoto.uri }} style={styles.facingProofThumb} />
+                )}
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.shelfCompareScroll}
+                contentContainerStyle={styles.shelfCompareContent}
+              >
+                <View style={styles.shelfCompareRow}>
+                  <View style={styles.shelfPanel}>
+                    <Text style={styles.shelfPanelTitle}>Expected</Text>
+                    <View style={styles.facingGridPreviewWrap}>
+                      <View style={styles.shelfFrame}>
+                        <View style={styles.shelfRail} />
+                        <View style={styles.shelfGridArea}>
+                          {Array.from({ length: Number(facingGridRows || 0) }).map((_, rowIndex) => (
+                            <View key={`expected-row-${rowIndex}`} style={styles.shelfRowBlock}>
+                              <Text style={styles.shelfLabel}>Shelf {rowIndex + 1}</Text>
+                              <View style={styles.facingGridRowPreview}>
+                                {Array.from({ length: Number(facingGridColumns || 0) }).map((__, colIndex) => {
+                                  const cellIndex = rowIndex * Number(facingGridColumns || 0) + colIndex;
+                                  const product = getShelfProductForIndex(cellIndex);
+
+                                  return (
+                                    <View
+                                      key={`expected-cell-${rowIndex}-${colIndex}`}
+                                      style={[
+                                        styles.facingGridCell,
+                                        styles.facingGridCellFilled,
+                                        { backgroundColor: product?.color || '#34d399' },
+                                      ]}
+                                    >
+                                      <Text style={styles.facingProductText}>
+                                        {getProductSlotLabel(product?.name)}
+                                      </Text>
+                                    </View>
+                                  );
+                                })}
+                              </View>
+                              <View style={styles.shelfPlank} />
+                            </View>
+                          ))}
+                        </View>
+                        <View style={styles.shelfRail} />
+                      </View>
+                    </View>
                   </View>
-                  <View style={[
-                    styles.stockStatusBadge,
-                    { backgroundColor: item.status === 'in-stock' ? '#10b981' : '#ef4444' }
-                  ]}>
-                    <Text style={styles.stockStatusText}>
-                      {item.status === 'in-stock' ? 'In Stock' : 'Out of Stock'}
-                    </Text>
+
+                  <View style={styles.shelfPanel}>
+                    <Text style={styles.shelfPanelTitle}>Observed</Text>
+                    <View style={styles.facingGridPreviewWrap}>
+                      <View style={styles.shelfFrame}>
+                        <View style={styles.shelfRail} />
+                        <View style={styles.shelfGridArea}>
+                          {Array.from({ length: Number(facingGridRows || 0) }).map((_, rowIndex) => (
+                            <View key={`observed-row-${rowIndex}`} style={styles.shelfRowBlock}>
+                              <Text style={styles.shelfLabel}>Shelf {rowIndex + 1}</Text>
+                              <View style={styles.facingGridRowPreview}>
+                                {Array.from({ length: Number(facingGridColumns || 0) }).map((__, colIndex) => {
+                                  const cellIndex = rowIndex * Number(facingGridColumns || 0) + colIndex;
+                                  const visible = Boolean(facingGridCells[cellIndex]);
+                                  const expectedProduct = getShelfProductForIndex(cellIndex);
+                                  const assignedProduct = getAssignedProductForIndex(cellIndex);
+                                  const assignedDepth = getAssignedDepthForIndex(cellIndex);
+                                  const isMismatch = visible && assignedProduct && assignedProduct.id !== expectedProduct?.id;
+                                  const isUnassigned = visible && !assignedProduct;
+                                  const displayProduct = assignedProduct || expectedProduct;
+
+                                  return (
+                                    <TouchableOpacity
+                                      key={`observed-cell-${rowIndex}-${colIndex}`}
+                                      activeOpacity={0.8}
+                                      onPress={() => handleOpenSlotAssignment(cellIndex)}
+                                      onLongPress={() => handleToggleFacingCellVisibility(cellIndex)}
+                                      style={[
+                                        styles.facingGridCell,
+                                        visible ? styles.facingGridCellFilled : styles.facingGridCellMissing,
+                                        visible && { backgroundColor: displayProduct?.color || '#34d399' },
+                                        isMismatch && styles.facingGridCellMismatch,
+                                        isUnassigned && styles.facingGridCellUnassigned,
+                                      ]}
+                                    >
+                                      {visible && (
+                                        <View style={styles.facingCellContent}>
+                                          <Text style={styles.facingProductText}>
+                                            {isUnassigned ? '???' : getProductSlotLabel(displayProduct?.name)}
+                                          </Text>
+                                          {!isUnassigned && assignedDepth > 1 && (
+                                            <Text style={styles.facingDepthText}>x{assignedDepth}</Text>
+                                          )}
+                                        </View>
+                                      )}
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                              </View>
+                              <View style={styles.shelfPlank} />
+                            </View>
+                          ))}
+                        </View>
+                        <View style={styles.shelfRail} />
+                      </View>
+                    </View>
                   </View>
                 </View>
+              </ScrollView>
 
-                <View style={styles.stockItemBody}>
-                  <View style={styles.stockCurrentInfo}>
-                    <Text style={styles.stockLabel}>Current Stock:</Text>
-                    <Text style={styles.stockValue}>{item.currentStock} units</Text>
-                  </View>
-
-                  <View style={styles.stockInputContainer}>
-                    <Text style={styles.stockLabel}>New Stock:</Text>
-                    <TextInput
-                      style={styles.stockInput}
-                      value={item.newStock === null ? '' : item.newStock.toString()}
-                      onChangeText={(value) => handleStockQuantityChange(item.id, value)}
-                      keyboardType="numeric"
-                      placeholder="Enter quantity"
-                      placeholderTextColor="#9ca3af"
-                    />
-                  </View>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.toggleStatusButton,
-                      { backgroundColor: item.status === 'in-stock' ? '#fee2e2' : '#d1fae5' }
-                    ]}
-                    onPress={() => handleToggleStockStatus(item.id)}
-                  >
-                    <MaterialCommunityIcons
-                      name={item.status === 'in-stock' ? 'close-circle' : 'check-circle'}
-                      size={18}
-                      color={item.status === 'in-stock' ? '#ef4444' : '#10b981'}
-                    />
-                    <Text style={[
-                      styles.toggleStatusText,
-                      { color: item.status === 'in-stock' ? '#ef4444' : '#10b981' }
-                    ]}>
-                      {item.status === 'in-stock' ? 'Mark Out of Stock' : 'Mark In Stock'}
-                    </Text>
-                  </TouchableOpacity>
+              <View style={styles.facingLegendRow}>
+                <View style={styles.facingLegendItem}>
+                  <View style={[styles.facingLegendDot, styles.facingGridCellFilled]} />
+                  <Text style={styles.facingLegendText}>Visible</Text>
+                </View>
+                <View style={styles.facingLegendItem}>
+                  <View style={[styles.facingLegendDot, styles.facingGridCellMissing]} />
+                  <Text style={styles.facingLegendText}>Missing</Text>
+                </View>
+                <View style={styles.facingLegendItem}>
+                  <View style={[styles.facingLegendDot, styles.facingGridCellMismatch]} />
+                  <Text style={styles.facingLegendText}>Mismatch</Text>
                 </View>
               </View>
-            )}
-            ListEmptyComponent={
-              <View style={styles.emptyStock}>
-                <MaterialCommunityIcons name="package-variant-closed" size={48} color="#9ca3af" />
-                <Text style={styles.emptyStockText}>No products to update</Text>
+
+              <Text style={styles.unifiedFacingStats}>
+                Visible: {facingGridCells.filter(Boolean).length} / {facingGridCells.length} • Missing: {facingGridCells.filter((cell) => !cell).length} • Mismatch: {getFacingMismatchCount()}
+              </Text>
+              <Text style={styles.unifiedFacingStats}>
+                Units observed (stacked): {getTotalObservedUnits()}
+              </Text>
+
+              <View style={styles.productQtySection}>
+                <Text style={styles.comparisonLabel}>EXPECTED VS OBSERVED BY PRODUCT</Text>
+                {facingProducts.map((product) => {
+                  const expected = Number(expectedTargetsFromGrid[product.id] || 0);
+                  const observed = getObservedCountForProduct(product.id);
+                  const gap = observed - expected;
+
+                  return (
+                    <View key={`qty-${product.id}`} style={styles.productQtyItem}>
+                      <View style={styles.productQtyRow}>
+                        <View style={[styles.productQtySwatch, { backgroundColor: product.color }]} />
+                        <View style={styles.productQtyInfo}>
+                          <Text style={styles.productQtyName} numberOfLines={1}>{product.name}</Text>
+                          <Text style={styles.productQtyMeta}>Observed: {observed}</Text>
+                        </View>
+
+                        <View style={styles.productQtyExpectedWrap}>
+                          <Text style={styles.productQtyExpectedLabel}>Expected</Text>
+                          <View style={styles.productQtyExpectedStatic}>
+                            <Text style={styles.productQtyExpectedStaticText}>{expected}</Text>
+                          </View>
+                        </View>
+
+                        <View style={[
+                          styles.productQtyGapBadge,
+                          gap < 0 ? styles.productQtyGapNegative : styles.productQtyGapPositive,
+                        ]}>
+                          <Text style={styles.productQtyGapText}>{gap >= 0 ? `+${gap}` : `${gap}`}</Text>
+                        </View>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.productQtyAssignButton}
+                        onPress={() => handleAssignProductFromSummary(product.id)}
+                        activeOpacity={0.85}
+                      >
+                        <MaterialCommunityIcons name="playlist-plus" size={14} color="#1d4ed8" />
+                        <Text style={styles.productQtyAssignText}>Assign</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
               </View>
-            }
-          />
+            </View>
+          </ScrollView>
 
           <View style={styles.modalFooter}>
             <TouchableOpacity
@@ -869,8 +1596,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
             >
               <MaterialCommunityIcons name="content-save" size={20} color="#fff" />
               <Text style={styles.saveButtonText}>
-                Save Updates {stockItems.filter(item => item.newStock !== null && item.newStock !== '').length > 0 && 
-                  `(${stockItems.filter(item => item.newStock !== null && item.newStock !== '').length})`}
+                Save Facing Grid
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -878,6 +1604,146 @@ export default function VisitExecutionScreen({ route, navigation }) {
               onPress={() => setShowStockModal(false)}
             >
               <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+
+          {showSlotAssignModal && (
+            <View style={styles.slotAssignOverlay}>
+              <View style={styles.slotAssignCard}>
+                <View style={styles.slotAssignHeader}>
+                  <Text style={styles.slotAssignTitle}>Assign Product to Slot</Text>
+                  <TouchableOpacity onPress={() => setShowSlotAssignModal(false)}>
+                    <MaterialCommunityIcons name="close" size={22} color="#334155" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.depthControlRow}>
+                  <Text style={styles.depthControlLabel}>Units stacked in this slot</Text>
+                  <View style={styles.depthControlActions}>
+                    <TouchableOpacity style={styles.depthControlButton} onPress={handleDecreaseActiveDepth}>
+                      <MaterialCommunityIcons name="minus" size={16} color="#334155" />
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.depthControlInput}
+                      value={activeSlotDepthInput}
+                      onChangeText={handleActiveSlotDepthInput}
+                      keyboardType="numeric"
+                      placeholder="1"
+                      placeholderTextColor="#94a3b8"
+                    />
+                    <TouchableOpacity style={styles.depthControlButton} onPress={handleIncreaseActiveDepth}>
+                      <MaterialCommunityIcons name="plus" size={16} color="#334155" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <ScrollView style={styles.slotAssignList}>
+                  {articles.slice(0, 12).map((product) => (
+                    <TouchableOpacity
+                      key={product.id}
+                      style={styles.slotAssignItem}
+                      onPress={() => handleAssignProductToSlot(product.id)}
+                    >
+                      <View style={[styles.slotAssignColor, { backgroundColor: product.color }]} />
+                      <View style={styles.slotAssignTextWrap}>
+                        <Text style={styles.slotAssignName}>{product.name}</Text>
+                        <Text style={styles.slotAssignMeta}>{product.meta}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                <TouchableOpacity style={styles.slotAssignMissingButton} onPress={handleClearSlotAssignment}>
+                  <MaterialCommunityIcons name="delete-outline" size={18} color="#b91c1c" />
+                  <Text style={styles.slotAssignMissingText}>Mark Slot as Missing</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      <Modal
+        visible={showPriceModal}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowPriceModal(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowPriceModal(false)}>
+              <MaterialCommunityIcons name="close" size={28} color="#111" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Price Comparison</Text>
+            <View style={{ width: 28 }} />
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            <Text style={styles.comparisonLabel}>COMPETITOR NAME</Text>
+            <TextInput
+              style={styles.comparisonInput}
+              value={competitorName}
+              onChangeText={setCompetitorName}
+              placeholder="Enter competitor store"
+              placeholderTextColor="#9ca3af"
+            />
+
+            <Text style={styles.comparisonLabel}>PASTA PRICE MATRIX</Text>
+            {priceComparisons.map((item) => {
+              const parsedCompetitorPrice = Number(item.competitorPrice);
+              const hasCompetitorPrice = item.competitorPrice !== '' && Number.isFinite(parsedCompetitorPrice);
+              const diff = hasCompetitorPrice ? parsedCompetitorPrice - item.ourPrice : null;
+              const isPositiveDiff = hasCompetitorPrice && diff >= 0;
+
+              return (
+                <View key={item.id} style={styles.comparisonCard}>
+                  <Text style={styles.comparisonProductName}>{item.name}</Text>
+
+                  <View style={styles.comparisonPriceRow}>
+                    <View style={styles.comparisonPriceBox}>
+                      <Text style={styles.comparisonPriceLabel}>Our Price</Text>
+                      <Text style={styles.comparisonPriceValue}>{formatTndPrice(item.ourPrice)}</Text>
+                    </View>
+
+                    <View style={styles.comparisonPriceBox}>
+                      <Text style={styles.comparisonPriceLabel}>{competitorName || 'Competitor'}</Text>
+                      <TextInput
+                        style={styles.comparisonPriceInput}
+                        value={item.competitorPrice}
+                        onChangeText={(value) => handleCompetitorPriceChange(item.id, value)}
+                        placeholder="0.000"
+                        placeholderTextColor="#9ca3af"
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={[
+                    styles.comparisonDiffBadge,
+                    hasCompetitorPrice
+                      ? (isPositiveDiff ? styles.comparisonDiffPositive : styles.comparisonDiffNegative)
+                      : styles.comparisonDiffNeutral,
+                  ]}>
+                    <Text style={styles.comparisonDiffText}>
+                      {!hasCompetitorPrice
+                        ? 'Enter competitor price'
+                        : isPositiveDiff
+                          ? `Our price lower by ${formatTndPrice(Math.abs(diff))}`
+                          : `Competitor lower by ${formatTndPrice(Math.abs(diff))}`}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
+
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.saveButton, { marginRight: 0 }]}
+              onPress={handleSavePriceComparison}
+            >
+              <MaterialCommunityIcons name="scale-balance" size={20} color="#fff" />
+              <Text style={styles.saveButtonText}>Save Comparison</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -889,10 +1755,11 @@ export default function VisitExecutionScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#ffffff',
   },
   container: {
     flex: 1,
+    backgroundColor: '#ffffff',
   },
   loadingContainer: {
     flex: 1,
@@ -903,29 +1770,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
   },
   headerButton: {
     padding: 8,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111',
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1f2937',
   },
   content: {
     flex: 1,
-    padding: 16,
+    paddingHorizontal: 14,
+  },
+  contentContainer: {
+    paddingBottom: 120,
   },
   completedBanner: {
     backgroundColor: '#d1fae5',
-    borderRadius: 12,
+    borderRadius: 18,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 14,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
@@ -946,159 +1814,503 @@ const styles = StyleSheet.create({
     color: '#047857',
     lineHeight: 18,
   },
-  storeCard: {
+  heroCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 14,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 4,
   },
-  storeIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: '#eff6ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  storeInfo: {
-    marginBottom: 12,
+  heroTextWrap: {
+    flex: 1,
   },
   storeName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111',
-    marginBottom: 4,
+    fontSize: 27,
+    fontWeight: '800',
+    color: '#1f2937',
+    marginBottom: 6,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   storeAddress: {
     fontSize: 14,
     color: '#6b7280',
+    flex: 1,
   },
-  gpsStatusBadge: {
-    flexDirection: 'row',
+  visitStatusChip: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    minWidth: 96,
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
   },
-  gpsStatusText: {
+  visitStatusChipText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#fff',
-    marginLeft: 6,
+    fontWeight: '800',
     letterSpacing: 0.5,
   },
-  section: {
-    marginBottom: 24,
+  heroMetaRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
   },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+  timerBox: {
+    flex: 1.15,
+    borderRadius: 18,
+    backgroundColor: '#fff5f5',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+  },
+  progressBox: {
+    flex: 0.85,
+    borderRadius: 18,
+    backgroundColor: '#f4f7fb',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+  },
+  timerValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#ef1b1b',
+    letterSpacing: 1,
+  },
+  timerLabel: {
+    fontSize: 12,
     color: '#6b7280',
-    marginBottom: 12,
-    letterSpacing: 0.5,
+    marginTop: 4,
+    fontWeight: '600',
   },
-  statusRow: {
+  progressValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  progressLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  tabBar: {
     flexDirection: 'row',
+    backgroundColor: '#faf5f5',
+    borderRadius: 18,
+    padding: 4,
+    marginBottom: 18,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  tabButtonActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  tabButtonText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    fontWeight: '700',
+  },
+  tabButtonTextActive: {
+    color: '#ff1f1f',
+  },
+  quickGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  quickActionCard: {
+    width: '48.2%',
+    backgroundColor: '#ffffff',
+    borderRadius: 22,
+    paddingVertical: 26,
+    paddingHorizontal: 14,
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
+    marginBottom: 14,
+    minHeight: 112,
+    borderWidth: 1,
+    borderColor: '#edf0f5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
+    position: 'relative',
   },
-  statusLabel: {
-    fontSize: 15,
-    color: '#111',
-    fontWeight: '500',
+  quickActionCardDisabled: {
+    opacity: 0.55,
+    borderStyle: 'dashed',
   },
-  statusValue: {
+  quickActionIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  quickActionTitle: {
+    textAlign: 'center',
     fontSize: 15,
-    color: '#2563eb',
     fontWeight: '700',
+    color: '#334155',
   },
-  timeTrackerLabel: {
+  quickActionTitleDisabled: {
+    color: '#94a3b8',
+  },
+  quickActionDoneBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#dcfce7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activitySection: {
+    marginBottom: 10,
+  },
+  sectionEyebrow: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#b7bfd0',
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+  activityCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
-  timeTrackerValue: {
-    fontSize: 18,
-    color: '#10b981',
-    fontWeight: '700',
-    fontFamily: 'monospace',
-  },
-  actionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
+    padding: 14,
+    borderRadius: 18,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#eef2f7',
   },
-  actionCardCompleted: {
-    borderColor: '#10b981',
-    borderWidth: 2,
+  emptyActivityCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#eef2f7',
   },
-  actionCardDisabled: {
-    opacity: 0.5,
+  emptyActivityText: {
+    color: '#94a3b8',
+    fontSize: 14,
   },
-  actionIcon: {
-    width: 48,
-    height: 48,
+  activityIconWrap: {
+    width: 38,
+    height: 38,
     borderRadius: 12,
-    backgroundColor: '#eff6ff',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  actionIconCompleted: {
-    backgroundColor: '#2563eb',
-  },
-  actionIconDisabled: {
-    backgroundColor: '#f3f4f6',
-  },
-  actionContent: {
+  activityContent: {
     flex: 1,
   },
-  actionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111',
-    marginBottom: 4,
+  activityTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#334155',
+    marginBottom: 3,
   },
-  actionTitleDisabled: {
-    color: '#9ca3af',
+  activitySubtitle: {
+    fontSize: 12,
+    color: '#94a3b8',
   },
-  actionSubtitle: {
-    fontSize: 13,
-    color: '#6b7280',
+  tabPanel: {
+    marginBottom: 18,
   },
-  completedBadge: {
+  articleToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+    gap: 10,
+  },
+  searchBox: {
+    flex: 1,
+    height: 46,
+    borderRadius: 15,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#edf1f6',
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  searchInput: {
+    flex: 1,
     marginLeft: 8,
+    fontSize: 14,
+    color: '#334155',
+    paddingVertical: 0,
+  },
+  filterButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#edf1f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  articleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#eef2f7',
+    paddingHorizontal: 10,
+    paddingVertical: 14,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.03,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  articleCardActive: {
+    borderColor: '#fecaca',
+    backgroundColor: '#fffdfd',
+  },
+  articleThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  articleDetails: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  articleName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#334155',
+  },
+  articleMeta: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 3,
+  },
+  articlePrice: {
+    fontSize: 22,
+    lineHeight: 24,
+    fontWeight: '800',
+    color: '#2f67ff',
+    marginTop: 6,
+  },
+  ruptureBadge: {
+    minWidth: 78,
+    height: 34,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#dce4ef',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    backgroundColor: '#ffffff',
+  },
+  ruptureBadgeActive: {
+    backgroundColor: '#ff3b30',
+    borderColor: '#ff3b30',
+  },
+  ruptureBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#b2bed1',
+  },
+  ruptureBadgeTextActive: {
+    color: '#ffffff',
+  },
+  emptyArticleState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 34,
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#eef2f7',
+  },
+  emptyArticleText: {
+    fontSize: 14,
+    color: '#94a3b8',
+    marginTop: 10,
+  },
+  comparisonLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94a3b8',
+    letterSpacing: 0.6,
+    marginBottom: 8,
+    marginTop: 6,
+  },
+  comparisonInput: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: '#0f172a',
+    marginBottom: 12,
+  },
+  comparisonCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 14,
+    marginBottom: 12,
+  },
+  comparisonProductName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 10,
+  },
+  comparisonPriceRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  comparisonPriceBox: {
+    flex: 1,
+  },
+  comparisonPriceLabel: {
+    fontSize: 12,
+    color: '#64748b',
+    marginBottom: 6,
+    fontWeight: '600',
+  },
+  comparisonPriceValue: {
+    fontSize: 14,
+    color: '#2563eb',
+    fontWeight: '700',
+    backgroundColor: '#eff6ff',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  comparisonPriceInput: {
+    fontSize: 14,
+    color: '#111827',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+  },
+  comparisonDiffBadge: {
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  comparisonDiffPositive: {
+    backgroundColor: '#dcfce7',
+  },
+  comparisonDiffNegative: {
+    backgroundColor: '#fee2e2',
+  },
+  comparisonDiffNeutral: {
+    backgroundColor: '#f1f5f9',
+  },
+  comparisonDiffText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  infoCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#eef2f7',
+    padding: 16,
+    marginBottom: 18,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  infoLabel: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  infoValue: {
+    fontSize: 13,
+    color: '#0f172a',
+    fontWeight: '700',
+    maxWidth: '58%',
+    textAlign: 'right',
   },
   notesInput: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 18,
     padding: 16,
     fontSize: 14,
     color: '#111',
-    minHeight: 120,
+    minHeight: 150,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#eef2f7',
+    marginBottom: 14,
+  },
+  secondaryButton: {
+    borderRadius: 16,
+    backgroundColor: '#f4f7fb',
+    paddingVertical: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  secondaryButtonDisabled: {
+    backgroundColor: '#f8fafc',
+  },
+  secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  secondaryButtonTextDisabled: {
+    color: '#94a3b8',
   },
   syncStatus: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
   },
   syncText: {
     fontSize: 12,
@@ -1107,17 +2319,42 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     letterSpacing: 0.5,
   },
-  submitButton: {
-    backgroundColor: '#e5e7eb',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 32,
+  footerCtaWrap: {
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 18,
+    backgroundColor: '#ffffff',
   },
-  submitButtonText: {
+  footerCtaButton: {
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: '#ff1717',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#ff1717',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  footerCtaButtonDisabled: {
+    backgroundColor: '#fca5a5',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  footerCtaText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#6b7280',
+    fontWeight: '800',
+    color: '#ffffff',
+    marginLeft: 8,
+    letterSpacing: 0.5,
+  },
+  footerHelperText: {
+    textAlign: 'center',
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 8,
   },
   // Modal Styles
   modalContainer: {
@@ -1230,6 +2467,191 @@ const styles = StyleSheet.create({
   stockList: {
     padding: 16,
   },
+  facingSummaryBox: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#eff6ff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  facingSummaryLabel: {
+    fontSize: 13,
+    color: '#1e3a8a',
+    fontWeight: '700',
+  },
+  facingSummaryValue: {
+    fontSize: 18,
+    color: '#2563eb',
+    fontWeight: '800',
+  },
+  unifiedFacingCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 14,
+  },
+  unifiedFacingExpectedText: {
+    fontSize: 14,
+    color: '#0f172a',
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  unifiedFacingHint: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  facingProofRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  facingProofButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  facingProofButtonText: {
+    marginLeft: 6,
+    fontSize: 12,
+    color: '#1d4ed8',
+    fontWeight: '700',
+  },
+  facingProofThumb: {
+    width: 42,
+    height: 42,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  unifiedFacingStats: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '700',
+    marginTop: 10,
+  },
+  productQtySection: {
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    paddingTop: 10,
+  },
+  productQtyItem: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    paddingBottom: 8,
+    marginBottom: 4,
+  },
+  productQtyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    gap: 8,
+  },
+  productQtySwatch: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+  },
+  productQtyInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  productQtyName: {
+    fontSize: 12,
+    color: '#0f172a',
+    fontWeight: '700',
+  },
+  productQtyMeta: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  productQtyExpectedWrap: {
+    width: 76,
+  },
+  productQtyExpectedLabel: {
+    fontSize: 10,
+    color: '#64748b',
+    marginBottom: 3,
+    fontWeight: '700',
+  },
+  productQtyExpectedInput: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 12,
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  productQtyExpectedStatic: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  productQtyExpectedStaticText: {
+    fontSize: 12,
+    color: '#0f172a',
+    fontWeight: '700',
+  },
+  productQtyGapBadge: {
+    minWidth: 42,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+  },
+  productQtyGapPositive: {
+    backgroundColor: '#dcfce7',
+  },
+  productQtyGapNegative: {
+    backgroundColor: '#fee2e2',
+  },
+  productQtyGapText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#334155',
+  },
+  productQtyAssignButton: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 2,
+  },
+  productQtyAssignText: {
+    marginLeft: 6,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1d4ed8',
+  },
   stockItem: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -1264,6 +2686,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111',
   },
+  facingExpectedBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+  },
+  facingExpectedText: {
+    fontSize: 11,
+    color: '#334155',
+    fontWeight: '700',
+  },
   stockStatusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1277,6 +2710,276 @@ const styles = StyleSheet.create({
   },
   stockItemBody: {
     gap: 12,
+  },
+  facingMetricRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+  },
+  facingGridInputRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  facingGridInputBlock: {
+    flex: 1,
+  },
+  facingSmallInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 15,
+    color: '#111827',
+    marginTop: 6,
+  },
+  facingGridPreviewWrap: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 12,
+    gap: 10,
+  },
+  shelfCompareRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  shelfCompareScroll: {
+    marginHorizontal: -2,
+  },
+  shelfCompareContent: {
+    paddingHorizontal: 2,
+  },
+  shelfPanel: {
+    flex: 1,
+    minWidth: 280,
+  },
+  shelfPanelTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748b',
+    marginBottom: 6,
+  },
+  shelfFrame: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  shelfRail: {
+    width: 6,
+    borderRadius: 4,
+    backgroundColor: '#94a3b8',
+    marginHorizontal: 4,
+  },
+  shelfGridArea: {
+    flex: 1,
+    gap: 10,
+  },
+  shelfRowBlock: {
+    gap: 6,
+  },
+  shelfLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+    marginLeft: 2,
+  },
+  facingGridRowPreview: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  shelfPlank: {
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#d1d5db',
+    marginTop: 2,
+  },
+  facingGridCell: {
+    width: 34,
+    height: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  facingCellContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  facingProductText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  facingDepthText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#ffffff',
+    marginTop: 2,
+  },
+  facingGridCellFilled: {
+    backgroundColor: '#34d399',
+    borderColor: '#10b981',
+  },
+  facingGridCellMissing: {
+    backgroundColor: '#ffffff',
+    borderColor: '#cbd5e1',
+    borderStyle: 'dashed',
+  },
+  facingGridCellMismatch: {
+    borderColor: '#f59e0b',
+    borderWidth: 2,
+  },
+  facingGridCellUnassigned: {
+    borderColor: '#f97316',
+    borderWidth: 2,
+    backgroundColor: '#fde68a',
+  },
+  facingLegendRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 10,
+    flexWrap: 'wrap',
+  },
+  facingLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  facingLegendDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  facingLegendText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '700',
+  },
+  slotAssignOverlay: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: 'rgba(15,23,42,0.45)',
+    justifyContent: 'flex-end',
+    zIndex: 50,
+  },
+  slotAssignCard: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 20,
+    maxHeight: '72%',
+  },
+  slotAssignHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  depthControlRow: {
+    marginBottom: 12,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  depthControlLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+    marginBottom: 8,
+  },
+  depthControlActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+  },
+  depthControlButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  depthControlInput: {
+    width: 54,
+    marginHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  slotAssignTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  slotAssignList: {
+    maxHeight: 360,
+  },
+  slotAssignItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef2f7',
+  },
+  slotAssignColor: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  slotAssignTextWrap: {
+    flex: 1,
+  },
+  slotAssignName: {
+    fontSize: 13,
+    color: '#0f172a',
+    fontWeight: '700',
+  },
+  slotAssignMeta: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  slotAssignMissingButton: {
+    marginTop: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+  },
+  slotAssignMissingText: {
+    marginLeft: 6,
+    color: '#b91c1c',
+    fontSize: 13,
+    fontWeight: '700',
   },
   stockCurrentInfo: {
     flexDirection: 'row',
@@ -1322,6 +3025,32 @@ const styles = StyleSheet.create({
   toggleStatusText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  facingToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  facingToggleChip: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#fff',
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  facingToggleChipActive: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#f87171',
+  },
+  facingToggleText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '700',
+  },
+  facingToggleTextActive: {
+    color: '#b91c1c',
   },
   emptyStock: {
     alignItems: 'center',

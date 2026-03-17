@@ -3,6 +3,10 @@ import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import GPSMap from '../components/GPSMap';
 import { userService, visitService, notificationService, gpsService, storeService } from '../services/apiService';
+import {
+  UserCheck, Users, RefreshCw, CheckCircle2, AlertTriangle,
+  MapPin, FileText, Clock,
+} from 'lucide-react';
 import './Dashboard.css';
 
 const Dashboard = () => {
@@ -249,7 +253,7 @@ const Dashboard = () => {
               <div className="stats-grid">
                 <div className="stat-card">
                   <div className="stat-header">
-                    <div className="stat-icon merchandisers">👤</div>
+                    <div className="stat-icon merchandisers"><UserCheck size={22} /></div>
                     {stats.merchandiserChange !== 0 && (
                       <div className={`stat-change ${stats.merchandiserChange > 0 ? 'positive' : 'negative'}`}>
                         {stats.merchandiserChange > 0 ? '+' : ''}{stats.merchandiserChange}%
@@ -264,7 +268,7 @@ const Dashboard = () => {
 
                 <div className="stat-card">
                   <div className="stat-header">
-                    <div className="stat-icon supervisors">👥</div>
+                    <div className="stat-icon supervisors"><Users size={22} /></div>
                     {stats.supervisorChange !== 0 && (
                       <div className={`stat-change ${stats.supervisorChange > 0 ? 'positive' : 'negative'}`}>
                         {stats.supervisorChange > 0 ? '+' : ''}{stats.supervisorChange}%
@@ -279,7 +283,7 @@ const Dashboard = () => {
 
                 <div className="stat-card">
                   <div className="stat-header">
-                    <div className="stat-icon active">⟳</div>
+                    <div className="stat-icon active"><RefreshCw size={22} /></div>
                     <div className="live-indicator">
                       <span className="live-dot"></span>
                       LIVE
@@ -293,7 +297,7 @@ const Dashboard = () => {
 
                 <div className="stat-card">
                   <div className="stat-header">
-                    <div className="stat-icon completed">✓</div>
+                    <div className="stat-icon completed"><CheckCircle2 size={22} /></div>
                     {stats.completedVisitsChange !== 0 && (
                       <div className={`stat-change ${stats.completedVisitsChange > 0 ? 'positive' : 'negative'}`}>
                         {stats.completedVisitsChange > 0 ? '+' : ''}{stats.completedVisitsChange}%
@@ -308,7 +312,7 @@ const Dashboard = () => {
 
                 <div className={`stat-card ${stats.gpsAlerts > 0 ? 'alert-active' : ''}`}>
                   <div className="stat-header">
-                    <div className="stat-icon alerts">⚠</div>
+                    <div className="stat-icon alerts"><AlertTriangle size={22} /></div>
                     <div className="stat-badge">Live</div>
                   </div>
                   <div className="stat-content">
@@ -350,11 +354,11 @@ const Dashboard = () => {
                       recentActivities.map((activity) => (
                         <div key={activity.id} className={`activity-item ${activity.type}`}>
                           <div className={`activity-icon ${activity.type}`}>
-                            {activity.type === 'checkin' && '📍'}
-                            {activity.type === 'alert' && '⚠️'}
-                            {activity.type === 'report' && '📄'}
-                            {activity.type === 'completed' && '✅'}
-                            {activity.type === 'delayed' && '⏱️'}
+                            {activity.type === 'checkin' && <MapPin size={16} />}
+                            {activity.type === 'alert' && <AlertTriangle size={16} />}
+                            {activity.type === 'report' && <FileText size={16} />}
+                            {activity.type === 'completed' && <CheckCircle2 size={16} />}
+                            {activity.type === 'delayed' && <Clock size={16} />}
                           </div>
                           <div className="activity-content">
                             <div className="activity-text">

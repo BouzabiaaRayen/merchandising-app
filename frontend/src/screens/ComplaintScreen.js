@@ -17,6 +17,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+import { supabase, REPORTS_BUCKET } from '../services/supabaseClient';
 
 const PROBLEM_CATEGORIES = [
   { value: 'technical', label: 'Technical Issue' },
@@ -51,6 +52,32 @@ export default function ComplaintScreen() {
   const [expandedId, setExpandedId] = useState(null);
 
   const selectedCategory = PROBLEM_CATEGORIES.find(c => c.value === category);
+
+  const uploadComplaintPhoto = async (photoAsset) => {
+    const response = await fetch(photoAsset.uri);
+    const blob = await response.blob();
+
+    const extension = (photoAsset.fileName?.split('.').pop() || 'jpg').toLowerCase();
+    const safeExtension = extension.length <= 5 ? extension : 'jpg';
+    const filePath = `complaints/${Date.now()}_${user?.id || 'user'}.${safeExtension}`;
+
+    const { error } = await supabase.storage
+      .from(REPORTS_BUCKET)
+      .upload(filePath, blob, {
+        contentType: photoAsset.mimeType || 'image/jpeg',
+        upsert: false,
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    const { data } = supabase.storage
+      .from(REPORTS_BUCKET)
+      .getPublicUrl(filePath);
+
+    return data?.publicUrl || null;
+  };
 
   const fetchComplaints = async (isRefresh = false) => {
     try {
@@ -112,21 +139,19 @@ export default function ComplaintScreen() {
     try {
       setSubmitting(true);
 
-      const formData = new FormData();
-      formData.append('category', category);
-      formData.append('description', description.trim());
+      const payload = {
+        category,
+        description: description.trim(),
+      };
 
       if (photo) {
-        formData.append('photo', {
-          uri: photo.uri,
-          type: photo.mimeType || 'image/jpeg',
-          name: photo.fileName || `complaint_${Date.now()}.jpg`,
-        });
+        const uploadedPhotoUrl = await uploadComplaintPhoto(photo);
+        if (uploadedPhotoUrl) {
+          payload.photo = uploadedPhotoUrl;
+        }
       }
 
-      await api.post('/merchandising/complaints/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await api.post('/merchandising/complaints/', payload);
 
       Alert.alert('Success', 'Your complaint has been submitted to the administrator.', [
         {
@@ -142,7 +167,10 @@ export default function ComplaintScreen() {
       ]);
     } catch (err) {
       console.error('Complaint submit error:', err);
-      const msg = err.response?.data?.error || err.response?.data?.detail || 'Failed to submit complaint.';
+      const msg = err.response?.data?.photo?.[0]
+        || err.response?.data?.error
+        || err.response?.data?.detail
+        || 'Failed to submit complaint.';
       Alert.alert('Error', msg);
     } finally {
       setSubmitting(false);

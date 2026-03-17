@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import { documentService } from '../services/apiService';
+import { Upload, FileText, FileSpreadsheet, RefreshCw, Download, Trash2, Calendar, User, Briefcase, Loader } from 'lucide-react';
 import './Documents.css';
 
 const Documents = () => {
@@ -306,7 +307,7 @@ const Documents = () => {
                     className="file-input"
                   />
                   <div className="file-upload-placeholder">
-                    <div className="file-icon">📄</div>
+                    <div className="file-icon"><FileText size={32} strokeWidth={1.2} /></div>
                     <div className="file-text">
                       Click to upload or drag and drop
                     </div>
@@ -396,7 +397,7 @@ const Documents = () => {
                   className="btn-primary"
                   disabled={uploading}
                 >
-                  {uploading ? '⏳ Uploading...' : '▶ Upload & Send'}
+                  {uploading ? <><Loader size={14} className="spin" /> Uploading...</> : <><Upload size={14} /> Upload &amp; Send</>}
                 </button>
               </div>
             </form>
@@ -411,7 +412,7 @@ const Documents = () => {
                 disabled={loading}
                 className="btn-refresh"
               >
-                🔄 Refresh
+                <RefreshCw size={14} /> Refresh
               </button>
             </div>
 
@@ -422,7 +423,7 @@ const Documents = () => {
               </div>
             ) : documents.length === 0 ? (
               <div className="empty-state">
-                <div style={{ fontSize: '48px', marginBottom: '1rem' }}>📄</div>
+                <div style={{ fontSize: '48px', marginBottom: '1rem' }}><FileText size={48} strokeWidth={1} /></div>
                 <div className="empty-title">No documents uploaded yet</div>
                 <div className="empty-description">
                   Documents you upload will appear here
@@ -433,7 +434,7 @@ const Documents = () => {
                 {documents.map((doc) => (
                   <div key={doc.id} className="document-card">
                     <div className="document-card-header">
-                      <div className="document-icon">📑</div>
+                      <div className="document-icon"><FileSpreadsheet size={24} strokeWidth={1.5} /></div>
                       <div className="document-meta">
                         <div className="document-title">{doc.title || 'Sem título'}</div>
                         <div className="document-type">
@@ -448,7 +449,7 @@ const Documents = () => {
 
                     <div className="document-info">
                       <div className="info-item">
-                        📅 {new Date(doc.created_at || doc.uploaded_at).toLocaleDateString('pt-BR', {
+                        <Calendar size={13} /> {new Date(doc.created_at || doc.uploaded_at).toLocaleDateString('pt-BR', {
                           year: 'numeric',
                           month: 'short',
                           day: 'numeric',
@@ -457,10 +458,10 @@ const Documents = () => {
                         })}
                       </div>
                       {doc.sent_to_merchandisers && (
-                        <div className="badge badge-blue">👤 Merchandisers</div>
+                        <div className="badge badge-blue"><User size={12} /> Merchandisers</div>
                       )}
                       {doc.sent_to_supervisors && (
-                        <div className="badge badge-green">👔 Supervisors</div>
+                        <div className="badge badge-green"><Briefcase size={12} /> Supervisors</div>
                       )}
                     </div>
 
@@ -469,13 +470,13 @@ const Documents = () => {
                         onClick={() => handleDownload(doc)}
                         className="btn-action btn-download"
                       >
-                        📥 Download
+                        <Download size={14} /> Download
                       </button>
                       <button
                         onClick={() => handleDelete(doc)}
                         className="btn-action btn-delete"
                       >
-                        🗑️
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
