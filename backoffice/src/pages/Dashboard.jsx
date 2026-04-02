@@ -31,14 +31,8 @@ const Dashboard = () => {
     fetchGPSLocations();
     fetchStores();
     
-    // Refresh GPS locations every 30 seconds
-    const gpsInterval = setInterval(fetchGPSLocations, 30000);
-    // Refresh stats (including GPS alerts) every 15 seconds
-    const statsInterval = setInterval(fetchStats, 15000);
-    return () => {
-      clearInterval(gpsInterval);
-      clearInterval(statsInterval);
-    };
+    // No automatic refresh - load data once on mount
+    return () => {};
   }, []);
 
   const fetchStats = async () => {
@@ -69,7 +63,7 @@ const Dashboard = () => {
         }),
       ]);
 
-      // Fetch GPS alerts (urgent notifications)
+      // Fetch GPS alerts (urgent system notifications about GPS being disabled)
       let alertsRes = await notificationService.getUrgent().catch(err => {
         console.error('Failed to fetch alerts from urgent endpoint:', err.response?.data || err.message);
         return null;
@@ -77,13 +71,15 @@ const Dashboard = () => {
 
       // Fallback: if urgent endpoint fails or returns nothing, filter all notifications
       if (!alertsRes || (!alertsRes.count && !alertsRes.results?.length)) {
-        console.log('Trying fallback: fetching all notifications and filtering by GPS_ALERT type');
+        console.log('Trying fallback: fetching all notifications and filtering by GPS alerts');
         const allNotifs = await notificationService.getNotifications().catch(err => {
           console.error('Failed to fetch notifications:', err.response?.data || err.message);
           return { results: [] };
         });
+        // Count system notifications with urgent priority (GPS disable alerts)
         const gpsAlerts = (allNotifs.results || []).filter(n => 
-          n.type === 'GPS_ALERT' || n.notification_type === 'GPS_ALERT'
+          (n.type === 'GPS_ALERT' || n.notification_type === 'GPS_ALERT' ||
+           (n.notification_type === 'system' && n.priority === 'urgent' && n.title?.includes('GPS')))
         );
         alertsRes = { results: gpsAlerts, count: gpsAlerts.length };
       }

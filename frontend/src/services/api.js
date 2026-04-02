@@ -59,6 +59,11 @@ const API_BASE_URL = resolveRuntimeApiUrl();
 
 console.log('API_BASE_URL:', API_BASE_URL);
 
+// Export base URL (without /api/v1) for WebSocket connections
+export const getWebSocketBaseUrl = () => {
+  return API_BASE_URL.replace(/\/api\/v1\/?$/, '');
+};
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,

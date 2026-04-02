@@ -12,6 +12,13 @@ const api = axios.create({
   },
 });
 
+// Get WebSocket base URL from window location
+export const getWebSocketUrl = (path) => {
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const host = window.location.host; // Includes port if not 80/443
+  return `${protocol}://${host}${path}`;
+};
+
 // Request interceptor — attach access token & handle FormData
 api.interceptors.request.use(
   (config) => {

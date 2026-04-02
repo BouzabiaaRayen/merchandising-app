@@ -16,10 +16,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useAuth } from '../contexts/AuthContext';
 import { visitService, storeService, notificationService, gpsService, userService, documentService } from '../services/apiService';
+import { getWebSocketBaseUrl } from '../services/api';
 import StoreMap from '../components/StoreMap';
 import { useNavigation } from '@react-navigation/native';
 import * as Print from 'expo-print';
 import { shareAsync } from 'expo-sharing';
+
+// Ref for WebSocket status connection
+const statusWebSocketRef = { current: null };
 
 export default function HomeScreen() {
   const { user } = useAuth();
@@ -65,6 +69,127 @@ export default function HomeScreen() {
       console.warn('Failed to notify supervisors of GPS off:', err.message);
     }
   };
+
+  // Send session status update via REST API (fallback if WebSocket unavailable)
+  const sendSessionStatusViaREST = async (status) => {
+    try {
+      // Create a notification to supervisors about the status change
+      const name = user?.first_name || user?.username || 'Merchandiser';
+      const statusLabel = status === 'active' ? 'enabled' : 'disabled';
+      
+      const supervisorsResp = await userService.getUsers({ role: 'supervisor', page_size: 50 });
+      const adminsResp = await userService.getUsers({ role: 'admin', page_size: 50 });
+      const targets = [
+        ...(Array.isArray(supervisorsResp) ? supervisorsResp : supervisorsResp.results ?? []),
+        ...(Array.isArray(adminsResp) ? adminsResp : adminsResp.results ?? []),
+      ];
+      
+      await Promise.allSettled(
+        targets.map((sup) =>
+          notificationService.createNotification({
+            user: sup.id,
+            title: status === 'active' ? '📍 GPS Enabled' : '📍 GPS Disabled',
+            message: `${name} has ${statusLabel} their GPS tracking.`,
+            notification_type: 'system',
+            priority: status === 'active' ? 'high' : 'urgent',
+          })
+        )
+      );
+      console.log(`✓ Status update notification sent via REST API (${status})`);
+    } catch (error) {
+      console.warn('REST API status notification failed:', error.message);
+    }
+  };
+
+  // Send session status update via WebSocket with REST fallback
+  const sendSessionStatusUpdate = async (status) => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      if (!token) {
+        console.warn('Cannot send status: Not authenticated');
+        return;
+      }
+
+      // Get the correct base URL dynamically (replaces localhost with actual host)
+      const baseUrl = getWebSocketBaseUrl();
+      console.log('WebSocket base URL:', baseUrl);
+      
+      // Remove trailing slash and protocol to build proper WebSocket URL
+      const hostWithPort = baseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      const protocol = baseUrl.includes('https') ? 'wss' : 'ws';
+      const wsUrl = `${protocol}://${hostWithPort}/ws/gps/tracking/?token=${token}`;
+
+      console.log('Attempting WebSocket connection to:', wsUrl.substring(0, wsUrl.lastIndexOf('?')));
+
+      let wsConnected = false;
+      
+      try {
+        if (statusWebSocketRef.current) {
+          console.log('WebSocket already exists, closing old connection');
+          statusWebSocketRef.current.close();
+        }
+        
+        statusWebSocketRef.current = new WebSocket(wsUrl);
+        
+        const connectionTimeout = setTimeout(() => {
+          if (statusWebSocketRef.current && statusWebSocketRef.current.readyState === 0) {
+            console.warn('WebSocket connection timeout after 5s, falling back to REST API');
+            statusWebSocketRef.current.close();
+            statusWebSocketRef.current = null;
+            if (!wsConnected) {
+              sendSessionStatusViaREST(status);
+            }
+          }
+        }, 5000);
+        
+        statusWebSocketRef.current.onopen = () => {
+          clearTimeout(connectionTimeout);
+          wsConnected = true;
+          console.log('✓ Status WebSocket connected');
+          // Send status after connection is established
+          statusWebSocketRef.current?.send(JSON.stringify({
+            type: 'session_status',
+            status: status,
+          }));
+          console.log(`✓ Session status sent via WebSocket: ${status}`);
+          
+          // Close after sending (give it time to process)
+          setTimeout(() => {
+            if (statusWebSocketRef.current && statusWebSocketRef.current.readyState === 1) {
+              statusWebSocketRef.current.close();
+            }
+            statusWebSocketRef.current = null;
+          }, 1000);
+        };
+
+        statusWebSocketRef.current.onerror = (error) => {
+          clearTimeout(connectionTimeout);
+          if (!wsConnected) {
+            console.warn('WebSocket error, falling back to REST API');
+            sendSessionStatusViaREST(status);
+          }
+          statusWebSocketRef.current = null;
+        };
+
+        statusWebSocketRef.current.onclose = (event) => {
+          clearTimeout(connectionTimeout);
+          console.log('Status WebSocket closed - code:', event.code, 'reason:', event.reason);
+          statusWebSocketRef.current = null;
+        };
+
+        statusWebSocketRef.current.onmessage = (event) => {
+          console.log('Status WebSocket message:', event.data);
+        };
+      } catch (wsErr) {
+        console.error('WebSocket creation error, falling back to REST API:', wsErr.message);
+        statusWebSocketRef.current = null;
+        sendSessionStatusViaREST(status);
+      }
+    } catch (error) {
+      console.error('Error preparing status update:', error);
+    }
+  };
+
 
   useEffect(() => {
     loadDayStatus();
@@ -182,6 +307,9 @@ export default function HomeScreen() {
         userService.patchUser(user.id, { gps_active: true }).catch(() => {});
       }
 
+      // Send session status update to supervisors via WebSocket
+      await sendSessionStatusUpdate('active');
+
       // Send initial ping immediately so the supervisor sees active status right away
       lastGpsSendRef.current = Date.now();
       await sendGpsToServer(currentLocation.coords);
@@ -205,6 +333,9 @@ export default function HomeScreen() {
       setGpsActive(false);
       setLocation(null);
 
+      // Send session status update to supervisors via WebSocket BEFORE server patch
+      await sendSessionStatusUpdate('stopped');
+
       // Mark user as GPS inactive on the server immediately
       if (user?.id) {
         userService.patchUser(user.id, { gps_active: false }).catch(() => {});
@@ -222,6 +353,13 @@ export default function HomeScreen() {
   // Send a GPS position to the server.
   // Tries /gps/track/ first; falls back to POST /gps/ on any failure.
   const sendGpsToServer = async (coords) => {
+    // Check if user is authenticated first
+    const token = await AsyncStorage.getItem('accessToken');
+    if (!token) {
+      console.warn('GPS not sent: User is not authenticated');
+      return; // Skip GPS sending if not authenticated
+    }
+
     const payload = {
       latitude: coords.latitude,
       longitude: coords.longitude,
@@ -230,6 +368,7 @@ export default function HomeScreen() {
       speed: coords.speed ?? null,
       heading: coords.heading ?? null,
     };
+
     try {
       const result = await gpsService.track(payload);
       console.log('GPS ping sent via /track/ ✓', result?.id ?? '');
@@ -237,6 +376,7 @@ export default function HomeScreen() {
       const status = trackErr.response?.status;
       const detail = JSON.stringify(trackErr.response?.data ?? trackErr.message);
       console.warn(`GPS /track/ failed (${status}):`, detail);
+      
       // Fall back for ANY failure (400 = missing field, 404 = endpoint missing, etc.)
       try {
         const result = await gpsService.createLocation(payload);
