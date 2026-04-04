@@ -17,6 +17,12 @@ import DocumentsHistoryScreen from '../screens/DocumentsHistoryScreen';
 import CongeScreen from '../screens/CongeScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import ComplaintScreen from '../screens/ComplaintScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
+import ChangePasswordScreen from '../screens/ChangePasswordScreen';
+import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
+import PerformanceScreen from '../screens/PerformanceScreen';
+import VisitHistoryScreen from '../screens/VisitHistoryScreen';
+import RoutesScreen from '../screens/RoutesScreen';
 
 // Supervisor screens
 import SupervisorOverviewScreen from '../screens/supervisor/SupervisorOverviewScreen';
@@ -155,6 +161,12 @@ function SupervisorStack() {
         component={ComplaintScreen}
         options={{ headerShown: false }}
       />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Performance" component={PerformanceScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="VisitHistory" component={VisitHistoryScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Routes" component={RoutesScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
@@ -194,6 +206,12 @@ function MainStack() {
         component={ComplaintScreen} 
         options={{ headerShown: false }} 
       />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Performance" component={PerformanceScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="VisitHistory" component={VisitHistoryScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Routes" component={RoutesScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

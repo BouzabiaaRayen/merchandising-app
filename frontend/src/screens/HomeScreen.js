@@ -15,8 +15,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useAuth } from '../contexts/AuthContext';
-import { visitService, storeService, notificationService, gpsService, userService, documentService } from '../services/apiService';
-import { getWebSocketBaseUrl } from '../services/api';
+import { visitService, storeService, notificationService, gpsService, userService, documentService, scheduleService } from '../services/apiService';
+import api, { getWebSocketBaseUrl } from '../services/api';
 import StoreMap from '../components/StoreMap';
 import { useNavigation } from '@react-navigation/native';
 import * as Print from 'expo-print';
@@ -28,6 +28,10 @@ const statusWebSocketRef = { current: null };
 export default function HomeScreen() {
   const { user } = useAuth();
   const navigation = useNavigation();
+
+  // User-scoped AsyncStorage key helper
+  const userKey = (key) => user?.id ? `${key}_${user.id}` : key;
+
   const [homeData, setHomeData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,6 +46,15 @@ export default function HomeScreen() {
   const locationSubscriptionRef = useRef(null);
   const locationCheckIntervalRef = useRef(null);
   const lastGpsSendRef = useRef(0); // timestamp of last server send
+
+  // Break state
+  const [breakWindowStart, setBreakWindowStart] = useState(null); // e.g. "12:00"
+  const [breakWindowEnd, setBreakWindowEnd] = useState(null);     // e.g. "14:00"
+  const [breakDuration, setBreakDuration] = useState(null);       // minutes
+  const [isOnBreak, setIsOnBreak] = useState(false);
+  const [breakStartTime, setBreakStartTime] = useState(null);
+  const [breakEndTime, setBreakEndTime] = useState(null);
+  const [breakElapsed, setBreakElapsed] = useState('00:00');
 
   // Sends a GPS-off alert notification to every supervisor/admin in the system.
   const notifyGPSOffToSupervisors = async () => {
@@ -453,15 +466,75 @@ export default function HomeScreen() {
 
   const loadDayStatus = async () => {
     try {
-      const startTime = await AsyncStorage.getItem('dayStartTime');
-      const started = await AsyncStorage.getItem('dayStarted');
+      const startTime = await AsyncStorage.getItem(userKey('dayStartTime'));
+      const started = await AsyncStorage.getItem(userKey('dayStarted'));
       if (started === 'true' && startTime) {
         setDayStarted(true);
         setDayStartTime(parseInt(startTime));
       }
+      // Load break state
+      const breakStart = await AsyncStorage.getItem(userKey('breakStartTime'));
+      const breakEnd = await AsyncStorage.getItem(userKey('breakEndTime'));
+      if (breakStart) setBreakStartTime(parseInt(breakStart));
+      if (breakEnd) setBreakEndTime(parseInt(breakEnd));
+      if (breakStart && !breakEnd) setIsOnBreak(true);
     } catch (error) {
       console.error('Error loading day status:', error);
     }
+  };
+
+  // Break timer
+  useEffect(() => {
+    let interval;
+    if (isOnBreak && breakStartTime) {
+      interval = setInterval(() => {
+        const elapsed = Date.now() - breakStartTime;
+        const mins = Math.floor(elapsed / 60000);
+        const secs = Math.floor((elapsed % 60000) / 1000);
+        setBreakElapsed(`${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`);
+      }, 1000);
+    }
+    return () => { if (interval) clearInterval(interval); };
+  }, [isOnBreak, breakStartTime]);
+
+  // Check if current time is within the break window
+  const isBreakWindowActive = () => {
+    if (!breakWindowStart || !breakWindowEnd) return false;
+    const now = new Date();
+    const [sh, sm] = breakWindowStart.split(':').map(Number);
+    const [eh, em] = breakWindowEnd.split(':').map(Number);
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const startMins = sh * 60 + sm;
+    const endMins = eh * 60 + em;
+    return nowMins >= startMins && nowMins <= endMins;
+  };
+
+  // Check if break window has passed
+  const isBreakWindowPassed = () => {
+    if (!breakWindowEnd) return false;
+    const now = new Date();
+    const [eh, em] = breakWindowEnd.split(':').map(Number);
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const endMins = eh * 60 + em;
+    return nowMins > endMins;
+  };
+
+  const handleStartBreak = async () => {
+    const now = Date.now();
+    setIsOnBreak(true);
+    setBreakStartTime(now);
+    await AsyncStorage.setItem(userKey('breakStartTime'), now.toString());
+    await AsyncStorage.removeItem(userKey('breakEndTime'));
+  };
+
+  const handleEndBreak = async () => {
+    const now = Date.now();
+    setIsOnBreak(false);
+    setBreakEndTime(now);
+    await AsyncStorage.setItem(userKey('breakEndTime'), now.toString());
+    const elapsed = now - breakStartTime;
+    const mins = Math.round(elapsed / 60000);
+    Alert.alert('Pause terminée', `Durée de pause: ${mins} min`);
   };
 
   const fetchHomeData = async () => {
@@ -598,7 +671,7 @@ export default function HomeScreen() {
       }
       
       // Calculate stats
-      const todayTotal = allTodayVisits.length; // Use ALL scheduled visits for today (not filtered by user)
+      const todayTotal = todayVisits.length; // Only count current user's visits
       const todayCompleted = completedTodayVisits.length;
       const todayPercent = todayTotal > 0 ? Math.round((todayCompleted / todayTotal) * 100) : 0;
       const todayRemaining = todayTotal - todayCompleted;
@@ -632,6 +705,20 @@ export default function HomeScreen() {
       console.log('========================');
       
       setHomeData(dashboardData);
+
+      // Fetch today's break schedule
+      try {
+        const schedule = await scheduleService.getTodaySchedule();
+        if (schedule) {
+          setBreakDuration(schedule.allowed_break_duration_minutes);
+          // Parse time fields — could be "HH:MM:SS" or "HH:MM"
+          const parseTime = (t) => t ? t.substring(0, 5) : null;
+          setBreakWindowStart(parseTime(schedule.break_window_start));
+          setBreakWindowEnd(parseTime(schedule.break_window_end));
+        }
+      } catch (schedErr) {
+        console.log('No break schedule for today:', schedErr.message);
+      }
 
       // Fetch unread notifications count
       try {
@@ -687,113 +774,260 @@ export default function HomeScreen() {
 
   const generateEndOfDayPDF = async (completedVisits, startTime) => {
     try {
-      // Fetch store details for completed visits
-      const storesData = [];
+      const today = new Date().toISOString().split('T')[0];
+
+      // ── Fetch all data in parallel ──
+      const [alertsRes, productsRes] = await Promise.all([
+        api.get('/merchandising/competitor-alerts/').catch(() => ({ data: [] })),
+        api.get('/merchandising/products/').catch(() => ({ data: [] })),
+      ]);
+      const allAlerts = (alertsRes.data?.results || alertsRes.data || []).filter(a => a.created_at?.startsWith(today));
+      const allProducts = (productsRes.data?.results || productsRes.data || []).filter(p => p.created_at?.startsWith(today) && p.created_by === user?.id);
+
+      const alertTypeLabels = {
+        promotion: 'Promotion', price_change: 'Changement de prix',
+        new_product: 'Nouveau produit', competitor_activity: 'Activité concurrent',
+      };
+
+      // ── Build per-store data ──
+      const storeBlocks = [];
       for (const visit of completedVisits) {
-        if (visit.store) {
-          try {
-            const store = await storeService.getStore(visit.store);
-            let timeSpent = 'N/A';
-            if (visit.check_in_time && visit.check_out_time) {
-              const checkIn = new Date(visit.check_in_time);
-              const checkOut = new Date(visit.check_out_time);
-              const diff = Math.floor((checkOut - checkIn) / 1000);
-              const hours = Math.floor(diff / 3600);
-              const minutes = Math.floor((diff % 3600) / 60);
-              timeSpent = `${hours}h ${minutes}m`;
-            }
-            storesData.push({
-              name: store.name,
-              address: store.address,
-              checkInTime: visit.check_in_time || visit.checked_in_at,
-              checkOutTime: visit.check_out_time,
-              timeSpent,
-              notes: visit.notes || 'No notes',
-            });
-          } catch (e) {
-            console.error('Error fetching store:', e);
-          }
+        let fullVisit = visit;
+        try { fullVisit = await visitService.getVisit(visit.id); } catch (e) {}
+        let store = { name: 'Magasin inconnu', address: '' };
+        try { if (visit.store) store = await storeService.getStore(visit.store); } catch (e) {}
+
+        const checkIn = fullVisit.check_in_time ? new Date(fullVisit.check_in_time) : null;
+        const checkOut = fullVisit.check_out_time ? new Date(fullVisit.check_out_time) : null;
+        let duration = '—';
+        if (checkIn && checkOut) {
+          const diff = Math.floor((checkOut - checkIn) / 1000);
+          const h = Math.floor(diff / 3600);
+          const m = Math.floor((diff % 3600) / 60);
+          duration = h > 0 ? `${h}h ${m}min` : `${m}min`;
         }
+
+        // Break
+        let breakStatus = 'none';
+        if (fullVisit.break_start_time && fullVisit.break_end_time) breakStatus = 'taken';
+        else if (fullVisit.break_window_start && !fullVisit.break_start_time) breakStatus = 'missed';
+
+        storeBlocks.push({
+          storeName: store.name,
+          storeAddress: store.address || '',
+          storeCity: store.city || '',
+          checkIn, checkOut, duration,
+          breakStatus,
+          breakTook: fullVisit.break_took,
+          breakDuration: fullVisit.break_duration,
+          breakStart: fullVisit.break_start_time,
+          breakEnd: fullVisit.break_end_time,
+          notes: fullVisit.notes,
+          alerts: allAlerts.filter(a => String(a.visit) === String(visit.id) || String(a.store) === String(visit.store)),
+          products: allProducts.filter(p => String(p.store) === String(visit.store)),
+          photos: fullVisit.photos || [],
+          facingData: fullVisit.facing_data || {},
+          priceComps: fullVisit.price_comparisons || [],
+          ruptures: fullVisit.stock_ruptures || [],
+        });
       }
 
-      // Calculate hours worked
+      // ── Totals ──
       let hoursWorked = '0h 0m';
       if (startTime) {
         const elapsed = Date.now() - startTime;
-        const hours = Math.floor(elapsed / (1000 * 60 * 60));
-        const minutes = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
-        hoursWorked = `${hours}h ${minutes}m`;
+        hoursWorked = `${Math.floor(elapsed / 3600000)}h ${Math.floor((elapsed % 3600000) / 60000)}m`;
       }
+      const dateStr = new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      const dayStartStr = startTime ? new Date(startTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+      const dayEndStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
-      const dateStr = new Date().toLocaleDateString('fr-FR', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-      });
-      const dayStartStr = startTime ? new Date(startTime).toLocaleTimeString('fr-FR') : null;
+      // ── Build events table rows per store ──
+      const buildEventsTable = (s) => {
+        const rows = [];
 
-      const storesHTML = storesData.map((store, i) => `
-        <div style="margin-bottom: 15px; padding: 12px; background: #f8f9fa; border-radius: 8px;">
-          <div style="font-weight: bold; color: #2563eb; margin-bottom: 5px;">${i + 1}. ${store.name}</div>
-          <div style="font-size: 12px; color: #6b7280; margin-bottom: 3px;">${store.address}</div>
-          <div style="font-size: 11px; color: #9ca3af;">
-            Check-in: ${store.checkInTime ? new Date(store.checkInTime).toLocaleTimeString('fr-FR') : 'N/A'} |
-            Check-out: ${store.checkOutTime ? new Date(store.checkOutTime).toLocaleTimeString('fr-FR') : 'N/A'} |
-            Duration: ${store.timeSpent}
-          </div>
-          ${store.notes !== 'No notes' ? `<div style="font-size: 11px; color: #475569; margin-top: 4px;">Notes: ${store.notes}</div>` : ''}
-        </div>
-      `).join('');
+        // Photos
+        s.photos.forEach((p, i) => {
+          const src = typeof p === 'string' ? p : p.uri || p.url || '';
+          rows.push({
+            type: 'Photo anomalie',
+            description: `Photo ${i + 1}`,
+            time: '',
+            image: src,
+          });
+        });
 
-      const html = `
-        <!DOCTYPE html>
-        <html><head><meta charset="utf-8">
-        <style>
-          body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 30px; color: #1e293b; }
-          .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #2563eb; padding-bottom: 20px; }
-          .title { font-size: 24px; font-weight: bold; color: #2563eb; margin-bottom: 10px; }
-          .subtitle { font-size: 14px; color: #64748b; }
-          .summary { display: flex; justify-content: space-around; margin: 30px 0; padding: 20px; background: #f1f5f9; border-radius: 10px; }
-          .summary-item { text-align: center; }
-          .summary-value { font-size: 28px; font-weight: bold; color: #2563eb; margin-bottom: 5px; }
-          .summary-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
-          .section-title { font-size: 16px; font-weight: bold; color: #1e293b; margin: 25px 0 15px 0; border-left: 4px solid #2563eb; padding-left: 10px; }
-          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
-        </style></head>
-        <body>
-          <div class="header">
-            <div class="title">DAILY REPORT</div>
-            <div class="subtitle">${dateStr}</div>
-            <div class="subtitle" style="margin-top: 8px;">Merchandiser: ${user?.first_name || ''} ${user?.last_name || user?.username || ''}</div>
-          </div>
-          <div class="summary">
-            <div class="summary-item">
-              <div class="summary-value">${completedVisits.length}</div>
-              <div class="summary-label">Stores Visited</div>
-            </div>
-            <div class="summary-item">
-              <div class="summary-value">${hoursWorked}</div>
-              <div class="summary-label">Hours Worked</div>
-            </div>
-          </div>
-          ${dayStartStr ? `<div style="text-align: center; margin: 20px 0; padding: 12px; background: #d1fae5; border-radius: 8px;">
-            <span style="font-weight: bold; color: #065f46;">Day started at:</span>
-            <span style="color: #047857; margin-left: 8px;">${dayStartStr}</span>
-          </div>` : ''}
-          <div class="section-title">Visit Details</div>
-          ${storesData.length > 0 ? storesHTML : '<div style="text-align: center; color: #94a3b8; padding: 20px;">No visit details available</div>'}
-          <div class="footer">Report generated on ${new Date().toLocaleString('fr-FR')}<br/>Merchandising App © 2026</div>
-        </body></html>
-      `;
+        // Facing
+        if (s.facingData?.productSummary?.length > 0) {
+          const summary = s.facingData.productSummary.map(ps =>
+            `${ps.productName}: attendu ${ps.expected}, observé ${ps.observed} (${ps.gap >= 0 ? '+' : ''}${ps.gap})`
+          ).join(' | ');
+          rows.push({
+            type: 'Facing / Linéaire',
+            description: `Grille ${s.facingData.rows}×${s.facingData.columns} — ${s.facingData.totalObservedUnits || 0} unités — ${summary}`,
+            time: '',
+            image: s.facingData.proofPhotoUri || '',
+          });
+        }
+
+        // Price comparisons
+        s.priceComps.forEach(pc => {
+          const diff = pc.ourPrice && pc.competitorPrice ? (pc.competitorPrice - pc.ourPrice).toFixed(2) : '—';
+          rows.push({
+            type: 'Prix concurrent',
+            description: `${pc.productName} — Notre prix: ${pc.ourPrice} TND, ${pc.competitor || 'Concurrent'}: ${pc.competitorPrice} TND (diff: ${diff})`,
+            time: '',
+            image: '',
+          });
+        });
+
+        // Ruptures
+        s.ruptures.forEach(r => {
+          rows.push({
+            type: 'Rupture de stock',
+            description: r.productName || r.productId,
+            time: '',
+            image: '',
+          });
+        });
+
+        // Alerts
+        s.alerts.forEach(a => {
+          const time = a.created_at ? new Date(a.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
+          rows.push({
+            type: `Alerte — ${alertTypeLabels[a.alert_type] || a.alert_type}`,
+            description: `${a.competitor_brand || ''}${a.description ? ' : ' + a.description : ''}`,
+            time,
+            image: a.photo || '',
+          });
+        });
+
+        // Products
+        s.products.forEach(p => {
+          const time = p.created_at ? new Date(p.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
+          const details = [p.name, p.brand, p.category, p.price ? `${p.price} TND` : ''].filter(Boolean).join(' — ');
+          rows.push({
+            type: 'Produit ajouté',
+            description: details + (p.description ? ` (${p.description})` : ''),
+            time,
+            image: p.image || '',
+          });
+        });
+
+        // Notes
+        if (s.notes) {
+          rows.push({ type: 'Notes', description: s.notes, time: '', image: '' });
+        }
+
+        return rows;
+      };
+
+      // ── Store sections HTML ──
+      const storesHTML = storeBlocks.map((s, idx) => {
+        const ciStr = s.checkIn ? s.checkIn.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+        const coStr = s.checkOut ? s.checkOut.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+
+        let breakLine = '';
+        if (s.breakStatus === 'taken') {
+          const bs = new Date(s.breakStart).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+          const be = new Date(s.breakEnd).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+          breakLine = `<tr><td class="lbl">Pause</td><td colspan="3">&#9989; ${bs} &rarr; ${be} (${s.breakTook || '?'}min / ${s.breakDuration || '?'}min)</td></tr>`;
+        } else if (s.breakStatus === 'missed') {
+          breakLine = `<tr><td class="lbl">Pause</td><td colspan="3" style="color:#dc2626;">&#9888;&#65039; Manquée</td></tr>`;
+        }
+
+        const events = buildEventsTable(s);
+
+        const eventsRows = events.length > 0
+          ? events.map((e, i) => `
+              <tr style="background:${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                <td style="padding:6px 8px;border:1px solid #e2e8f0;font-weight:600;color:#334155;white-space:nowrap;vertical-align:top;">${e.type}</td>
+                <td style="padding:6px 8px;border:1px solid #e2e8f0;vertical-align:top;">${e.description}</td>
+                <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;vertical-align:top;">${e.time || '—'}</td>
+                <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;vertical-align:top;">${e.image ? `<img src="${e.image}" style="max-width:65px;max-height:45px;border-radius:3px;"/>` : '—'}</td>
+              </tr>`).join('')
+          : `<tr><td colspan="4" style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;border:1px solid #e2e8f0;">Aucun événement enregistré pour cette visite.</td></tr>`;
+
+        return `
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;page-break-inside:avoid;">
+            <!-- Store header -->
+            <tr>
+              <td colspan="4" style="background:#2563eb;color:#fff;padding:10px 14px;font-size:14px;font-weight:700;">
+                <table style="border-collapse:collapse;"><tr>
+                  <td style="width:28px;height:28px;border:2px solid #fff;border-radius:50%;text-align:center;vertical-align:middle;font-weight:800;font-size:12px;color:#fff;">${idx + 1}</td>
+                  <td style="padding-left:10px;color:#fff;font-size:14px;font-weight:700;">${s.storeName}</td>
+                </tr></table>
+              </td>
+            </tr>
+            <!-- Store info -->
+            <tr><td class="lbl">Adresse</td><td colspan="3">${s.storeAddress}${s.storeCity ? ', ' + s.storeCity : ''}</td></tr>
+            <tr><td class="lbl">Arrivée</td><td colspan="3">${ciStr}</td></tr>
+            <tr><td class="lbl">Départ</td><td colspan="3">${coStr}</td></tr>
+            <tr><td class="lbl">Durée</td><td colspan="3"><strong>${s.duration}</strong></td></tr>
+            ${breakLine}
+            <!-- Events header -->
+            <tr>
+              <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;width:22%;">Type</td>
+              <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;">Description</td>
+              <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;width:10%;">Heure</td>
+              <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;width:14%;">Photo</td>
+            </tr>
+            ${eventsRows}
+          </table>
+        `;
+      }).join('');
+
+      // ── Full HTML (tables only — no flexbox for PDF compatibility) ──
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  @page { margin: 18mm 14mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b; font-size: 11px; line-height: 1.45; }
+  table { border-collapse: collapse; }
+  .lbl { width: 100px; font-weight: 700; color: #475569; background: #f8fafc; padding: 5px 14px; border-bottom: 1px solid #f1f5f9; font-size: 11px; }
+  td { font-size: 11px; padding: 5px 14px; border-bottom: 1px solid #f1f5f9; }
+</style></head><body>
+
+  <!-- ═══ HEADER ═══ -->
+  <table style="width:100%;border-bottom:3px solid #2563eb;margin-bottom:16px;">
+    <tr><td colspan="2" style="text-align:center;font-size:20px;font-weight:800;color:#2563eb;letter-spacing:2px;padding:8px 0 12px;">RAPPORT JOURNALIER</td></tr>
+    <tr><td style="font-weight:700;color:#475569;width:150px;padding:3px 8px;">Merchandiser</td><td style="padding:3px 8px;">${user?.first_name || ''} ${user?.last_name || user?.username || ''}</td></tr>
+    <tr><td style="font-weight:700;color:#475569;padding:3px 8px;">Date</td><td style="padding:3px 8px;">${dateStr}</td></tr>
+    <tr><td style="font-weight:700;color:#475569;padding:3px 8px;">Début de journée</td><td style="padding:3px 8px;">${dayStartStr}</td></tr>
+    <tr><td style="font-weight:700;color:#475569;padding:3px 8px;">Fin de journée</td><td style="padding:3px 8px;">${dayEndStr}</td></tr>
+    <tr><td style="font-weight:700;color:#475569;padding:3px 8px 10px;">Durée totale</td><td style="padding:3px 8px 10px;"><strong>${hoursWorked}</strong></td></tr>
+  </table>
+
+  <!-- ═══ SUMMARY ═══ -->
+  <table style="width:100%;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:18px;background:#f8fafc;">
+    <tr>
+      <td style="text-align:center;padding:10px 0;width:25%;"><div style="font-size:20px;font-weight:800;color:#2563eb;">${completedVisits.length}</div><div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#64748b;">Magasins</div></td>
+      <td style="text-align:center;padding:10px 0;width:25%;border-left:1px solid #e2e8f0;"><div style="font-size:20px;font-weight:800;color:#2563eb;">${hoursWorked}</div><div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#64748b;">Heures</div></td>
+      <td style="text-align:center;padding:10px 0;width:25%;border-left:1px solid #e2e8f0;"><div style="font-size:20px;font-weight:800;color:#2563eb;">${allAlerts.length}</div><div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#64748b;">Alertes</div></td>
+      <td style="text-align:center;padding:10px 0;width:25%;border-left:1px solid #e2e8f0;"><div style="font-size:20px;font-weight:800;color:#2563eb;">${allProducts.length}</div><div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#64748b;">Produits</div></td>
+    </tr>
+  </table>
+
+  <!-- ═══ STORES ═══ -->
+  ${storesHTML || '<p style="text-align:center;color:#94a3b8;padding:20px;">Aucune visite enregistrée</p>'}
+
+  <!-- ═══ FOOTER ═══ -->
+  <table style="width:100%;margin-top:24px;border-top:1px solid #e2e8f0;">
+    <tr><td style="text-align:center;font-size:9px;color:#94a3b8;padding-top:12px;">Rapport généré le ${new Date().toLocaleString('fr-FR')} — Merchandising App &copy; ${new Date().getFullYear()}</td></tr>
+  </table>
+
+</body></html>`;
 
       const { uri } = await Print.printToFileAsync({ html });
 
       // Upload to backend
       try {
-        const fileName = `rapport_${user?.username || 'merchandiser'}_${new Date().toISOString().split('T')[0]}.pdf`;
+        const fileName = `rapport_${user?.username || 'merchandiser'}_${today}.pdf`;
         await documentService.uploadDocument(
           { uri, type: 'application/pdf', name: fileName },
           {
-            title: `Daily Report - ${dateStr}`,
-            description: `${user?.first_name || user?.username || 'Merchandiser'} - ${completedVisits.length} stores visited, ${hoursWorked} worked`,
+            title: `Rapport Journalier - ${dateStr}`,
+            description: `${user?.first_name || user?.username || 'Merchandiser'} - ${completedVisits.length} magasins, ${hoursWorked} travaillées, ${allAlerts.length} alertes, ${allProducts.length} produits`,
             document_type: 'daily_report',
             merchandiser: user?.id,
           }
@@ -807,55 +1041,66 @@ export default function HomeScreen() {
       await shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
     } catch (error) {
       console.error('Error generating end-of-day PDF:', error);
-      Alert.alert('Error', 'Failed to generate PDF report');
+      Alert.alert('Erreur', 'Échec de la génération du rapport PDF');
     }
   };
 
   const handleStartDay = async () => {
     if (dayStarted) {
-      // End day
+      // Check if all visits are completed before allowing end day
+      const totalVisits = todayVisits.length;
+      const completedVisits = todayVisits.filter(v => v.status === 'completed');
+      const allCompleted = totalVisits > 0 && completedVisits.length === totalVisits;
+
+      if (totalVisits === 0) {
+        Alert.alert(
+          'Aucune visite',
+          'Aucune visite planifiée pour aujourd\'hui. Vous ne pouvez pas terminer la journée sans visites.'
+        );
+        return;
+      }
+
+      if (!allCompleted) {
+        Alert.alert(
+          'Travail incomplet',
+          `Vous avez complété ${completedVisits.length}/${totalVisits} visites.\nVeuillez terminer toutes les visites avant de finir la journée.`
+        );
+        return;
+      }
+
+      // All visits completed — allow end day
       Alert.alert(
-        'End Day',
-        'Are you sure you want to end your day?',
+        'Fin de journée',
+        'Toutes les visites sont complétées. Voulez-vous terminer votre journée et générer le rapport ?',
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: 'Annuler', style: 'cancel' },
           {
-            text: 'End Day',
+            text: 'Terminer',
             style: 'destructive',
             onPress: async () => {
               try {
-                // Check if all visits are completed
-                const totalVisits = todayVisits.length;
-                const completedVisits = todayVisits.filter(v => v.status === 'completed');
-                const allCompleted = totalVisits > 0 && completedVisits.length === totalVisits;
-
-                // End the day
-                await AsyncStorage.removeItem('dayStartTime');
-                await AsyncStorage.removeItem('dayStarted');
+                await AsyncStorage.removeItem(userKey('dayStartTime'));
+                await AsyncStorage.removeItem(userKey('dayStarted'));
+                await AsyncStorage.removeItem(userKey('breakStartTime'));
+                await AsyncStorage.removeItem(userKey('breakEndTime'));
                 const savedStartTime = dayStartTime;
                 setDayStarted(false);
                 setDayStartTime(null);
                 setElapsedTime('00:00:00');
+                setIsOnBreak(false);
+                setBreakStartTime(null);
+                setBreakEndTime(null);
+                setBreakElapsed('00:00');
                 // Notify supervisor dashboard
                 if (user?.id) {
                   userService.patchUser(user.id, { day_started: false, day_start_time: null }).catch(() => {});
                 }
 
-                if (allCompleted) {
-                  // Generate PDF report automatically
-                  Alert.alert('Day Ended', 'All visits completed! Generating your report...');
-                  await generateEndOfDayPDF(completedVisits, savedStartTime);
-                } else if (totalVisits === 0) {
-                  Alert.alert('Day Ended', 'Your day has ended. No visits were scheduled.');
-                } else {
-                  Alert.alert(
-                    'Day Ended',
-                    `Your day has ended.\n${completedVisits.length}/${totalVisits} visits completed.\nPDF report is only generated when all visits are completed.`
-                  );
-                }
+                Alert.alert('Journée terminée', 'Toutes les visites complétées ! Génération du rapport...');
+                await generateEndOfDayPDF(completedVisits, savedStartTime);
               } catch (error) {
                 console.error('Error ending day:', error);
-                Alert.alert('Error', 'Failed to end day');
+                Alert.alert('Erreur', 'Impossible de terminer la journée');
               }
             }
           }
@@ -865,8 +1110,8 @@ export default function HomeScreen() {
       // Start day
       try {
         const startTime = Date.now();
-        await AsyncStorage.setItem('dayStartTime', startTime.toString());
-        await AsyncStorage.setItem('dayStarted', 'true');
+        await AsyncStorage.setItem(userKey('dayStartTime'), startTime.toString());
+        await AsyncStorage.setItem(userKey('dayStarted'), 'true');
         setDayStarted(true);
         setDayStartTime(startTime);
         // Notify supervisor dashboard
@@ -971,13 +1216,14 @@ export default function HomeScreen() {
             )}
           </View>
         </TouchableOpacity>
-        
-        {/* Store Map */}
+
+        {/* 2. Today's Route label + 3. Map */}
+        <Text style={styles.routeLabel}>Today's Route</Text>
         <View style={styles.mapContainer}>
           <StoreMap stores={todayStores} height={200} />
         </View>
 
-        {/* Ready to Begin Card */}
+        {/* 4. Ready to Begin Card */}
         {!dayStarted && (
           <View style={styles.readyCard}>
             <Text style={styles.readyTitle}>Ready to begin?</Text>
@@ -991,7 +1237,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Daily Progress */}
+        {/* 5. Daily Progress */}
         <View style={styles.progressSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Daily Progress</Text>
@@ -1010,22 +1256,35 @@ export default function HomeScreen() {
           {dayStarted && (
             <View style={styles.progressItem}>
               <MaterialCommunityIcons name="clock-outline" size={16} color="#666" />
-              <Text style={styles.estimatedTime}>Estimated finish: {elapsedTime}</Text>
+              <Text style={styles.estimatedTime}>Time worked: {elapsedTime}</Text>
             </View>
           )}
         </View>
 
-        {/* Today's Route */}
-        <View style={styles.routeSection}>
+        {/* 6. Today's Schedule card — pause reminder + stores */}
+        <View style={styles.scheduleSection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Today's Route</Text>
-            <TouchableOpacity onPress={onRefresh}>
-              <Text style={styles.viewMapLink}>View Map</Text>
-            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>Today's Schedule</Text>
           </View>
 
+          {/* Break reminder (right under title) */}
+          {breakWindowStart && breakWindowEnd && (
+            <View style={styles.breakReminder}>
+              <MaterialCommunityIcons name="coffee-outline" size={18} color="#f59e0b" />
+              <Text style={styles.breakReminderText}>
+                Pause: {breakWindowStart} - {breakWindowEnd} ({breakDuration || 30} min)
+              </Text>
+              {breakEndTime && (
+                <View style={styles.breakDoneBadge}>
+                  <MaterialCommunityIcons name="check" size={12} color="#10b981" />
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Store list */}
           {todayStores.length > 0 ? (
-            todayStores.slice(0, 3).map((store, index) => {
+            todayStores.map((store) => {
               const status = getStoreVisitStatus(store.id);
               const statusStyle = status === 'COMPLETED' ? styles.routeStatusCompleted : 
                                  status === 'IN PROGRESS' ? styles.routeStatusInProgress : 
@@ -1056,12 +1315,44 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* End Day Button (shown when day is started) */}
+        {/* Break + End Day buttons (outside the card, only when day started) */}
         {dayStarted && (
-          <TouchableOpacity style={styles.endDayBtn} onPress={handleStartDay}>
-            <MaterialCommunityIcons name="stop-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-            <Text style={styles.endDayText}>End Workday</Text>
-          </TouchableOpacity>
+          <View>
+            {breakWindowStart && breakWindowEnd && !breakEndTime && (
+              <TouchableOpacity 
+                style={[
+                  styles.breakBtn,
+                  (!isBreakWindowActive() || isOnBreak === false && isBreakWindowPassed()) && styles.breakBtnDisabled
+                ]}
+                onPress={isOnBreak ? handleEndBreak : handleStartBreak}
+                disabled={!isOnBreak && (!isBreakWindowActive() || isBreakWindowPassed())}
+              >
+                <MaterialCommunityIcons 
+                  name={isOnBreak ? 'pause-circle' : 'coffee'} 
+                  size={20} 
+                  color="#fff" 
+                  style={{ marginRight: 8 }} 
+                />
+                <Text style={styles.breakBtnText}>
+                  {isOnBreak 
+                    ? `Fin Pause (${breakElapsed})` 
+                    : isBreakWindowPassed() 
+                      ? 'Pause manquée' 
+                      : `Prendre Pause (${breakWindowStart} - ${breakWindowEnd})`}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {breakEndTime && (
+              <View style={styles.breakCompletedBanner}>
+                <MaterialCommunityIcons name="check-circle" size={18} color="#10b981" />
+                <Text style={styles.breakCompletedText}>Pause terminée ✓</Text>
+              </View>
+            )}
+            <TouchableOpacity style={styles.endDayBtn} onPress={handleStartDay}>
+              <MaterialCommunityIcons name="stop-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.endDayText}>End Workday</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         <View style={{ height: 20 }} />
@@ -1225,8 +1516,15 @@ const styles = StyleSheet.create({
   progressValue: { fontSize: 14, fontWeight: '600', color: '#222' },
   estimatedTime: { fontSize: 13, color: '#666', marginLeft: 6 },
 
-  // Route Section
-  routeSection: {
+  // Route label
+  routeLabel: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#222',
+    marginBottom: 8,
+  },
+  // Schedule Section (stores + break + end day)
+  scheduleSection: {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
@@ -1234,7 +1532,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e8eaed'
   },
-  viewMapLink: { fontSize: 14, color: '#4285f4', fontWeight: '600' },
   routeItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1268,6 +1565,64 @@ const styles = StyleSheet.create({
     paddingVertical: 24
   },
   emptyRouteText: { fontSize: 14, color: '#999', marginTop: 8 },
+
+  // Break Button
+  breakBtn: {
+    backgroundColor: '#8b5cf6',
+    borderRadius: 8,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12
+  },
+  breakBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  breakBtnDisabled: {
+    backgroundColor: '#d1d5db',
+  },
+  breakReminder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fffbeb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  breakReminderText: {
+    fontSize: 13,
+    color: '#92400e',
+    fontWeight: '500',
+    marginLeft: 8,
+    flex: 1,
+  },
+  breakDoneBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#d1fae5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  breakCompletedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ecfdf5',
+    borderRadius: 8,
+    paddingVertical: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  breakCompletedText: {
+    fontSize: 14,
+    color: '#065f46',
+    fontWeight: '600',
+    marginLeft: 6,
+  },
 
   // End Day Button
   endDayBtn: {

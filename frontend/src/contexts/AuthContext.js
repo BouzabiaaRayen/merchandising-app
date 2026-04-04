@@ -102,12 +102,25 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const refreshUser = async () => {
+    try {
+      const profile = await authService.getProfile();
+      const avatarUrl = getAvatarUrl(profile.avatar_url || profile.avatar);
+      const profileWithAvatar = { ...profile, avatar_url: avatarUrl };
+      await AsyncStorage.setItem('user', JSON.stringify(profileWithAvatar));
+      setUser(profileWithAvatar);
+    } catch (error) {
+      console.error('Error refreshing user:', error);
+    }
+  };
+
   const value = {
     user,
     loading,
     login,
     register,
     logout,
+    refreshUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

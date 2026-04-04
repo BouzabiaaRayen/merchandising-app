@@ -7,7 +7,8 @@ import {
   ScrollView,
   SafeAreaView,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  Alert
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -123,29 +124,44 @@ export default function PlanningScreen() {
     }).toUpperCase();
   };
 
+  // Find the first visit that is not completed — only that one (and completed ones) are tappable
+  const firstPendingIndex = visits.findIndex(v => v.status?.toUpperCase() !== 'COMPLETED');
+
   const getVisitStatusInfo = (visit, index) => {
     const status = visit.status?.toUpperCase() || 'SCHEDULED';
+    const isLocked = firstPendingIndex !== -1 && index > firstPendingIndex;
     
     if (status === 'COMPLETED') {
       return {
         label: 'DONE',
         color: '#10b981',
         dotColor: '#10b981',
-        showButton: false
+        showButton: false,
+        locked: false
       };
     } else if (status === 'IN_PROGRESS') {
       return {
         label: 'CURRENT',
         color: '#3b82f6',
         dotColor: '#3b82f6',
-        showButton: true
+        showButton: true,
+        locked: false
+      };
+    } else if (isLocked) {
+      return {
+        label: 'LOCKED',
+        color: '#d1d5db',
+        dotColor: '#e5e7eb',
+        showButton: false,
+        locked: true
       };
     } else {
       return {
         label: 'PLANNED',
         color: '#9ca3af',
         dotColor: '#d1d5db',
-        showButton: false
+        showButton: false,
+        locked: false
       };
     }
   };
@@ -289,9 +305,17 @@ export default function PlanningScreen() {
                       <TouchableOpacity 
                         style={[
                           styles.visitCard,
-                          visit.status === 'in_progress' && styles.visitCardActive
+                          visit.status === 'in_progress' && styles.visitCardActive,
+                          statusInfo.locked && styles.visitCardLocked
                         ]}
-                        onPress={() => navigation.navigate('VisitExecution', { visitId: visit.id })}
+                        onPress={() => {
+                          if (statusInfo.locked) {
+                            Alert.alert('Visit verrouillée', 'Vous devez terminer la visite précédente avant de commencer celle-ci.');
+                            return;
+                          }
+                          navigation.navigate('VisitExecution', { visitId: visit.id });
+                        }}
+                        activeOpacity={statusInfo.locked ? 1 : 0.7}
                       >
                         <View style={styles.visitHeader}>
                           <Text style={styles.storeName}>
@@ -303,7 +327,7 @@ export default function PlanningScreen() {
                         </View>
                         
                         <Text style={styles.visitTime}>
-                          {scheduledTime} - {endTime}
+                          {scheduledTime}
                         </Text>
 
                         {statusInfo.showButton && (
@@ -518,6 +542,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  visitCardLocked: {
+    opacity: 0.5,
+    backgroundColor: '#f3f4f6',
   },
   visitHeader: {
     flexDirection: 'row',

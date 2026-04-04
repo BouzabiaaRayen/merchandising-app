@@ -44,6 +44,7 @@ export const authService = {
     api.post('/users/change_password/', {
       old_password: oldPassword,
       new_password: newPassword,
+      new_password_confirm: newPassword,
     }).then(r => r.data),
 };
 
@@ -320,4 +321,70 @@ export const leaveService = {
 
   getLeave: (id) =>
     api.get(`/merchandising/leaves/${id}/`).then(r => r.data),
+};
+
+// ---------------------------------------------------------------------------
+// Schedules
+// ---------------------------------------------------------------------------
+export const scheduleService = {
+  getSchedules: (params = {}) =>
+    api.get('/merchandising/schedules/', { params }).then(r => r.data),
+
+  getSchedule: (id) =>
+    api.get(`/merchandising/schedules/${id}/`).then(r => r.data),
+
+  createSchedule: (data) =>
+    api.post('/merchandising/schedules/', data).then(r => r.data),
+
+  updateSchedule: (id, data) =>
+    api.put(`/merchandising/schedules/${id}/`, data).then(r => r.data),
+
+  patchSchedule: (id, data) =>
+    api.patch(`/merchandising/schedules/${id}/`, data).then(r => r.data),
+
+  deleteSchedule: (id) =>
+    api.delete(`/merchandising/schedules/${id}/`).then(r => r.data),
+
+  getTodaySchedule: () =>
+    api.get('/merchandising/schedules/today_schedule/').then(r => r.data),
+};
+
+// ---------------------------------------------------------------------------
+// Day Logs
+// ---------------------------------------------------------------------------
+export const dayLogService = {
+  getDayLogs: (params = {}) =>
+    api.get('/merchandising/day-logs/', { params }).then(r => r.data),
+
+  getDayLog: (id) =>
+    api.get(`/merchandising/day-logs/${id}/`).then(r => r.data),
+
+  createDayLog: (data) =>
+    api.post('/merchandising/day-logs/', data).then(r => r.data),
+
+  endDay: (id) =>
+    api.post(`/merchandising/day-logs/${id}/end_day/`).then(r => r.data),
+
+  getTodayLog: () =>
+    api.get('/merchandising/day-logs/today_log/').then(r => r.data),
+};
+
+// ---------------------------------------------------------------------------
+// Break Logs
+// ---------------------------------------------------------------------------
+export const breakService = {
+  getBreaks: (params = {}) =>
+    api.get('/merchandising/breaks/', { params }).then(r => r.data),
+
+  getBreak: (id) =>
+    api.get(`/merchandising/breaks/${id}/`).then(r => r.data),
+
+  startBreak: (data) =>
+    api.post('/merchandising/breaks/', data).then(r => r.data),
+
+  endBreak: (id, data) =>
+    api.patch(`/merchandising/breaks/${id}/`, data).then(r => r.data),
+
+  getTodayBreak: () =>
+    api.get('/merchandising/breaks/today_break/').then(r => r.data),
 };

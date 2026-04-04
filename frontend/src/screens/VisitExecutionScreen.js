@@ -16,8 +16,10 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import { visitService, storeService, notificationService } from '../services/apiService';
+import { visitService, storeService, notificationService, scheduleService, productService } from '../services/apiService';
+import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const FAKE_ARTICLES = [
   {
@@ -182,6 +184,30 @@ const getExpectedTargetsFromGrid = (products, totalSlots) => {
   return targets;
 };
 
+const VISIT_PROGRESS_KEY = (visitId) => `visitProgress_${visitId}`;
+
+const saveVisitProgress = async (visitId, updates) => {
+  try {
+    const existing = await AsyncStorage.getItem(VISIT_PROGRESS_KEY(visitId));
+    const current = existing ? JSON.parse(existing) : {};
+    const merged = { ...current, ...updates };
+    await AsyncStorage.setItem(VISIT_PROGRESS_KEY(visitId), JSON.stringify(merged));
+    console.log('Visit progress saved:', visitId, merged);
+  } catch (e) {
+    console.error('Error saving visit progress:', e);
+  }
+};
+
+const loadVisitProgress = async (visitId) => {
+  try {
+    const data = await AsyncStorage.getItem(VISIT_PROGRESS_KEY(visitId));
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    console.error('Error loading visit progress:', e);
+    return null;
+  }
+};
+
 export default function VisitExecutionScreen({ route, navigation }) {
   const { visitId } = route.params;
   const { user } = useAuth();
@@ -196,9 +222,35 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const [checkOutTime, setCheckOutTime] = useState(null);
   const [locationChecked, setLocationChecked] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [breakStartTime, setBreakStartTime] = useState(null);
+  const [breakEndTime, setBreakEndTime] = useState(null);
+  const [breakDuration, setBreakDuration] = useState(null);
+  const [breakWindowStart, setBreakWindowStart] = useState(null);
+  const [breakWindowEnd, setBreakWindowEnd] = useState(null);
+  const [breakElapsedTime, setBreakElapsedTime] = useState('00:00:00');
+  const [isOnBreak, setIsOnBreak] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [showSlotAssignModal, setShowSlotAssignModal] = useState(false);
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertBrand, setAlertBrand] = useState('');
+  const [alertType, setAlertType] = useState('');
+  const [showAlertTypeDropdown, setShowAlertTypeDropdown] = useState(false);
+  const [alertDescription, setAlertDescription] = useState('');
+  const [alertPhoto, setAlertPhoto] = useState(null);
+  const [alertSubmitting, setAlertSubmitting] = useState(false);
+  const [alertCompleted, setAlertCompleted] = useState(false);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [productName, setProductName] = useState('');
+  const [productBrand, setProductBrand] = useState('');
+  const [productCategory, setProductCategory] = useState('');
+  const [showProductCategoryDropdown, setShowProductCategoryDropdown] = useState(false);
+  const [productPrice, setProductPrice] = useState('');
+  const [productSku, setProductSku] = useState('');
+  const [productDescription, setProductDescription] = useState('');
+  const [productPhoto, setProductPhoto] = useState(null);
+  const [productSubmitting, setProductSubmitting] = useState(false);
+  const [productCompleted, setProductCompleted] = useState(false);
   const [stockUpdateCompleted, setStockUpdateCompleted] = useState(false);
   const [priceComparisonCompleted, setPriceComparisonCompleted] = useState(false);
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
@@ -275,6 +327,43 @@ export default function VisitExecutionScreen({ route, navigation }) {
     };
   }, [checkInTime, checkOutTime]);
 
+  // Timer for tracking break time
+  useEffect(() => {
+    let breakInterval;
+    if (isOnBreak && breakStartTime) {
+      breakInterval = setInterval(() => {
+        const now = new Date();
+        const breakStart = new Date(breakStartTime);
+        const diff = Math.floor((now - breakStart) / 1000);
+        
+        const hours = Math.floor(diff / 3600);
+        const minutes = Math.floor((diff % 3600) / 60);
+        const seconds = diff % 60;
+        
+        setBreakElapsedTime(
+          `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+        );
+      }, 1000);
+    } else if (breakEndTime && breakStartTime) {
+      // Calculate final break duration
+      const breakStart = new Date(breakStartTime);
+      const breakEnd = new Date(breakEndTime);
+      const diff = Math.floor((breakEnd - breakStart) / 1000);
+      
+      const hours = Math.floor(diff / 3600);
+      const minutes = Math.floor((diff % 3600) / 60);
+      const seconds = diff % 60;
+      
+      setBreakElapsedTime(
+        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+      );
+    }
+    
+    return () => {
+      if (breakInterval) clearInterval(breakInterval);
+    };
+  }, [isOnBreak, breakStartTime, breakEndTime]);
+
   // Monitor location services status
   useEffect(() => {
     let locationCheckInterval;
@@ -331,6 +420,27 @@ export default function VisitExecutionScreen({ route, navigation }) {
       setNotes(visitData.notes || '');
       setCheckInTime(visitData.check_in_time || visitData.checked_in_at);
       
+      // Load break data from today's Schedule (one break per day, not per visit)
+      try {
+        const todaySchedule = await scheduleService.getTodaySchedule();
+        if (todaySchedule) {
+          setBreakDuration(todaySchedule.allowed_break_duration_minutes);
+          setBreakWindowStart(todaySchedule.break_window_start);
+          setBreakWindowEnd(todaySchedule.break_window_end);
+        }
+      } catch (scheduleErr) {
+        // No schedule for today — break not configured by admin
+        console.log('No schedule found for today:', scheduleErr.message);
+      }
+
+      // Load break times from visit if merchandiser already started/ended break
+      if (visitData.break_start_time) {
+        setBreakStartTime(visitData.break_start_time);
+      }
+      if (visitData.break_end_time) {
+        setBreakEndTime(visitData.break_end_time);
+      }
+      
       // If visit is completed, set checkout time to stop timer
       if (visitData.status === 'completed' && visitData.check_out_time) {
         setCheckOutTime(visitData.check_out_time);
@@ -352,6 +462,44 @@ export default function VisitExecutionScreen({ route, navigation }) {
         if (location && storeData.latitude && storeData.longitude) {
           calculateDistance(storeData);
         }
+      }
+
+      // Restore visit progress from local storage
+      const savedProgress = await loadVisitProgress(visitId);
+      console.log('Loaded visit progress:', visitId, savedProgress);
+      if (savedProgress) {
+        if (savedProgress.alertCompleted) setAlertCompleted(true);
+        if (savedProgress.productCompleted) setProductCompleted(true);
+        if (savedProgress.stockUpdateCompleted) setStockUpdateCompleted(true);
+        if (savedProgress.priceComparisonCompleted) setPriceComparisonCompleted(true);
+        if (savedProgress.photos?.length > 0) setPhotos(savedProgress.photos);
+      }
+
+      // Also check server for existing alerts/products for this visit
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const [alertsRes, productsRes] = await Promise.all([
+          api.get('/merchandising/competitor-alerts/').catch(() => null),
+          api.get('/merchandising/products/').catch(() => null),
+        ]);
+        if (alertsRes) {
+          const allAlerts = alertsRes.data?.results || alertsRes.data || [];
+          const visitAlerts = allAlerts.filter(
+            a => String(a.visit) === String(visitId) || (a.created_at && a.created_at.startsWith(today) && String(a.store) === String(visitData.store))
+          );
+          console.log('Server alerts for visit:', visitAlerts.length, 'of', allAlerts.length);
+          if (visitAlerts.length > 0) setAlertCompleted(true);
+        }
+        if (productsRes) {
+          const allProducts = productsRes.data?.results || productsRes.data || [];
+          const visitProducts = allProducts.filter(
+            p => p.created_at && p.created_at.startsWith(today) && String(p.store) === String(visitData.store) && String(p.created_by) === String(user?.id)
+          );
+          console.log('Server products for visit:', visitProducts.length, 'of', allProducts.length);
+          if (visitProducts.length > 0) setProductCompleted(true);
+        }
+      } catch (e) {
+        console.log('Could not check existing alerts/products:', e.message);
       }
     } catch (error) {
       console.error('Error fetching visit data:', error);
@@ -451,6 +599,18 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
   const handleCheckIn = async () => {
     try {
+      // Check if day has been started (user-scoped key)
+      const userId = user?.id;
+      const dayStarted = await AsyncStorage.getItem(userId ? `dayStarted_${userId}` : 'dayStarted');
+      if (dayStarted !== 'true') {
+        Alert.alert(
+          'Day Not Started',
+          'You must start your work day from the Home screen before checking into a store.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
       if (!location) {
         Alert.alert('GPS Required', 'Please enable GPS to check in');
         return;
@@ -506,7 +666,9 @@ export default function VisitExecutionScreen({ route, navigation }) {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setPhotos([...photos, result.assets[0]]);
+        const newPhotos = [...photos, result.assets[0]];
+        setPhotos(newPhotos);
+        saveVisitProgress(visitId, { photos: newPhotos });
       }
     } catch (error) {
       console.error('Photo error:', error);
@@ -531,6 +693,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
           onPress: () => {
             const newPhotos = photos.filter((_, i) => i !== index);
             setPhotos(newPhotos);
+            saveVisitProgress(visitId, { photos: newPhotos });
           }
         }
       ]
@@ -786,12 +949,10 @@ export default function VisitExecutionScreen({ route, navigation }) {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Save',
-          onPress: () => {
-            console.log('Facing grid saved:', {
+          onPress: async () => {
+            const facingPayload = {
               rows: Number(facingGridRows || 0),
               columns: Number(facingGridColumns || 0),
-              cells: facingGridCells,
-              slotAssignments,
               totalObservedUnits: getTotalObservedUnits(),
               proofPhotoUri: facingProofPhoto?.uri || null,
               productSummary: articles.slice(0, 8).map((product) => {
@@ -805,8 +966,14 @@ export default function VisitExecutionScreen({ route, navigation }) {
                   gap: observed - expected,
                 };
               }),
-            });
+            };
+            console.log('Facing grid saved:', facingPayload);
+            // Persist facing data to backend
+            try {
+              await visitService.patchVisit(visitId, { facing_data: facingPayload });
+            } catch (e) { console.error('Failed to save facing_data:', e); }
             setStockUpdateCompleted(true);
+            await saveVisitProgress(visitId, { stockUpdateCompleted: true });
             setShowStockModal(false);
             Alert.alert('Success', 'Facing updates saved!');
           }
@@ -817,22 +984,23 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
   const handleCheckOut = async () => {
     try {
-      const completionPercentage = calculateCompletionPercentage();
-      
-      if (completionPercentage < 100) {
-        Alert.alert(
-          'Incomplete Tasks',
-          'Please complete all tasks before checking out.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-
       // Set checkout time to stop the timer
       const checkoutTimestamp = new Date().toISOString();
       setCheckOutTime(checkoutTimestamp);
 
+      // Save stock rupture data to backend before checkout
+      try {
+        const ruptureData = articles
+          .filter(a => a.isRupture)
+          .map(a => ({ productId: a.id, productName: a.name, status: 'rupture' }));
+        if (ruptureData.length > 0) {
+          await visitService.patchVisit(visitId, { stock_ruptures: ruptureData });
+        }
+      } catch (e) { console.error('Failed to save stock_ruptures:', e); }
+
       await visitService.checkOut(visitId, notes);
+      // Clean up saved progress after successful checkout
+      try { await AsyncStorage.removeItem(VISIT_PROGRESS_KEY(visitId)); } catch (_) {}
       Alert.alert('Success', 'Checked out successfully!', [
         { text: 'OK', onPress: () => navigation.goBack() }
       ]);
@@ -899,6 +1067,97 @@ export default function VisitExecutionScreen({ route, navigation }) {
     setShowPriceModal(true);
   };
 
+  const isCurrentTimeInBreakWindow = () => {
+    if (!breakWindowStart || !breakWindowEnd) return false;
+    
+    const now = new Date();
+    const [startHour, startMin] = breakWindowStart.split(':').map(Number);
+    const [endHour, endMin] = breakWindowEnd.split(':').map(Number);
+    
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
+    
+    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+  };
+
+  const handleStartBreak = async () => {
+    try {
+      if (!isCurrentTimeInBreakWindow()) {
+        Alert.alert(
+          'Break Window Unavailable',
+          `Breaks are only allowed between ${breakWindowStart} and ${breakWindowEnd}`,
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      const breakStart = new Date().toISOString();
+      setBreakStartTime(breakStart);
+      setIsOnBreak(true);
+      
+      // Patch visit with break start time
+      await visitService.patchVisit(visitId, {
+        break_start_time: breakStart,
+      });
+      
+      Alert.alert('Break Started', `Your break of ${breakDuration} minutes has started`);
+    } catch (error) {
+      console.error('Break start error:', error);
+      Alert.alert('Error', 'Failed to start break');
+    }
+  };
+
+  const handleEndBreak = async () => {
+    try {
+      if (!breakStartTime) {
+        Alert.alert('Error', 'Break was not started properly');
+        return;
+      }
+
+      const breakEnd = new Date().toISOString();
+      const breakStart = new Date(breakStartTime);
+      const actualDurationMinutes = Math.round((new Date(breakEnd) - breakStart) / (1000 * 60));
+      const allowedDurationMinutes = breakDuration || 30;
+      const isOvertime = actualDurationMinutes > allowedDurationMinutes;
+
+      setBreakEndTime(breakEnd);
+      setIsOnBreak(false);
+      
+      // Patch visit with break end time
+      await visitService.patchVisit(visitId, {
+        break_end_time: breakEnd,
+        break_took: actualDurationMinutes,
+      });
+
+      // If overtime, notify both user and admin
+      if (isOvertime) {
+        const overtimeMinutes = actualDurationMinutes - allowedDurationMinutes;
+        const message = `Break overtime by ${overtimeMinutes} minutes`;
+        
+        // Notify user
+        Alert.alert(
+          'Break Overtime',
+          `You took ${actualDurationMinutes} minutes, but only ${allowedDurationMinutes} were allowed.\nOvertime: ${overtimeMinutes} minutes`,
+          [{ text: 'OK' }]
+        );
+        
+        // Notify admin
+        await notificationService.createNotification({
+          user: user?.id,
+          title: 'Break Overtime Alert',
+          message: `${user?.first_name || user?.username} took an extra ${overtimeMinutes} minutes break at ${store?.name || 'Unknown Store'}`,
+          type: 'BREAK_ALERT',
+        });
+      } else {
+        Alert.alert('Break Ended', `Break completed in ${actualDurationMinutes} minutes`);
+      }
+    } catch (error) {
+      console.error('Break end error:', error);
+      Alert.alert('Error', 'Failed to end break');
+    }
+  };
+
   const handleCompetitorPriceChange = (itemId, value) => {
     const normalizedValue = value.replace(',', '.').replace(/[^\d.]/g, '');
     setPriceComparisons((current) =>
@@ -910,14 +1169,205 @@ export default function VisitExecutionScreen({ route, navigation }) {
     );
   };
 
-  const handleSavePriceComparison = () => {
+  const handleSavePriceComparison = async () => {
+    // Build price comparison payload with filled entries
+    const filledComparisons = priceComparisons
+      .filter(pc => pc.competitorPrice && pc.competitorPrice.trim() !== '')
+      .map(pc => ({
+        productName: pc.name,
+        ourPrice: pc.ourPrice,
+        competitorPrice: parseFloat(pc.competitorPrice.replace(',', '.')) || 0,
+        competitor: competitorName,
+      }));
+    // Persist to backend
+    try {
+      await visitService.patchVisit(visitId, { price_comparisons: filledComparisons });
+    } catch (e) { console.error('Failed to save price_comparisons:', e); }
     setPriceComparisonCompleted(true);
+    await saveVisitProgress(visitId, { priceComparisonCompleted: true });
     setShowPriceModal(false);
     Alert.alert('Saved', 'Price comparison has been recorded for this visit.');
   };
 
+  // Ajout Produit handlers
+  const PRODUCT_CATEGORIES = [
+    { value: 'food', label: 'Alimentaire' },
+    { value: 'beauty', label: 'Beauté & Soins' },
+    { value: 'home', label: 'Maison & Jardin' },
+    { value: 'clothing', label: 'Vêtements' },
+    { value: 'electronics', label: 'Électronique' },
+    { value: 'sports', label: 'Sports' },
+    { value: 'other', label: 'Autre' },
+  ];
+
   const handleAddProduct = () => {
-    Alert.alert('Add Product', 'Product addition is not connected yet. Facing entry remains available from Saisi Facing.');
+    setProductName('');
+    setProductBrand('');
+    setProductCategory('');
+    setProductPrice('');
+    setProductSku('');
+    setProductDescription('');
+    setProductPhoto(null);
+    setShowProductCategoryDropdown(false);
+    setShowProductModal(true);
+  };
+
+  const handleProductTakePhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission requise', 'Autorisez l\'accès à la caméra.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.7 });
+      if (!result.canceled && result.assets?.[0]) {
+        setProductPhoto(result.assets[0]);
+      }
+    } catch (err) {
+      console.error('Camera error:', err);
+    }
+  };
+
+  const handleSubmitProduct = async () => {
+    if (!productName.trim()) {
+      Alert.alert('Requis', 'Entrez le nom du produit.');
+      return;
+    }
+    if (!productCategory) {
+      Alert.alert('Requis', 'Sélectionnez une catégorie.');
+      return;
+    }
+    if (!productPrice.trim()) {
+      Alert.alert('Requis', 'Entrez le prix du produit.');
+      return;
+    }
+    try {
+      setProductSubmitting(true);
+      const sku = productSku.trim() || `SKU-${Date.now()}`;
+      const data = {
+        name: productName.trim(),
+        brand: productBrand.trim() || null,
+        category: productCategory,
+        price: parseFloat(productPrice.replace(',', '.')),
+        sku,
+        description: productDescription.trim() || null,
+        store: visit?.store || store?.id || null,
+        is_active: true,
+      };
+      await productService.createProduct(data);
+      setProductCompleted(true);
+      await saveVisitProgress(visitId, { productCompleted: true });
+      setShowProductModal(false);
+      Alert.alert('Succès', 'Produit ajouté avec succès.');
+    } catch (err) {
+      console.error('Product submit error:', err);
+      const detail = err.response?.data;
+      const msg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || 'Échec de l\'ajout.');
+      Alert.alert('Erreur', msg);
+    } finally {
+      setProductSubmitting(false);
+    }
+  };
+
+  // Alerte Concurrent handlers
+  const ALERT_TYPES = [
+    { value: 'promotion', label: 'Promotion' },
+    { value: 'price_change', label: 'Changement de prix' },
+    { value: 'new_product', label: 'Nouveau produit' },
+    { value: 'competitor_activity', label: 'Activité concurrent' },
+  ];
+
+  const handleOpenAlertModal = () => {
+    setAlertBrand('');
+    setAlertType('');
+    setAlertDescription('');
+    setAlertPhoto(null);
+    setShowAlertTypeDropdown(false);
+    setShowAlertModal(true);
+  };
+
+  const handleAlertPickImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission requise', 'Autorisez l\'accès aux photos.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        setAlertPhoto(result.assets[0]);
+      }
+    } catch (err) {
+      console.error('Image picker error:', err);
+    }
+  };
+
+  const handleAlertTakePhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission requise', 'Autorisez l\'accès à la caméra.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        setAlertPhoto(result.assets[0]);
+      }
+    } catch (err) {
+      console.error('Camera error:', err);
+    }
+  };
+
+  const handleSubmitAlert = async () => {
+    if (!alertBrand.trim()) {
+      Alert.alert('Requis', 'Entrez la marque concurrente.');
+      return;
+    }
+    if (!alertType) {
+      Alert.alert('Requis', 'Sélectionnez un type d\'alerte.');
+      return;
+    }
+    if (!alertDescription.trim()) {
+      Alert.alert('Requis', 'Décrivez la situation.');
+      return;
+    }
+    if (!alertPhoto) {
+      Alert.alert('Requis', 'Ajoutez une photo comme preuve.');
+      return;
+    }
+    try {
+      setAlertSubmitting(true);
+      const formData = new FormData();
+      formData.append('alert_type', alertType);
+      formData.append('competitor_brand', alertBrand.trim());
+      formData.append('store', visit?.store || store?.id || '');
+      formData.append('visit', visitId || '');
+      formData.append('description', alertDescription.trim());
+      formData.append('photo', {
+        uri: alertPhoto.uri,
+        type: 'image/jpeg',
+        name: 'alert_photo.jpg',
+      });
+      await api.post('/merchandising/competitor-alerts/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setAlertCompleted(true);
+      await saveVisitProgress(visitId, { alertCompleted: true });
+      setShowAlertModal(false);
+      Alert.alert('Succès', 'Alerte concurrent envoyée avec succès.');
+    } catch (err) {
+      console.error('Alert submit error:', err);
+      Alert.alert('Erreur', err.response?.data?.detail || 'Échec de l\'envoi.');
+    } finally {
+      setAlertSubmitting(false);
+    }
   };
 
   const handleToggleArticleRupture = (articleId) => {
@@ -944,20 +1394,20 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const gpsStatus = getGPSStatus();
   const isCheckedIn = !!checkInTime;
   const isVisitCompleted = visit?.status === 'completed';
-  const canCheckOut = completionPercentage >= 100 && isCheckedIn && !isVisitCompleted;
+  const canCheckOut = isCheckedIn && !isVisitCompleted;
   const scheduleLabel = visit?.scheduled_date ? formatTime(visit.scheduled_date) : 'Not scheduled';
   const visitStatusConfig = isVisitCompleted
     ? { label: 'VISITE TERMINEE', color: '#16a34a', bg: '#dcfce7' }
     : isCheckedIn
-      ? { label: 'VISITE ACTIVE', color: '#ffffff', bg: '#ff1f1f' }
+      ? { label: 'VISITE ACTIVE', color: '#ffffff', bg: '#2563eb' }
       : { label: 'VISITE PLANIFIEE', color: '#1d4ed8', bg: '#dbeafe' };
   const quickActions = [
     {
       key: 'photo',
       title: 'Anomalie Photo',
       icon: 'camera-outline',
-      accent: '#ff3b30',
-      background: '#fff1f1',
+      accent: '#2563eb',
+      background: '#dbeafe',
       onPress: handleOpenPhotoModal,
       disabled: !isCheckedIn || isVisitCompleted,
       completed: photos.length > 0,
@@ -966,8 +1416,8 @@ export default function VisitExecutionScreen({ route, navigation }) {
       key: 'facing',
       title: 'Saisi Facing',
       icon: 'view-grid-plus-outline',
-      accent: '#ff3b30',
-      background: '#fff1f1',
+      accent: '#2563eb',
+      background: '#dbeafe',
       onPress: handleOpenStockModal,
       disabled: !isCheckedIn || isVisitCompleted,
       completed: stockUpdateCompleted,
@@ -976,8 +1426,8 @@ export default function VisitExecutionScreen({ route, navigation }) {
       key: 'pricing',
       title: 'Prix Concurrents',
       icon: 'tag-outline',
-      accent: '#ff3b30',
-      background: '#fff6ef',
+      accent: '#2563eb',
+      background: '#dbeafe',
       onPress: handleCompetitorPrices,
       disabled: !isCheckedIn || isVisitCompleted,
       completed: priceComparisonCompleted,
@@ -986,19 +1436,21 @@ export default function VisitExecutionScreen({ route, navigation }) {
       key: 'product',
       title: 'Ajout Produit',
       icon: 'plus-circle-outline',
-      accent: '#ff3b30',
-      background: '#fff1f1',
+      accent: '#2563eb',
+      background: '#dbeafe',
       onPress: handleAddProduct,
       disabled: !isCheckedIn || isVisitCompleted,
+      completed: productCompleted,
     },
     {
       key: 'alert',
       title: 'Alerte Concurrent',
       icon: 'bell-alert-outline',
-      accent: '#ff3b30',
-      background: '#fff1f1',
-      onPress: () => navigation.navigate('Complaint'),
+      accent: '#2563eb',
+      background: '#dbeafe',
+      onPress: handleOpenAlertModal,
       disabled: !isCheckedIn || isVisitCompleted,
+      completed: alertCompleted,
     },
     {
       key: 'other',
@@ -1032,8 +1484,8 @@ export default function VisitExecutionScreen({ route, navigation }) {
       title: 'Anomalie Photo',
       subtitle: `${store?.name || visit?.store_name || 'Magasin'} • ${photos.length} photo${photos.length > 1 ? 's' : ''}`,
       icon: 'camera-outline',
-      iconColor: '#ff5a52',
-      iconBackground: '#fff1f1',
+      iconColor: '#2563eb',
+      iconBackground: '#dbeafe',
     },
     notes?.trim() && {
       key: 'notes',
@@ -1313,9 +1765,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
             />
             <Text style={styles.footerCtaText}>{footerButtonLabel}</Text>
           </TouchableOpacity>
-          {isCheckedIn && !canCheckOut && !isVisitCompleted && (
-            <Text style={styles.footerHelperText}>Complete photo capture and facing update before checkout.</Text>
-          )}
+
         </View>
       </View>
 
@@ -1748,6 +2198,282 @@ export default function VisitExecutionScreen({ route, navigation }) {
           </View>
         </SafeAreaView>
       </Modal>
+
+      {/* Alerte Concurrent Modal */}
+      <Modal
+        visible={showAlertModal}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowAlertModal(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowAlertModal(false)}>
+              <MaterialCommunityIcons name="close" size={24} color="#111" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Alerte Concurrent</Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
+            {/* Info Card */}
+            <View style={styles.alertInfoCard}>
+              <View style={styles.alertInfoRow}>
+                <MaterialCommunityIcons name="store" size={18} color="#6b7280" />
+                <Text style={styles.alertInfoLabel}>Magasin</Text>
+                <Text style={styles.alertInfoValue}>{store?.name || visit?.store_name || 'N/A'}</Text>
+              </View>
+              <View style={styles.alertInfoDivider} />
+              <View style={styles.alertInfoRow}>
+                <MaterialCommunityIcons name="calendar" size={18} color="#6b7280" />
+                <Text style={styles.alertInfoLabel}>Date</Text>
+                <Text style={styles.alertInfoValue}>{new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</Text>
+              </View>
+            </View>
+
+            {/* Competitor Brand */}
+            <Text style={styles.alertSectionLabel}>Marque concurrente *</Text>
+            <TextInput
+              style={styles.alertInput}
+              placeholder="Ex: Coca-Cola, Danone..."
+              placeholderTextColor="#9ca3af"
+              value={alertBrand}
+              onChangeText={setAlertBrand}
+            />
+
+            {/* Alert Type Dropdown */}
+            <Text style={styles.alertSectionLabel}>Type d'alerte *</Text>
+            <TouchableOpacity
+              style={styles.alertDropdown}
+              onPress={() => setShowAlertTypeDropdown(!showAlertTypeDropdown)}
+            >
+              <Text style={alertType ? styles.alertDropdownText : styles.alertDropdownPlaceholder}>
+                {alertType ? ALERT_TYPES.find(t => t.value === alertType)?.label : 'Sélectionner le type...'}
+              </Text>
+              <MaterialCommunityIcons
+                name={showAlertTypeDropdown ? 'chevron-up' : 'chevron-down'}
+                size={22}
+                color="#6b7280"
+              />
+            </TouchableOpacity>
+            {showAlertTypeDropdown && (
+              <View style={styles.alertDropdownList}>
+                {ALERT_TYPES.map((type) => (
+                  <TouchableOpacity
+                    key={type.value}
+                    style={[
+                      styles.alertDropdownItem,
+                      alertType === type.value && styles.alertDropdownItemActive,
+                    ]}
+                    onPress={() => {
+                      setAlertType(type.value);
+                      setShowAlertTypeDropdown(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.alertDropdownItemText,
+                      alertType === type.value && styles.alertDropdownItemTextActive,
+                    ]}>
+                      {type.label}
+                    </Text>
+                    {alertType === type.value && (
+                      <MaterialCommunityIcons name="check" size={18} color="#2563eb" />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {/* Description */}
+            <Text style={styles.alertSectionLabel}>Description *</Text>
+            <TextInput
+              style={styles.alertTextInput}
+              placeholder="Décrivez la situation observée..."
+              placeholderTextColor="#9ca3af"
+              value={alertDescription}
+              onChangeText={setAlertDescription}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+
+            {/* Photo */}
+            <Text style={styles.alertSectionLabel}>
+              Photo (preuve visuelle) *
+            </Text>
+            {alertPhoto ? (
+              <View style={styles.alertPhotoContainer}>
+                <Image source={{ uri: alertPhoto.uri }} style={styles.alertPhotoPreview} />
+                <TouchableOpacity onPress={() => setAlertPhoto(null)} style={styles.alertRemovePhoto}>
+                  <MaterialCommunityIcons name="close-circle" size={28} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.alertPhotoBtn} onPress={handleAlertTakePhoto}>
+                <MaterialCommunityIcons name="camera" size={24} color="#2563eb" />
+                <Text style={styles.alertPhotoBtnText}>Prendre photo</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Submit */}
+            <TouchableOpacity
+              style={[styles.alertSubmitBtn, alertSubmitting && { opacity: 0.6 }]}
+              onPress={handleSubmitAlert}
+              disabled={alertSubmitting}
+            >
+              <MaterialCommunityIcons name="send" size={20} color="#fff" />
+              <Text style={styles.alertSubmitBtnText}>
+                {alertSubmitting ? 'Envoi en cours...' : 'Envoyer l\'alerte'}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Ajout Produit Modal */}
+      <Modal
+        visible={showProductModal}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowProductModal(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowProductModal(false)}>
+              <MaterialCommunityIcons name="close" size={24} color="#111" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Ajout Produit</Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
+            {/* Product Name */}
+            <Text style={styles.alertSectionLabel}>Nom du produit *</Text>
+            <TextInput
+              style={styles.alertInput}
+              placeholder="Ex: Lait Délice 1L..."
+              placeholderTextColor="#9ca3af"
+              value={productName}
+              onChangeText={setProductName}
+            />
+
+            {/* Brand */}
+            <Text style={styles.alertSectionLabel}>Marque</Text>
+            <TextInput
+              style={styles.alertInput}
+              placeholder="Ex: Délice, Vitalait..."
+              placeholderTextColor="#9ca3af"
+              value={productBrand}
+              onChangeText={setProductBrand}
+            />
+
+            {/* Category Dropdown */}
+            <Text style={styles.alertSectionLabel}>Catégorie *</Text>
+            <TouchableOpacity
+              style={styles.alertDropdown}
+              onPress={() => setShowProductCategoryDropdown(!showProductCategoryDropdown)}
+            >
+              <Text style={productCategory ? styles.alertDropdownText : styles.alertDropdownPlaceholder}>
+                {productCategory ? PRODUCT_CATEGORIES.find(c => c.value === productCategory)?.label : 'Sélectionner...'}
+              </Text>
+              <MaterialCommunityIcons
+                name={showProductCategoryDropdown ? 'chevron-up' : 'chevron-down'}
+                size={22}
+                color="#6b7280"
+              />
+            </TouchableOpacity>
+            {showProductCategoryDropdown && (
+              <View style={styles.alertDropdownList}>
+                {PRODUCT_CATEGORIES.map((cat) => (
+                  <TouchableOpacity
+                    key={cat.value}
+                    style={[
+                      styles.alertDropdownItem,
+                      productCategory === cat.value && styles.alertDropdownItemActive,
+                    ]}
+                    onPress={() => {
+                      setProductCategory(cat.value);
+                      setShowProductCategoryDropdown(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.alertDropdownItemText,
+                      productCategory === cat.value && styles.alertDropdownItemTextActive,
+                    ]}>
+                      {cat.label}
+                    </Text>
+                    {productCategory === cat.value && (
+                      <MaterialCommunityIcons name="check" size={18} color="#2563eb" />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {/* Price */}
+            <Text style={styles.alertSectionLabel}>Prix (TND) *</Text>
+            <TextInput
+              style={styles.alertInput}
+              placeholder="Ex: 2.450"
+              placeholderTextColor="#9ca3af"
+              value={productPrice}
+              onChangeText={setProductPrice}
+              keyboardType="decimal-pad"
+            />
+
+            {/* SKU */}
+            <Text style={styles.alertSectionLabel}>Code / SKU</Text>
+            <TextInput
+              style={styles.alertInput}
+              placeholder="Optionnel - code barre..."
+              placeholderTextColor="#9ca3af"
+              value={productSku}
+              onChangeText={setProductSku}
+            />
+
+            {/* Description */}
+            <Text style={styles.alertSectionLabel}>Description</Text>
+            <TextInput
+              style={styles.alertTextInput}
+              placeholder="Description du produit..."
+              placeholderTextColor="#9ca3af"
+              value={productDescription}
+              onChangeText={setProductDescription}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+
+            {/* Photo */}
+            <Text style={styles.alertSectionLabel}>Photo du produit</Text>
+            {productPhoto ? (
+              <View style={styles.alertPhotoContainer}>
+                <Image source={{ uri: productPhoto.uri }} style={styles.alertPhotoPreview} />
+                <TouchableOpacity onPress={() => setProductPhoto(null)} style={styles.alertRemovePhoto}>
+                  <MaterialCommunityIcons name="close-circle" size={28} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.alertPhotoBtn} onPress={handleProductTakePhoto}>
+                <MaterialCommunityIcons name="camera" size={24} color="#2563eb" />
+                <Text style={styles.alertPhotoBtnText}>Prendre photo</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Submit */}
+            <TouchableOpacity
+              style={[styles.alertSubmitBtn, productSubmitting && { opacity: 0.6 }]}
+              onPress={handleSubmitProduct}
+              disabled={productSubmitting}
+            >
+              <MaterialCommunityIcons name="plus-circle" size={20} color="#fff" />
+              <Text style={styles.alertSubmitBtnText}>
+                {productSubmitting ? 'Ajout en cours...' : 'Ajouter le produit'}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1884,7 +2610,7 @@ const styles = StyleSheet.create({
   timerValue: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#ef1b1b',
+    color: '#111111',
     letterSpacing: 1,
   },
   timerLabel: {
@@ -1931,7 +2657,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   tabButtonTextActive: {
-    color: '#ff1f1f',
+    color: '#2563eb',
   },
   quickGrid: {
     flexDirection: 'row',
@@ -2139,8 +2865,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   ruptureBadgeActive: {
-    backgroundColor: '#ff3b30',
-    borderColor: '#ff3b30',
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
   },
   ruptureBadgeText: {
     fontSize: 12,
@@ -2328,18 +3054,18 @@ const styles = StyleSheet.create({
   footerCtaButton: {
     height: 56,
     borderRadius: 18,
-    backgroundColor: '#ff1717',
+    backgroundColor: '#2563eb',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#ff1717',
+    shadowColor: '#2563eb',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 16,
     elevation: 6,
   },
   footerCtaButtonDisabled: {
-    backgroundColor: '#fca5a5',
+    backgroundColor: '#93c5fd',
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -2400,6 +3126,174 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
+  // Alert Modal Styles
+  alertInfoCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  alertInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  alertInfoLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+    width: 70,
+  },
+  alertInfoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+    flex: 1,
+  },
+  alertInfoDivider: {
+    height: 1,
+    backgroundColor: '#e5e7eb',
+    marginVertical: 10,
+  },
+  alertDescriptionHint: {
+    fontSize: 13,
+    color: '#6b7280',
+    lineHeight: 19,
+    marginBottom: 4,
+    marginTop: 12,
+  },
+  alertSectionLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  alertInput: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 14,
+    fontSize: 14,
+    color: '#111',
+    marginBottom: 4,
+  },
+  alertDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 14,
+    marginBottom: 4,
+  },
+  alertDropdownText: {
+    fontSize: 14,
+    color: '#111',
+    fontWeight: '500',
+  },
+  alertDropdownPlaceholder: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+  alertDropdownList: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginBottom: 4,
+    overflow: 'hidden',
+  },
+  alertDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  alertDropdownItemActive: {
+    backgroundColor: '#eff6ff',
+  },
+  alertDropdownItemText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  alertDropdownItemTextActive: {
+    color: '#2563eb',
+    fontWeight: '600',
+  },
+  alertTextInput: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 14,
+    fontSize: 14,
+    color: '#111',
+    minHeight: 100,
+    marginBottom: 4,
+  },
+  alertPhotoContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+    position: 'relative',
+  },
+  alertPhotoPreview: {
+    width: '100%',
+    height: 220,
+    borderRadius: 12,
+  },
+  alertRemovePhoto: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+  },
+  alertPhotoButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  alertPhotoBtn: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 20,
+    borderRadius: 12,
+    backgroundColor: '#f0f5ff',
+    borderWidth: 1.5,
+    borderColor: '#dbeafe',
+    borderStyle: 'dashed',
+  },
+  alertPhotoBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563eb',
+  },
+  alertSubmitBtn: {
+    backgroundColor: '#2563eb',
+    borderRadius: 12,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 20,
+    marginBottom: 30,
+  },
+  alertSubmitBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
   // Photo Modal Styles
   emptyState: {
     flex: 1,
@@ -2445,7 +3339,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     right: 12,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#2563eb',
     borderRadius: 20,
     padding: 6,
   },

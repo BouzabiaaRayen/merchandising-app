@@ -170,7 +170,7 @@ const DocumentsScreen = () => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color="#6366f1" />
+          <ActivityIndicator size="large" color="#2563eb" />
         <Text style={styles.loadingText}>Loading documents...</Text>
         </View>
       </SafeAreaView>
@@ -187,7 +187,7 @@ const DocumentsScreen = () => {
             {documents.length} documento{documents.length !== 1 ? 's' : ''}
           </Text>
         </View>
-        <MaterialCommunityIcons name="file-document-multiple" size={32} color="#6366f1" />
+        <MaterialCommunityIcons name="file-document-multiple" size={32} color="#2563eb" />
       </View>
 
       {error && (
@@ -227,7 +227,7 @@ const DocumentsScreen = () => {
                   <MaterialCommunityIcons
                     name={getDocumentIcon(document.document_type)}
                     size={28}
-                    color="#6366f1"
+                    color="#2563eb"
                   />
                 </View>
                 <View style={styles.headerInfo}>
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 12,
-    backgroundColor: '#f0f4ff',
+    backgroundColor: '#dbeafe',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12
@@ -432,7 +432,8 @@ const styles = StyleSheet.create({
 
   cardType: {
     fontSize: 12,
-    color: '#64748b',
+    color: '#2563eb',
+    fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5
   },
@@ -465,7 +466,7 @@ const styles = StyleSheet.create({
   // Download Button
   downloadButton: {
     flexDirection: 'row',
-    backgroundColor: '#6366f1',
+    backgroundColor: '#2563eb',
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 16,

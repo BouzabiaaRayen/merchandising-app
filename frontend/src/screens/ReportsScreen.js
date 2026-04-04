@@ -83,6 +83,16 @@ const ReportsScreen = () => {
               timeSpent = `${hours}h ${minutes}m`;
             }
             
+            // Extract break information
+            const breakData = {
+              breakStartTime: visit.break_start_time ? new Date(visit.break_start_time).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : null,
+              breakEndTime: visit.break_end_time ? new Date(visit.break_end_time).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : null,
+              allowedDuration: visit.break_duration || 30,
+              actualDuration: visit.break_took || null,
+              overtime: visit.break_took && visit.break_duration && visit.break_took > visit.break_duration ? visit.break_took - visit.break_duration : 0,
+              missed: !visit.break_start_time && visit.break_duration ? true : false,
+            };
+            
             storesData.push({
               name: store.name,
               address: store.address,
@@ -94,6 +104,7 @@ const ReportsScreen = () => {
               // For now using placeholder values
               photosCount: 4, // Assumed completed visits have 4 photos
               stockUpdated: true,
+              break: breakData,
             });
           } catch (error) {
             console.error('Error fetching store:', error);
@@ -154,6 +165,22 @@ const ReportsScreen = () => {
             Arrivée: ${store.checkInTime ? new Date(store.checkInTime).toLocaleTimeString('fr-FR') : 'N/A'} | 
             Départ: ${store.checkOutTime ? new Date(store.checkOutTime).toLocaleTimeString('fr-FR') : 'N/A'}
           </div>
+          ${store.break && store.break.breakStartTime ? `
+            <div style="margin-top: 8px; padding: 8px; background: #fffbf0; border-left: 3px solid #f59e0b; border-radius: 4px;">
+              <div style="font-size: 11px; color: #92400e; font-weight: bold; margin-bottom: 4px;">PAUSE</div>
+              <div style="font-size: 10px; color: #b45309;">
+                <div>Début: ${store.break.breakStartTime || 'N/A'}</div>
+                <div>Fin: ${store.break.breakEndTime || 'En cours'}</div>
+                <div>Durée autorisée: ${store.break.allowedDuration} min</div>
+                <div>Durée réelle: ${store.break.actualDuration ? store.break.actualDuration + ' min' : 'N/A'}</div>
+                ${store.break.overtime > 0 ? `<div style="color: #dc2626;">Dépassement: ${store.break.overtime} min</div>` : ''}
+              </div>
+            </div>
+          ` : store.break && store.break.missed ? `
+            <div style="margin-top: 8px; padding: 8px; background: #fee2e2; border-left: 3px solid #dc2626; border-radius: 4px;">
+              <div style="font-size: 11px; color: #7f1d1d; font-weight: bold;">PAUSE MANQUEE</div>
+            </div>
+          ` : ''}
         </div>
       `).join('');
       

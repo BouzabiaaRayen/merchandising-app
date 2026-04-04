@@ -225,19 +225,19 @@ export default function ProfileScreen() {
               icon="account-edit"
               title="Edit Profile"
               subtitle="Update your personal information"
-              onPress={() => Alert.alert('Coming Soon', 'Edit profile feature will be available soon')}
+              onPress={() => navigation.navigate('EditProfile')}
             />
             <MenuItem
               icon="lock-outline"
               title="Change Password"
               subtitle="Update your password"
-              onPress={() => Alert.alert('Coming Soon', 'Change password feature will be available soon')}
+              onPress={() => navigation.navigate('ChangePassword')}
             />
             <MenuItem
               icon="bell-outline"
               title="Notifications"
               subtitle="Manage notification preferences"
-              onPress={() => Alert.alert('Coming Soon', 'Notification settings will be available soon')}
+              onPress={() => navigation.navigate('NotificationSettings')}
             />
           </View>
         </View>
@@ -251,21 +251,21 @@ export default function ProfileScreen() {
               title="Performance"
               subtitle="View your work statistics"
               iconColor="#10b981"
-              onPress={() => Alert.alert('Coming Soon', 'Performance metrics will be available soon')}
+              onPress={() => navigation.navigate('Performance')}
             />
             <MenuItem
               icon="history"
               title="Visit History"
               subtitle="View completed store visits"
               iconColor="#8b5cf6"
-              onPress={() => Alert.alert('Coming Soon', 'Visit history will be available soon')}
+              onPress={() => navigation.navigate('VisitHistory')}
             />
             <MenuItem
               icon="map-marker-path"
               title="Routes"
               subtitle="View assigned routes"
               iconColor="#f59e0b"
-              onPress={() => Alert.alert('Coming Soon', 'Routes will be available soon')}
+              onPress={() => navigation.navigate('Routes')}
             />
             <MenuItem
               icon="calendar-month-outline"

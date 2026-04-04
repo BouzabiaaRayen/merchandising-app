@@ -107,7 +107,7 @@ export default function DocumentsHistoryScreen() {
     <View style={styles.documentCard}>
       <View style={styles.documentHeader}>
         <View style={styles.icon}>
-          <MaterialCommunityIcons name="file-document" size={24} color="#f3730b" />
+          <MaterialCommunityIcons name="file-document" size={24} color="#2563eb" />
         </View>
         <View style={styles.info}>
           <Text style={styles.title} numberOfLines={2}>
@@ -166,7 +166,7 @@ export default function DocumentsHistoryScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#f3730b" />
+          <ActivityIndicator size="large" color="#2563eb" />
         </View>
       </SafeAreaView>
     );
@@ -196,7 +196,7 @@ export default function DocumentsHistoryScreen() {
               setRefreshing(true);
               fetchDocuments();
             }}
-            colors={['#f3730b']}
+            colors={['#2563eb']}
           />
         }
         ListEmptyComponent={
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     color: '#1a1a2e',
   },
   badge: {
-    backgroundColor: '#f3730b',
+    backgroundColor: '#2563eb',
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
     width: 45,
     height: 45,
     borderRadius: 10,
-    backgroundColor: '#f3730b20',
+    backgroundColor: '#2563eb20',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
 
   type: {
     fontSize: 12,
-    color: '#f3730b',
+    color: '#2563eb',
     fontWeight: '600',
   },
 
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
   },
 
   downloadButton: {
-    backgroundColor: '#f3730b',
+    backgroundColor: '#2563eb',
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 16,

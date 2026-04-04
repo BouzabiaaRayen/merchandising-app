@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Image,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -190,9 +191,20 @@ export default function SupervisorOverviewScreen() {
     <SafeAreaView style={styles.safe}>
       {/* ---- Header ---- */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.welcomeSmall}>Welcome back,</Text>
-          <Text style={styles.welcomeName}>{displayName}</Text>
+        <View style={styles.headerLeft}>
+          {user?.avatar_url ? (
+            <Image source={{ uri: user.avatar_url }} style={styles.headerAvatar} />
+          ) : (
+            <View style={styles.headerAvatarFallback}>
+              <Text style={styles.headerAvatarText}>
+                {(user?.first_name?.[0] || user?.username?.[0] || 'S').toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <View>
+            <Text style={styles.welcomeSmall}>Welcome back,</Text>
+            <Text style={styles.welcomeName}>{displayName}</Text>
+          </View>
         </View>
         <TouchableOpacity
           style={styles.notifBtn}
@@ -433,6 +445,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e8eaed',
   },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#e2e8f0' },
+  headerAvatarFallback: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#2563eb', alignItems: 'center', justifyContent: 'center' },
+  headerAvatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
   welcomeSmall: { fontSize: 13, color: '#666' },
   welcomeName: { fontSize: 18, fontWeight: '700', color: '#1a1a2e', marginTop: 1 },
   notifBtn: { position: 'relative', padding: 4 },
