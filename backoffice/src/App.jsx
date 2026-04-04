@@ -103,10 +103,10 @@ function App() {
           }
         />
         <Route
-          path="/settings"
+          path="/schedules"
           element={
             <ProtectedRoute>
-              <Settings />
+              <Complaints />
             </ProtectedRoute>
           }
         />

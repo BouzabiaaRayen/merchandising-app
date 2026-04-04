@@ -26,6 +26,9 @@ const Visits = () => {
     merchandiser: '',
     scheduled_date: '',
     notes: '',
+    break_duration: '30',
+    break_window_start: '12:00',
+    break_window_end: '14:00',
   });
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -93,6 +96,9 @@ const Visits = () => {
         merchandiser: parseInt(formData.merchandiser, 10),
         scheduled_date: formData.scheduled_date,
         notes: formData.notes,
+        break_duration: parseInt(formData.break_duration, 10),
+        break_window_start: formData.break_window_start,
+        break_window_end: formData.break_window_end,
         status: 'SCHEDULED',
       });
 
@@ -104,6 +110,9 @@ const Visits = () => {
         merchandiser: '',
         scheduled_date: '',
         notes: '',
+        break_duration: '30',
+        break_window_start: '12:00',
+        break_window_end: '14:00',
       });
       await fetchVisits();
     } catch (err) {
@@ -121,6 +130,9 @@ const Visits = () => {
       merchandiser: '',
       scheduled_date: '',
       notes: '',
+      break_duration: '30',
+      break_window_start: '12:00',
+      break_window_end: '14:00',
     });
     setFormError('');
   };
@@ -356,6 +368,48 @@ const Visits = () => {
                     onChange={handleInputChange}
                     required
                   />
+                </div>
+
+                <h3 style={{marginBottom: '15px', marginTop: '20px', fontSize: '14px', fontWeight: '600', color: '#374151'}}>Break Management</h3>
+
+                <div className="form-group">
+                  <label htmlFor="break_duration">Break Duration (minutes)</label>
+                  <input
+                    type="number"
+                    id="break_duration"
+                    name="break_duration"
+                    min="15"
+                    max="120"
+                    value={formData.break_duration}
+                    onChange={handleInputChange}
+                    placeholder="30"
+                  />
+                </div>
+
+                <div className="form-row" style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px'}}>
+                  <div className="form-group">
+                    <label htmlFor="break_window_start">Break Window Start Time</label>
+                    <input
+                      type="time"
+                      id="break_window_start"
+                      name="break_window_start"
+                      value={formData.break_window_start}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="break_window_end">Break Window End Time</label>
+                    <input
+                      type="time"
+                      id="break_window_end"
+                      name="break_window_end"
+                      value={formData.break_window_end}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
                 </div>
 
                 <div className="form-group">

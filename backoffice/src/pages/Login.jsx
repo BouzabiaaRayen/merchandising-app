@@ -38,6 +38,15 @@ const Login = () => {
       const profile = await authService.getProfile();
       console.log('=== LOGIN PROFILE DEBUG ===');
       console.log('Profile after login:', JSON.stringify(profile, null, 2));
+
+      // Only allow admin users to access the backoffice
+      if (profile.role !== 'admin' && profile.role !== 'ADMIN') {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        setError('Accès refusé. Seuls les administrateurs peuvent accéder au backoffice.');
+        return;
+      }
+
       const avatarUrl = getAvatarUrl(profile.avatar_url || profile.avatar);
       console.log('Avatar URL (avatars bucket):', avatarUrl);
       console.log('=========================');

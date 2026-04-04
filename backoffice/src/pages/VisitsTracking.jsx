@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
-import { visitService, userService, storeService } from '../services/apiService';
+import { visitService, userService, storeService, scheduleService } from '../services/apiService';
 import './VisitsTracking.css';
 import './Users.css';
 import './Visits.css';
@@ -32,6 +32,18 @@ const VisitsTracking = () => {
     scheduled_date: '',
     notes: '',
   });
+
+  // Daily break modal state
+  const [showBreakModal, setShowBreakModal] = useState(false);
+  const [breakFormData, setBreakFormData] = useState({
+    merchandiser: '',
+    date: '',
+    allowed_break_duration_minutes: '30',
+    break_window_start: '12:00',
+    break_window_end: '14:00',
+  });
+  const [breakFormError, setBreakFormError] = useState('');
+  const [breakSubmitting, setBreakSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -175,6 +187,61 @@ const VisitsTracking = () => {
     setFormError('');
   };
 
+  const handleBreakInputChange = (e) => {
+    const { name, value } = e.target;
+    setBreakFormData({ ...breakFormData, [name]: value });
+  };
+
+  const handleSetDailyBreak = async (e) => {
+    e.preventDefault();
+    setBreakFormError('');
+    setBreakSubmitting(true);
+
+    if (!breakFormData.merchandiser || !breakFormData.date) {
+      setBreakFormError('Merchandiser and Date are required');
+      setBreakSubmitting(false);
+      return;
+    }
+
+    try {
+      await scheduleService.createSchedule({
+        merchandiser: parseInt(breakFormData.merchandiser, 10),
+        date: breakFormData.date,
+        allowed_break_duration_minutes: parseInt(breakFormData.allowed_break_duration_minutes, 10),
+        break_window_start: breakFormData.break_window_start + ':00',
+        break_window_end: breakFormData.break_window_end + ':00',
+      });
+
+      setSuccessMessage('Daily break configured successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+      setShowBreakModal(false);
+      setBreakFormData({
+        merchandiser: '',
+        date: '',
+        allowed_break_duration_minutes: '30',
+        break_window_start: '12:00',
+        break_window_end: '14:00',
+      });
+    } catch (err) {
+      console.error('Error setting daily break:', err);
+      setBreakFormError(err.response?.data?.detail || err.response?.data?.non_field_errors?.[0] || 'Failed to set daily break');
+    } finally {
+      setBreakSubmitting(false);
+    }
+  };
+
+  const handleCancelBreak = () => {
+    setShowBreakModal(false);
+    setBreakFormData({
+      merchandiser: '',
+      date: '',
+      allowed_break_duration_minutes: '30',
+      break_window_start: '12:00',
+      break_window_end: '14:00',
+    });
+    setBreakFormError('');
+  };
+
   return (
     <div className="app">
       <Sidebar />
@@ -182,9 +249,14 @@ const VisitsTracking = () => {
         <Navbar />
         <div className="page-container">
           <div className="tracking-header">
-            <button className="add-btn" onClick={() => setShowScheduleModal(true)}>
-              + Schedule Visit
-            </button>
+            <div>
+              <button className="add-btn" onClick={() => setShowScheduleModal(true)}>
+                + Schedule Visit
+              </button>
+              <button className="add-btn" style={{marginLeft: '10px', backgroundColor: '#f59e0b'}} onClick={() => setShowBreakModal(true)}>
+                ☕ Set Daily Break
+              </button>
+            </div>
             <button className="clear-filters-btn" onClick={handleClearFilters}>
               Clear Filters
             </button>
@@ -431,6 +503,102 @@ const VisitsTracking = () => {
                 </button>
                 <button type="submit" className="btn-submit" disabled={submitting}>
                   {submitting ? 'Scheduling...' : 'Schedule Visit'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Set Daily Break Modal */}
+      {showBreakModal && (
+        <div className="modal-overlay" onClick={handleCancelBreak}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Set Daily Break</h2>
+              <button className="close-btn" onClick={handleCancelBreak}>×</button>
+            </div>
+            <form onSubmit={handleSetDailyBreak}>
+              <div className="form-body">
+                {breakFormError && (
+                  <div className="form-error">{breakFormError}</div>
+                )}
+
+                <div className="form-group">
+                  <label htmlFor="break_merchandiser">Merchandiser *</label>
+                  <select
+                    id="break_merchandiser"
+                    name="merchandiser"
+                    value={breakFormData.merchandiser}
+                    onChange={handleBreakInputChange}
+                    required
+                  >
+                    <option value="">-- Select a merchandiser --</option>
+                    {merchandisers.map((merch) => (
+                      <option key={merch.id} value={merch.id}>
+                        {merch.first_name} {merch.last_name} ({merch.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="break_date">Date *</label>
+                  <input
+                    type="date"
+                    id="break_date"
+                    name="date"
+                    value={breakFormData.date}
+                    onChange={handleBreakInputChange}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="allowed_break_duration_minutes">Break Duration (minutes)</label>
+                  <input
+                    type="number"
+                    id="allowed_break_duration_minutes"
+                    name="allowed_break_duration_minutes"
+                    min="15"
+                    max="120"
+                    value={breakFormData.allowed_break_duration_minutes}
+                    onChange={handleBreakInputChange}
+                    placeholder="30"
+                  />
+                </div>
+
+                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px'}}>
+                  <div className="form-group">
+                    <label htmlFor="bw_start">Break Window Start</label>
+                    <input
+                      type="time"
+                      id="bw_start"
+                      name="break_window_start"
+                      value={breakFormData.break_window_start}
+                      onChange={handleBreakInputChange}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="bw_end">Break Window End</label>
+                    <input
+                      type="time"
+                      id="bw_end"
+                      name="break_window_end"
+                      value={breakFormData.break_window_end}
+                      onChange={handleBreakInputChange}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn-cancel" onClick={handleCancelBreak}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-submit" disabled={breakSubmitting}>
+                  {breakSubmitting ? 'Saving...' : 'Save Break Config'}
                 </button>
               </div>
             </form>

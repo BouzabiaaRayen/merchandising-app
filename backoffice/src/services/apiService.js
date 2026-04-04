@@ -350,3 +350,23 @@ export const complaintService = {
     return api.post(`/merchandising/complaints/${id}/respond/`, data).then(r => r.data);
   },
 };
+
+// ---------------------------------------------------------------------------
+// Schedules (daily break configuration per merchandiser)
+// ---------------------------------------------------------------------------
+export const scheduleService = {
+  getSchedules: (params = {}) =>
+    api.get('/merchandising/schedules/', { params }).then(r => r.data),
+
+  getSchedule: (id) =>
+    api.get(`/merchandising/schedules/${id}/`).then(r => r.data),
+
+  createSchedule: (data) =>
+    api.post('/merchandising/schedules/', data).then(r => r.data),
+
+  updateSchedule: (id, data) =>
+    api.patch(`/merchandising/schedules/${id}/`, data).then(r => r.data),
+
+  deleteSchedule: (id) =>
+    api.delete(`/merchandising/schedules/${id}/`).then(r => r.data),
+};
