@@ -288,7 +288,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
   // FIX: restored areRequiredEventsCompleted
   const areRequiredEventsCompleted = () =>
-    photos.length > 0 && stockUpdateCompleted && priceComparisonCompleted;
+    photos.length > 0 && priceComparisonCompleted;
 
   const calculateCompletionPercentage = () => {
     let completed = 0;
@@ -1042,7 +1042,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
       : 'DEMARRER LA VISITE';
 
   const footerButtonDisabled =
-    isVisitCompleted || (isCheckedIn && (!canCheckOut || !areRequiredEventsCompleted()));
+    isVisitCompleted || !canCheckOut;
 
   const footerButtonHandler = isCheckedIn ? handleCheckOut : handleCheckIn;
 

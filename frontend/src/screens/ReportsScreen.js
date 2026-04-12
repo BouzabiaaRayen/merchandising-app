@@ -24,7 +24,7 @@ const ReportsScreen = () => {
   const [loading, setLoading] = useState(false);
   const [reports, setReports] = useState([]);
   const [todayData, setTodayData] = useState(null);
-  const [generatingPDF, setGeneratingPDF] = useState(false);
+  // Removed PDF generation state and logic
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   useEffect(() => {
@@ -148,189 +148,7 @@ const ReportsScreen = () => {
     }
   };
 
-  const generatePDF = async () => {
-    if (!todayData) {
-      Alert.alert('Pas de données', 'Aucune donnée disponible pour générer le rapport');
-      return;
-    }
-    
-    try {
-      setGeneratingPDF(true);
-      
-      const storesHTML = todayData.stores.map((store, index) => `
-        <div style="margin-bottom: 15px; padding: 12px; background: #f8f9fa; border-radius: 8px;">
-          <div style="font-weight: bold; color: #2563eb; margin-bottom: 5px;">${index + 1}. ${store.name}</div>
-          <div style="font-size: 12px; color: #6b7280; margin-bottom: 3px;">${store.address}</div>
-          <div style="font-size: 11px; color: #9ca3af;">
-            Arrivée: ${store.checkInTime ? new Date(store.checkInTime).toLocaleTimeString('fr-FR') : 'N/A'} | 
-            Départ: ${store.checkOutTime ? new Date(store.checkOutTime).toLocaleTimeString('fr-FR') : 'N/A'}
-          </div>
-          ${store.break && store.break.breakStartTime ? `
-            <div style="margin-top: 8px; padding: 8px; background: #fffbf0; border-left: 3px solid #f59e0b; border-radius: 4px;">
-              <div style="font-size: 11px; color: #92400e; font-weight: bold; margin-bottom: 4px;">PAUSE</div>
-              <div style="font-size: 10px; color: #b45309;">
-                <div>Début: ${store.break.breakStartTime || 'N/A'}</div>
-                <div>Fin: ${store.break.breakEndTime || 'En cours'}</div>
-                <div>Durée autorisée: ${store.break.allowedDuration} min</div>
-                <div>Durée réelle: ${store.break.actualDuration ? store.break.actualDuration + ' min' : 'N/A'}</div>
-                ${store.break.overtime > 0 ? `<div style="color: #dc2626;">Dépassement: ${store.break.overtime} min</div>` : ''}
-              </div>
-            </div>
-          ` : store.break && store.break.missed ? `
-            <div style="margin-top: 8px; padding: 8px; background: #fee2e2; border-left: 3px solid #dc2626; border-radius: 4px;">
-              <div style="font-size: 11px; color: #7f1d1d; font-weight: bold;">PAUSE MANQUEE</div>
-            </div>
-          ` : ''}
-        </div>
-      `).join('');
-      
-      const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body {
-              font-family: 'Helvetica', 'Arial', sans-serif;
-              padding: 30px;
-              color: #1e293b;
-            }
-            .header {
-              text-align: center;
-              margin-bottom: 30px;
-              border-bottom: 3px solid #2563eb;
-              padding-bottom: 20px;
-            }
-            .title {
-              font-size: 24px;
-              font-weight: bold;
-              color: #2563eb;
-              margin-bottom: 10px;
-            }
-            .subtitle {
-              font-size: 14px;
-              color: #64748b;
-            }
-            .summary {
-              display: flex;
-              justify-content: space-around;
-              margin: 30px 0;
-              padding: 20px;
-              background: #f1f5f9;
-              border-radius: 10px;
-            }
-            .summary-item {
-              text-align: center;
-            }
-            .summary-value {
-              font-size: 28px;
-              font-weight: bold;
-              color: #2563eb;
-              margin-bottom: 5px;
-            }
-            .summary-label {
-              font-size: 11px;
-              color: #64748b;
-              text-transform: uppercase;
-              letter-spacing: 1px;
-            }
-            .section-title {
-              font-size: 16px;
-              font-weight: bold;
-              color: #1e293b;
-              margin: 25px 0 15px 0;
-              border-left: 4px solid #2563eb;
-              padding-left: 10px;
-            }
-            .footer {
-              margin-top: 40px;
-              text-align: center;
-              font-size: 11px;
-              color: #94a3b8;
-              border-top: 1px solid #e2e8f0;
-              padding-top: 20px;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="title">RAPPORT JOURNALIER</div>
-            <div class="subtitle">${todayData.date}</div>
-            <div class="subtitle" style="margin-top: 8px;">Merchandiser: ${user?.first_name || user?.username || 'N/A'}</div>
-          </div>
-          
-          <div class="summary">
-            <div class="summary-item">
-              <div class="summary-value">${todayData.storesVisited}</div>
-              <div class="summary-label">Magasins Visités</div>
-            </div>
-            <div class="summary-item">
-              <div class="summary-value">${todayData.hoursWorked}</div>
-              <div class="summary-label">Heures Travaillées</div>
-            </div>
-          </div>
-          
-          ${todayData.dayStartTime ? `
-            <div style="text-align: center; margin: 20px 0; padding: 12px; background: #d1fae5; border-radius: 8px;">
-              <span style="font-weight: bold; color: #065f46;">Début de journée:</span>
-              <span style="color: #047857; margin-left: 8px;">${todayData.dayStartTime}</span>
-            </div>
-          ` : ''}
-          
-          <div class="section-title">Détails des Visites</div>
-          ${todayData.stores.length > 0 ? storesHTML : '<div style="text-align: center; color: #94a3b8; padding: 20px;">Aucune visite complétée</div>'}
-          
-          <div class="footer">
-            Rapport généré le ${new Date().toLocaleString('fr-FR')}<br/>
-            Merchandising App © 2026
-          </div>
-        </body>
-        </html>
-      `;
-      
-      const { uri } = await Print.printToFileAsync({ html });
-      
-      // Upload PDF to backend (backend will forward to Supabase)
-      try {
-        const fileName = `rapport_${user?.username || 'merchandiser'}_${new Date().toISOString().split('T')[0]}.pdf`;
-        
-        console.log('🔍 Starting PDF upload to backend...');
-        console.log('📄 File details:', { fileName, uri, type: 'application/pdf' });
-        
-        const uploadResult = await documentService.uploadDocument(
-          {
-            uri: uri,
-            type: 'application/pdf',
-            name: fileName,
-          },
-          {
-            title: `Rapport Journalier - ${todayData.date}`,
-            description: `Rapport de ${user?.first_name || user?.username || 'Merchandiser'} - ${todayData.storesVisited} magasins visités, ${todayData.hoursWorked} travaillées`,
-            document_type: 'daily_report',
-            merchandiser: user?.id,
-          }
-        );
-        
-        console.log('✅ PDF uploaded successfully:', uploadResult);
-        Alert.alert('Succès', 'Rapport généré et envoyé au backoffice');
-      } catch (uploadError) {
-        console.error('❌ Error uploading PDF:', uploadError);
-        console.error('Error details:', {
-          message: uploadError.message,
-          response: uploadError.response?.data,
-        });
-        Alert.alert('Avertissement', `PDF généré mais non envoyé: ${uploadError.response?.data?.detail || uploadError.message}`);
-      }
-      
-      await shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
-      
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      Alert.alert('Erreur', 'Impossible de générer le PDF');
-    } finally {
-      setGeneratingPDF(false);
-    }
-  };
+  // Removed generatePDF logic. Only end-of-day report is kept.
 
   return (
     <SafeAreaView style={styles.container}>
@@ -385,20 +203,7 @@ const ReportsScreen = () => {
                 </View>
               </View>
               
-              <TouchableOpacity 
-                style={[styles.downloadButton, generatingPDF && styles.downloadButtonDisabled]}
-                onPress={generatePDF}
-                disabled={generatingPDF}
-              >
-                {generatingPDF ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <MaterialCommunityIcons name="file-pdf-box" size={20} color="#fff" />
-                    <Text style={styles.downloadButtonText}>Générer le rapport PDF</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              {/* PDF generation button removed. Only end-of-day report is available. */}
               
               <View style={styles.viewDetailsHint}>
                 <MaterialCommunityIcons name="gesture-tap" size={16} color="#6366f1" />
