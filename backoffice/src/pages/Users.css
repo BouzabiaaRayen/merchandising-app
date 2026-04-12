@@ -530,14 +530,16 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: inherit;
   font-weight: 600;
   font-size: 0.875rem;
   flex-shrink: 0;
+  background: none;
+  box-shadow: none;
+  border: none;
 }
 
 .user-details-cell {
@@ -559,8 +561,6 @@
 
 .supervisor-name {
   color: #6b7280;
-  font-size: 0.875rem;
-}
 
 .action-buttons {
   display: flex;
@@ -661,18 +661,20 @@
 }
 
 .user-avatar-large {
-  width: 80px;
-  height: 80px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  font-size: 2rem;
+  color: inherit;
   font-weight: 600;
-  margin: 0 auto 1rem;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  font-size: 1.5rem;
+  margin-bottom: 18px;
+  background: none;
+  box-shadow: none;
+  border: none;
+}
 }
 
 .user-detail-section {

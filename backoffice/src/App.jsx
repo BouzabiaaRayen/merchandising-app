@@ -15,6 +15,7 @@ import Complaints from './pages/Complaints';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import ProtectedRoute from './components/ProtectedRoute';
+import Logs from './pages/Logs';
 import './App.css';
 
 function App() {
@@ -22,106 +23,23 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/users"
-          element={
-            <ProtectedRoute>
-              <Users />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/stores"
-          element={
-            <ProtectedRoute>
-              <Stores />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/visits-tracking"
-          element={
-            <ProtectedRoute>
-              <VisitsTracking />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/inventory"
-          element={
-            <ProtectedRoute>
-              <Inventory />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/notifications"
-          element={
-            <ProtectedRoute>
-              <Notifications />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/documents"
-          element={
-            <ProtectedRoute>
-              <Documents />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/reports"
-          element={
-            <ProtectedRoute>
-              <Reports />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/leave-requests"
-          element={
-            <ProtectedRoute>
-              <LeaveRequests />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/complaints"
-          element={
-            <ProtectedRoute>
-              <Complaints />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/schedules"
-          element={
-            <ProtectedRoute>
-              <Complaints />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
+        <Route path="/stores" element={<ProtectedRoute><Stores /></ProtectedRoute>} />
+        <Route path="/visits-tracking" element={<ProtectedRoute><VisitsTracking /></ProtectedRoute>} />
+        <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
+        <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+        <Route path="/documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
+        <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+        <Route path="/leave-requests" element={<ProtectedRoute><LeaveRequests /></ProtectedRoute>} />
+        <Route path="/complaints" element={<ProtectedRoute><Complaints /></ProtectedRoute>} />
+        <Route path="/schedules" element={<ProtectedRoute><Complaints /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Router>
   );
-}
+} // ← this was missing!
 
 export default App;

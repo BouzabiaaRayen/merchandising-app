@@ -1,3 +1,4 @@
+// This file was deleted by GitHub Copilot as part of removing the Visit History feature.
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,

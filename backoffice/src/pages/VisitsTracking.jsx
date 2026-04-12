@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import { visitService, userService, storeService, scheduleService } from '../services/apiService';
+import { getAvatarUrl } from '../services/supabaseClient';
 import './VisitsTracking.css';
 import './Users.css';
 import './Visits.css';
@@ -27,23 +28,35 @@ const VisitsTracking = () => {
   // Schedule visit modal state
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [formData, setFormData] = useState({
-    store: '',
+    stores: [], // array of selected store IDs
     merchandiser: '',
     scheduled_date: '',
     notes: '',
   });
+  // Visit durations per store (default 30 min)
+  const [visitDurations, setVisitDurations] = useState({});
+  // Haversine formula for travel time estimation (in minutes, assuming 40km/h avg speed)
+  function haversine(lat1, lon1, lat2, lon2) {
+    const toRad = (x) => (x * Math.PI) / 180;
+    const R = 6371; // km
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const d = R * c;
+    return d;
+  }
 
-  // Daily break modal state
-  const [showBreakModal, setShowBreakModal] = useState(false);
-  const [breakFormData, setBreakFormData] = useState({
-    merchandiser: '',
-    date: '',
-    allowed_break_duration_minutes: '30',
-    break_window_start: '12:00',
-    break_window_end: '14:00',
-  });
-  const [breakFormError, setBreakFormError] = useState('');
-  const [breakSubmitting, setBreakSubmitting] = useState(false);
+  function estimateTravelTime(from, to) {
+    if (!from || !to || !from.latitude || !from.longitude || !to.latitude || !to.longitude) return 0;
+    const dist = haversine(from.latitude, from.longitude, to.latitude, to.longitude);
+    // Assume 40km/h average speed
+    return Math.round((dist / 40) * 60);
+  }
+
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -131,11 +144,31 @@ const VisitsTracking = () => {
   };
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
+    const { name, value, type, checked } = e.target;
+    if (name === 'stores') {
+      const storeId = parseInt(value, 10);
+      setFormData((prev) => {
+        const newStores = checked
+          ? [...prev.stores, storeId]
+          : prev.stores.filter((id) => id !== storeId);
+        return { ...prev, stores: newStores };
+      });
+      // Set default duration if adding
+      if (checked) {
+        setVisitDurations((durs) =>
+          !durs[storeId] ? { ...durs, [storeId]: 30 } : durs
+        );
+      }
+    } else {
+      setFormData({
+        ...formData,
+        [name]: value,
+      });
+    }
+  };
+
+  const handleDurationChange = (storeId, value) => {
+    setVisitDurations((prev) => ({ ...prev, [storeId]: Number(value) }));
   };
 
   const handleScheduleVisit = async (e) => {
@@ -143,26 +176,30 @@ const VisitsTracking = () => {
     setFormError('');
     setSubmitting(true);
 
-    if (!formData.store || !formData.merchandiser || !formData.scheduled_date) {
-      setFormError('Store, Merchandiser, and Scheduled Date are required');
+    if (!formData.stores.length || !formData.merchandiser || !formData.scheduled_date) {
+      setFormError('At least one store, merchandiser, and scheduled date are required');
       setSubmitting(false);
       return;
     }
 
     try {
-      await visitService.createVisit({
-        store: parseInt(formData.store, 10),
-        merchandiser: parseInt(formData.merchandiser, 10),
-        scheduled_date: formData.scheduled_date,
-        notes: formData.notes,
-        status: 'SCHEDULED',
-      });
-
-      setSuccessMessage('Visit scheduled successfully!');
+      // Schedule a visit for each selected store
+      await Promise.all(
+        formData.stores.map((storeId) =>
+          visitService.createVisit({
+            store: storeId,
+            merchandiser: parseInt(formData.merchandiser, 10),
+            scheduled_date: formData.scheduled_date,
+            notes: formData.notes,
+            status: 'SCHEDULED',
+          })
+        )
+      );
+      setSuccessMessage('Visits scheduled successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
       setShowScheduleModal(false);
       setFormData({
-        store: '',
+        stores: [],
         merchandiser: '',
         scheduled_date: '',
         notes: '',
@@ -187,60 +224,6 @@ const VisitsTracking = () => {
     setFormError('');
   };
 
-  const handleBreakInputChange = (e) => {
-    const { name, value } = e.target;
-    setBreakFormData({ ...breakFormData, [name]: value });
-  };
-
-  const handleSetDailyBreak = async (e) => {
-    e.preventDefault();
-    setBreakFormError('');
-    setBreakSubmitting(true);
-
-    if (!breakFormData.merchandiser || !breakFormData.date) {
-      setBreakFormError('Merchandiser and Date are required');
-      setBreakSubmitting(false);
-      return;
-    }
-
-    try {
-      await scheduleService.createSchedule({
-        merchandiser: parseInt(breakFormData.merchandiser, 10),
-        date: breakFormData.date,
-        allowed_break_duration_minutes: parseInt(breakFormData.allowed_break_duration_minutes, 10),
-        break_window_start: breakFormData.break_window_start + ':00',
-        break_window_end: breakFormData.break_window_end + ':00',
-      });
-
-      setSuccessMessage('Daily break configured successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
-      setShowBreakModal(false);
-      setBreakFormData({
-        merchandiser: '',
-        date: '',
-        allowed_break_duration_minutes: '30',
-        break_window_start: '12:00',
-        break_window_end: '14:00',
-      });
-    } catch (err) {
-      console.error('Error setting daily break:', err);
-      setBreakFormError(err.response?.data?.detail || err.response?.data?.non_field_errors?.[0] || 'Failed to set daily break');
-    } finally {
-      setBreakSubmitting(false);
-    }
-  };
-
-  const handleCancelBreak = () => {
-    setShowBreakModal(false);
-    setBreakFormData({
-      merchandiser: '',
-      date: '',
-      allowed_break_duration_minutes: '30',
-      break_window_start: '12:00',
-      break_window_end: '14:00',
-    });
-    setBreakFormError('');
-  };
 
   return (
     <div className="app">
@@ -252,9 +235,6 @@ const VisitsTracking = () => {
             <div>
               <button className="add-btn" onClick={() => setShowScheduleModal(true)}>
                 + Schedule Visit
-              </button>
-              <button className="add-btn" style={{marginLeft: '10px', backgroundColor: '#f59e0b'}} onClick={() => setShowBreakModal(true)}>
-                ☕ Set Daily Break
               </button>
             </div>
             <button className="clear-filters-btn" onClick={handleClearFilters}>
@@ -304,8 +284,28 @@ const VisitsTracking = () => {
                             <td>
                               <div className="merchandiser-cell">
                                 <div className="merchandiser-avatar">
-                                  {merchandiser?.first_name?.charAt(0) || 'M'}
-                                  {merchandiser?.last_name?.charAt(0) || ''}
+                                  {merchandiser?.avatar_url || merchandiser?.avatar ? (
+                                    (() => {
+                                      const url = getAvatarUrl(merchandiser.avatar_url || merchandiser.avatar);
+                                      return url ? (
+                                        <img
+                                          src={url}
+                                          alt="avatar"
+                                          style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
+                                        />
+                                      ) : (
+                                        <>
+                                          {merchandiser?.first_name?.charAt(0) || 'M'}
+                                          {merchandiser?.last_name?.charAt(0) || ''}
+                                        </>
+                                      );
+                                    })()
+                                  ) : (
+                                    <>
+                                      {merchandiser?.first_name?.charAt(0) || 'M'}
+                                      {merchandiser?.last_name?.charAt(0) || ''}
+                                    </>
+                                  )}
                                 </div>
                                 <div className="merchandiser-info">
                                   <div className="merchandiser-name">
@@ -437,22 +437,149 @@ const VisitsTracking = () => {
                 )}
                 
                 <div className="form-group">
-                  <label htmlFor="store">Store *</label>
-                  <select
-                    id="store"
-                    name="store"
-                    value={formData.store}
-                    onChange={handleInputChange}
-                    required
-                  >
-                    <option value="">-- Select a store --</option>
+                  <label>Stores *</label>
+                  <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '6px', padding: '4px 0 4px 0' }}>
                     {stores.map((store) => (
-                      <option key={store.id} value={store.id}>
-                        [{store.code || store.id}] {store.name} - {store.address}
-                      </option>
+                      <div key={store.id} style={{ display: 'flex', alignItems: 'flex-start', padding: '6px 0', marginBottom: 2 }}>
+                        <div style={{ width: 22, display: 'flex', justifyContent: 'center' }}>
+                          <input
+                            type="checkbox"
+                            id={`store_${store.id}`}
+                            name="stores"
+                            value={store.id}
+                            checked={formData.stores.includes(store.id)}
+                            onChange={handleInputChange}
+                            style={{ marginTop: 2, marginLeft: 0 }}
+                          />
+                        </div>
+                        <label htmlFor={`store_${store.id}`} style={{ marginLeft: 8, width: '100%', cursor: 'pointer', textAlign: 'left' }}>
+                          <div style={{ fontWeight: 500, color: '#222', textAlign: 'left' }}>{store.name}</div>
+                          <div style={{ fontSize: '12px', color: '#888', marginTop: 1, textAlign: 'left' }}>{store.address}</div>
+                        </label>
+                      </div>
                     ))}
-                  </select>
+                  </div>
                 </div>
+                {/* Route Feasibility Summary - Redesigned to match screenshot */}
+                {formData.stores.length > 0 && (() => {
+                  // Calculations
+                  const visitTime = formData.stores.reduce((sum, id) => sum + (visitDurations[id] || 30), 0);
+                  const travelSegments = formData.stores.length > 1
+                    ? formData.stores.slice(0, -1).map((id, idx, arr) => {
+                        const from = stores.find(s => s.id === arr[idx]);
+                        const to = stores.find(s => s.id === formData.stores[idx + 1]);
+                        return { from, to, mins: estimateTravelTime(from, to) };
+                      })
+                    : [];
+                  const travelTime = travelSegments.reduce((sum, seg) => sum + seg.mins, 0);
+                  const breakTime = 60;
+                  const total = visitTime + travelTime + breakTime;
+                  const start = 8 * 60; // 8:00 AM in minutes
+                  const end = start + total;
+                  const endHour = Math.floor(end / 60);
+                  const endMin = end % 60;
+                  const endTimeStr = `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
+                  const feasible = end <= (17 * 60 + 30);
+
+                  // Colors (must be defined before use)
+                  // Minimal, modern, light UI
+                  const accent = feasible ? '#4fbb6f' : '#f97373';
+                  return (
+                    <div style={{
+                      border: `1.5px solid #ececec`,
+                      borderRadius: 16,
+                      margin: '24px 0',
+                      background: '#fff',
+                      boxShadow: '0 2px 12px 0 rgba(60,60,60,0.04)',
+                      padding: 0,
+                      overflow: 'hidden',
+                      fontFamily: 'Inter, Arial, sans-serif',
+                      color: '#23272f',
+                      transition: 'box-shadow 0.2s',
+                    }}>
+                      {/* Header */}
+                      <div style={{ background: '#f8fafc', color: accent, padding: '14px 24px', fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', borderBottom: '1px solid #ececec', letterSpacing: 0.1 }}>
+                        <span role="img" aria-label="calendar" style={{ marginRight: 10, fontSize: 18 }}>🗓️</span>
+                        Route Feasibility <span style={{ color: '#b0b4ba', marginLeft: 8, fontWeight: 400 }}>(8 AM - 5:30 PM)</span>
+                      </div>
+                      <div style={{ padding: '22px 24px 12px 24px' }}>
+                        {/* Store Visits */}
+                        <div style={{ fontWeight: 500, marginBottom: 10, color: '#7b7f87', fontSize: 13 }}>Store Visits</div>
+                        <div style={{ marginBottom: 18 }}>
+                          {formData.stores.map((id, idx) => {
+                            const store = stores.find(s => s.id === id);
+                            return store ? (
+                              <div key={id} style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+                                <span style={{ fontWeight: 500, minWidth: 18, fontSize: 13, color: '#b0b4ba' }}>{idx + 1}.</span>
+                                <span style={{ marginLeft: 10, flex: 1, fontSize: 14, color: '#23272f' }}>{store.name}</span>
+                                <input
+                                  type="number"
+                                  min={10}
+                                  max={180}
+                                  value={visitDurations[id] || 30}
+                                  onChange={e => handleDurationChange(id, e.target.value)}
+                                  style={{ width: 38, marginLeft: 10, height: 22, borderRadius: 8, border: '1px solid #ececec', paddingLeft: 4, fontSize: 13, background: '#f8fafc', color: '#23272f' }}
+                                  title="Visit duration (minutes)"
+                                />
+                                <span style={{ marginLeft: 5, fontSize: 12, color: '#b0b4ba' }}>min</span>
+                              </div>
+                            ) : null;
+                          })}
+                        </div>
+                        {/* Travel Times */}
+                        <div style={{ fontWeight: 500, marginBottom: 10, color: '#7b7f87', fontSize: 13 }}>Travel Times (GPS-based)</div>
+                        <div style={{ marginBottom: 18 }}>
+                          {travelSegments.length === 0 && <div style={{ color: '#b0b4ba', fontSize: 12 }}>N/A</div>}
+                          {travelSegments.map((seg, idx) => (
+                            <div key={idx} style={{ color: accent, fontSize: 12.5, display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+                              <span style={{ minWidth: 70, color: '#b0b4ba' }}>{seg.from?.name} <span style={{ color: '#d1d5db' }}>→</span> {seg.to?.name}:</span>
+                              <span style={{ color: accent, fontWeight: 500, marginLeft: 8 }}>{seg.mins} min</span>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Totals */}
+                        <div style={{ marginBottom: 2, fontSize: 13.5, color: '#23272f', display: 'block' }}>
+                          <div><b>Total Visits:</b> {formData.stores.length}</div>
+                          <div><b>Total Travel:</b> {travelTime} min</div>
+                          <div><b>Total Visit Time:</b> {visitTime} min</div>
+                          <div><b>Break (fixed):</b> 60 min (12:00 - 13:00)</div>
+                        </div>
+                        <div style={{ margin: '18px 0 0 0', fontWeight: 600, fontSize: 14, color: accent, display: 'flex', alignItems: 'center', gap: 18 }}>
+                          <span role="img" aria-label="clock" style={{ fontSize: 15 }}>⏰</span>
+                          <span>Total Duration: {Math.floor(total / 60)}h {total % 60}m</span>
+                          <span>|</span>
+                          <span>Estimated End: {endTimeStr}</span>
+                        </div>
+                        {/* Feasibility Message */}
+                        <div style={{
+                          marginTop: 16,
+                          padding: '12px 16px',
+                          borderRadius: 10,
+                          background: feasible ? '#f6fef9' : '#fff6f6',
+                          color: accent,
+                          fontWeight: 500,
+                          fontSize: 13.5,
+                          border: `1px solid ${accent}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          boxShadow: '0 1px 4px 0 rgba(60,60,60,0.03)',
+                        }}>
+                          {feasible ? (
+                            <>
+                              <span role="img" aria-label="check" style={{ marginRight: 10, fontSize: 15 }}>✅</span>
+                              Route feasible - Should finish by {endTimeStr}
+                            </>
+                          ) : (
+                            <>
+                              <span role="img" aria-label="warning" style={{ marginRight: 10, fontSize: 15 }}>⚠️</span>
+                              This route may exceed 5:30 PM - Estimated end: {endTimeStr}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="form-group">
                   <label htmlFor="merchandiser">Merchandiser *</label>
@@ -473,9 +600,9 @@ const VisitsTracking = () => {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="scheduled_date">Scheduled Date & Time *</label>
+                  <label htmlFor="scheduled_date">Scheduled Date *</label>
                   <input
-                    type="datetime-local"
+                    type="date"
                     id="scheduled_date"
                     name="scheduled_date"
                     value={formData.scheduled_date}
@@ -510,101 +637,6 @@ const VisitsTracking = () => {
         </div>
       )}
 
-      {/* Set Daily Break Modal */}
-      {showBreakModal && (
-        <div className="modal-overlay" onClick={handleCancelBreak}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Set Daily Break</h2>
-              <button className="close-btn" onClick={handleCancelBreak}>×</button>
-            </div>
-            <form onSubmit={handleSetDailyBreak}>
-              <div className="form-body">
-                {breakFormError && (
-                  <div className="form-error">{breakFormError}</div>
-                )}
-
-                <div className="form-group">
-                  <label htmlFor="break_merchandiser">Merchandiser *</label>
-                  <select
-                    id="break_merchandiser"
-                    name="merchandiser"
-                    value={breakFormData.merchandiser}
-                    onChange={handleBreakInputChange}
-                    required
-                  >
-                    <option value="">-- Select a merchandiser --</option>
-                    {merchandisers.map((merch) => (
-                      <option key={merch.id} value={merch.id}>
-                        {merch.first_name} {merch.last_name} ({merch.email})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="break_date">Date *</label>
-                  <input
-                    type="date"
-                    id="break_date"
-                    name="date"
-                    value={breakFormData.date}
-                    onChange={handleBreakInputChange}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="allowed_break_duration_minutes">Break Duration (minutes)</label>
-                  <input
-                    type="number"
-                    id="allowed_break_duration_minutes"
-                    name="allowed_break_duration_minutes"
-                    min="15"
-                    max="120"
-                    value={breakFormData.allowed_break_duration_minutes}
-                    onChange={handleBreakInputChange}
-                    placeholder="30"
-                  />
-                </div>
-
-                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px'}}>
-                  <div className="form-group">
-                    <label htmlFor="bw_start">Break Window Start</label>
-                    <input
-                      type="time"
-                      id="bw_start"
-                      name="break_window_start"
-                      value={breakFormData.break_window_start}
-                      onChange={handleBreakInputChange}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="bw_end">Break Window End</label>
-                    <input
-                      type="time"
-                      id="bw_end"
-                      name="break_window_end"
-                      value={breakFormData.break_window_end}
-                      onChange={handleBreakInputChange}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="modal-footer">
-                <button type="button" className="btn-cancel" onClick={handleCancelBreak}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-submit" disabled={breakSubmitting}>
-                  {breakSubmitting ? 'Saving...' : 'Save Break Config'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

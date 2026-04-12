@@ -97,14 +97,16 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: inherit;
   font-weight: 600;
   font-size: 0.875rem;
   flex-shrink: 0;
+  background: none;
+  box-shadow: none;
+  border: none;
 }
 
 .merchandiser-info {
@@ -126,9 +128,7 @@
 
 /* Store Cell */
 .store-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+
 }
 
 .store-name {

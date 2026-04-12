@@ -113,44 +113,75 @@ const Dashboard = () => {
         page_size: 10 
       });
 
+
+      // Get all merchandisers and stores for lookup
+      const [merchandisersRes, storesRes] = await Promise.all([
+        userService.getUsers({ role: 'merchandiser', page_size: 1000 }),
+        storeService.getStores({ page_size: 1000 })
+      ]);
+      const merchandisers = merchandisersRes.results || [];
+      const stores = storesRes.results || [];
+
+
+      // Helper to get merchandiser name
+      const getMerchandiserName = (visit) => {
+        if (visit.merchandiser_name) return visit.merchandiser_name;
+        if (visit.merchandiser) {
+          const merch = merchandisers.find(m => m.id === visit.merchandiser);
+          if (merch) return `${merch.first_name || ''} ${merch.last_name || ''}`.trim() || merch.username || 'Unknown User';
+        }
+        return 'Unknown User';
+      };
+
+      // Helper to get store name
+      const getStoreName = (visit) => {
+        if (visit.store_name) return visit.store_name;
+        if (visit.store) {
+          const store = stores.find(s => s.id === visit.store);
+          if (store) return store.name || 'Unknown Store';
+        }
+        return 'Unknown Store';
+      };
+
+
       // Transform visits to activity format
       const activities = (visitsRes.results || []).map((visit, index) => {
         const timeAgo = getTimeAgo(visit.updated_at);
-        
+        const userName = getMerchandiserName(visit);
+        const storeName = getStoreName(visit);
         if (visit.status === 'completed') {
           return {
             id: visit.id,
-            user: visit.merchandiser_name || 'Unknown User',
+            user: userName,
             action: 'Visit Completed',
-            location: visit.store_name || 'Unknown Store',
+            location: storeName,
             time: timeAgo,
             type: 'completed',
           };
         } else if (visit.status === 'in_progress') {
           return {
             id: visit.id,
-            user: visit.merchandiser_name || 'Unknown User',
+            user: userName,
             action: 'checked in',
-            location: visit.store_name || 'Unknown Store',
+            location: storeName,
             time: timeAgo,
             type: 'checkin',
           };
         } else if (visit.status === 'cancelled') {
           return {
             id: visit.id,
-            user: visit.merchandiser_name || 'Unknown User',
+            user: userName,
             action: 'Visit Cancelled',
-            location: visit.store_name || 'Unknown Store',
+            location: storeName,
             time: timeAgo,
             type: 'delayed',
           };
         }
-        
         return {
           id: visit.id,
-          user: visit.merchandiser_name || 'Unknown User',
+          user: userName,
           action: visit.status,
-          location: visit.store_name || 'Unknown Store',
+          location: storeName,
           time: timeAgo,
           type: 'report',
         };
@@ -343,7 +374,7 @@ const Dashboard = () => {
                       <h2>Recent Activities</h2>
                       <p>Live operational log</p>
                     </div>
-                    <a href="#" className="view-all-link">VIEW ALL LOGS</a>
+                    <a href="#" className="view-all-link" onClick={e => { e.preventDefault(); window.location.href = '/logs'; }}>VIEW ALL LOGS</a>
                   </div>
                   <div className="activities-list">
                     {recentActivities.length > 0 ? (

@@ -21,7 +21,7 @@ import EditProfileScreen from '../screens/EditProfileScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 import PerformanceScreen from '../screens/PerformanceScreen';
-import VisitHistoryScreen from '../screens/VisitHistoryScreen';
+// import VisitHistoryScreen from '../screens/VisitHistoryScreen';
 import RoutesScreen from '../screens/RoutesScreen';
 
 // Supervisor screens
@@ -165,7 +165,7 @@ function SupervisorStack() {
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ headerShown: false }} />
       <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Performance" component={PerformanceScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="VisitHistory" component={VisitHistoryScreen} options={{ headerShown: false }} />
+      {/* VisitHistoryScreen removed */}
       <Stack.Screen name="Routes" component={RoutesScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
@@ -210,7 +210,7 @@ function MainStack() {
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ headerShown: false }} />
       <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Performance" component={PerformanceScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="VisitHistory" component={VisitHistoryScreen} options={{ headerShown: false }} />
+      {/* VisitHistoryScreen removed */}
       <Stack.Screen name="Routes" component={RoutesScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );

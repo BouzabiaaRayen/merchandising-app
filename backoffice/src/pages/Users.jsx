@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import { userService } from '../services/apiService';
+import { getAvatarUrl } from '../services/supabaseClient';
 import { Search, SlidersHorizontal, Pencil, Eye, UserPlus, Trash2, CheckCircle2, User } from 'lucide-react';
 import './Users.css';
 
@@ -484,7 +485,22 @@ const Users = () => {
                           <td>
                             <div className="user-info">
                               <div className="user-avatar-cell">
-                                <span>{user.username?.substring(0, 2).toUpperCase() || 'U'}</span>
+                                {user.avatar_url || user.avatar ? (
+                                  (() => {
+                                    const url = getAvatarUrl(user.avatar_url || user.avatar);
+                                    return url ? (
+                                      <img
+                                        src={url}
+                                        alt="avatar"
+                                        style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                                      />
+                                    ) : (
+                                      <span>{user.username?.substring(0, 2).toUpperCase() || 'U'}</span>
+                                    );
+                                  })()
+                                ) : (
+                                  <span>{user.username?.substring(0, 2).toUpperCase() || 'U'}</span>
+                                )}
                               </div>
                               <div className="user-details-cell">
                                 <div className="user-name-cell">{user.first_name} {user.last_name}</div>
@@ -799,7 +815,22 @@ const Users = () => {
             <div className="form-body">
               <div className="user-detail-card">
                 <div className="user-avatar-large">
-                  <span>{selectedUser.username?.substring(0, 2).toUpperCase() || 'U'}</span>
+                  {selectedUser.avatar_url || selectedUser.avatar ? (
+                    (() => {
+                      const url = getAvatarUrl(selectedUser.avatar_url || selectedUser.avatar);
+                      return url ? (
+                        <img
+                          src={url}
+                          alt="avatar"
+                          style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <span>{selectedUser.username?.substring(0, 2).toUpperCase() || 'U'}</span>
+                      );
+                    })()
+                  ) : (
+                    <span>{selectedUser.username?.substring(0, 2).toUpperCase() || 'U'}</span>
+                  )}
                 </div>
                 
                 <div className="user-detail-section">

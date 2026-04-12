@@ -19,7 +19,7 @@ import { getAvatarUrl } from '../services/supabaseClient';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const [avatarUri, setAvatarUri] = useState(null);
   const [uploading, setUploading] = useState(false);
 
@@ -109,6 +109,8 @@ export default function ProfileScreen() {
       console.log('Resolved avatar URL:', newAvatarUrl);
       if (newAvatarUrl) {
         setAvatarUri(newAvatarUrl);
+        // Refresh user context so HomeScreen and others update avatar
+        if (refreshUser) await refreshUser();
         Alert.alert('Success', 'Profile picture updated successfully!');
       } else {
         Alert.alert('Warning', 'Upload completed but could not retrieve image URL');
@@ -247,25 +249,18 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>WORK</Text>
           <View style={styles.menuGroup}>
             <MenuItem
+              icon="map-marker-path"
+              title="My Routes"
+              subtitle="View your assigned routes"
+              iconColor="#f59e0b"
+              onPress={() => navigation.navigate('Routes')}
+            />
+            <MenuItem
               icon="chart-box-outline"
               title="Performance"
               subtitle="View your work statistics"
               iconColor="#10b981"
               onPress={() => navigation.navigate('Performance')}
-            />
-            <MenuItem
-              icon="history"
-              title="Visit History"
-              subtitle="View completed store visits"
-              iconColor="#8b5cf6"
-              onPress={() => navigation.navigate('VisitHistory')}
-            />
-            <MenuItem
-              icon="map-marker-path"
-              title="Routes"
-              subtitle="View assigned routes"
-              iconColor="#f59e0b"
-              onPress={() => navigation.navigate('Routes')}
             />
             <MenuItem
               icon="calendar-month-outline"
