@@ -1041,8 +1041,8 @@ export default function VisitExecutionScreen({ route, navigation }) {
       ? 'CLOTURER LA VISITE'
       : 'DEMARRER LA VISITE';
 
-  const footerButtonDisabled =
-    isVisitCompleted || !canCheckOut;
+  // Enable button for check-in unless visit is completed
+  const footerButtonDisabled = isVisitCompleted;
 
   const footerButtonHandler = isCheckedIn ? handleCheckOut : handleCheckIn;
 
