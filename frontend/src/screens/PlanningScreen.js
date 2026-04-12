@@ -326,9 +326,7 @@ export default function PlanningScreen() {
                           </View>
                         </View>
                         
-                        <Text style={styles.visitTime}>
-                          {scheduledTime}
-                        </Text>
+                        {/* Removed scheduled time display as requested */}
 
                         {statusInfo.showButton && (
                           <TouchableOpacity

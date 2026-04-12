@@ -13,6 +13,7 @@ import PlanningScreen from '../screens/PlanningScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import VisitExecutionScreen from '../screens/VisitExecutionScreen';
 import ReportsScreen from '../screens/ReportsScreen';
+import ReportAnomalyScreen from '../screens/ReportAnomalyScreen';
 import DocumentsHistoryScreen from '../screens/DocumentsHistoryScreen';
 import CongeScreen from '../screens/CongeScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
@@ -185,6 +186,11 @@ function MainStack() {
         name="VisitExecution" 
         component={VisitExecutionScreen} 
         options={{ headerShown: false }} 
+      />
+      <Stack.Screen
+        name="ReportAnomaly"
+        component={ReportAnomalyScreen}
+        options={{ title: 'Report Anomaly', headerShown: true }}
       />
       <Stack.Screen 
         name="Conge" 

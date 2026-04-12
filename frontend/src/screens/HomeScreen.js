@@ -706,18 +706,27 @@ export default function HomeScreen() {
       
       setHomeData(dashboardData);
 
-      // Fetch today's break schedule
+      // Fetch today's break schedule, fallback to 12:00–13:00 if missing
       try {
         const schedule = await scheduleService.getTodaySchedule();
-        if (schedule) {
+        if (schedule && schedule.break_window_start && schedule.break_window_end) {
           setBreakDuration(schedule.allowed_break_duration_minutes);
           // Parse time fields — could be "HH:MM:SS" or "HH:MM"
           const parseTime = (t) => t ? t.substring(0, 5) : null;
           setBreakWindowStart(parseTime(schedule.break_window_start));
           setBreakWindowEnd(parseTime(schedule.break_window_end));
+        } else {
+          // Fallback: always show break window 12:00–13:00
+          setBreakWindowStart('12:00');
+          setBreakWindowEnd('13:00');
+          setBreakDuration(60);
         }
       } catch (schedErr) {
-        console.log('No break schedule for today:', schedErr.message);
+        // Fallback: always show break window 12:00–13:00
+        setBreakWindowStart('12:00');
+        setBreakWindowEnd('13:00');
+        setBreakDuration(60);
+        console.log('No break schedule for today, fallback to 12:00–13:00:', schedErr.message);
       }
 
       // Fetch unread notifications count
@@ -924,9 +933,6 @@ export default function HomeScreen() {
 
       // ── Store sections HTML ──
       const storesHTML = storeBlocks.map((s, idx) => {
-        const ciStr = s.checkIn ? s.checkIn.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-        const coStr = s.checkOut ? s.checkOut.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-
         let breakLine = '';
         if (s.breakStatus === 'taken') {
           const bs = new Date(s.breakStart).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
@@ -943,16 +949,15 @@ export default function HomeScreen() {
               <tr style="background:${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
                 <td style="padding:6px 8px;border:1px solid #e2e8f0;font-weight:600;color:#334155;white-space:nowrap;vertical-align:top;">${e.type}</td>
                 <td style="padding:6px 8px;border:1px solid #e2e8f0;vertical-align:top;">${e.description}</td>
-                <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;vertical-align:top;">${e.time || '—'}</td>
-                <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;vertical-align:top;">${e.image ? `<img src="${e.image}" style="max-width:65px;max-height:45px;border-radius:3px;"/>` : '—'}</td>
+                <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;vertical-align:top;">${e.image ? `<img src=\"${e.image}\" style=\"max-width:65px;max-height:45px;border-radius:3px;\"/>` : '—'}</td>
               </tr>`).join('')
-          : `<tr><td colspan="4" style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;border:1px solid #e2e8f0;">Aucun événement enregistré pour cette visite.</td></tr>`;
+          : `<tr><td colspan="3" style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;border:1px solid #e2e8f0;">Aucun événement enregistré pour cette visite.</td></tr>`;
 
         return `
           <table style="width:100%;border-collapse:collapse;margin-bottom:20px;page-break-inside:avoid;">
             <!-- Store header -->
             <tr>
-              <td colspan="4" style="background:#2563eb;color:#fff;padding:10px 14px;font-size:14px;font-weight:700;">
+              <td colspan="3" style="background:#2563eb;color:#fff;padding:10px 14px;font-size:14px;font-weight:700;">
                 <table style="border-collapse:collapse;"><tr>
                   <td style="width:28px;height:28px;border:2px solid #fff;border-radius:50%;text-align:center;vertical-align:middle;font-weight:800;font-size:12px;color:#fff;">${idx + 1}</td>
                   <td style="padding-left:10px;color:#fff;font-size:14px;font-weight:700;">${s.storeName}</td>
@@ -960,16 +965,12 @@ export default function HomeScreen() {
               </td>
             </tr>
             <!-- Store info -->
-            <tr><td class="lbl">Adresse</td><td colspan="3">${s.storeAddress}${s.storeCity ? ', ' + s.storeCity : ''}</td></tr>
-            <tr><td class="lbl">Arrivée</td><td colspan="3">${ciStr}</td></tr>
-            <tr><td class="lbl">Départ</td><td colspan="3">${coStr}</td></tr>
-            <tr><td class="lbl">Durée</td><td colspan="3"><strong>${s.duration}</strong></td></tr>
+            <tr><td class="lbl">Adresse</td><td colspan="2">${s.storeAddress}${s.storeCity ? ', ' + s.storeCity : ''}</td></tr>
             ${breakLine}
             <!-- Events header -->
             <tr>
               <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;width:22%;">Type</td>
               <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;">Description</td>
-              <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;width:10%;">Heure</td>
               <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;width:14%;">Photo</td>
             </tr>
             ${eventsRows}

@@ -11,7 +11,6 @@ import {
   Alert,
   Modal,
   Image,
-  FlatList
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -22,141 +21,21 @@ import { useAuth } from '../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const FAKE_ARTICLES = [
-  {
-    id: 'art-1',
-    name: 'Warda Bidha Spaghetti N°3',
-    meta: '500g • Semoule dure',
-    price: '2.450 TND',
-    status: 'rupture',
-    color: '#f4d48e',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-2',
-    name: 'Warda Bidha Spaghetti N°5',
-    meta: '500g • Cuisson rapide',
-    price: '2.600 TND',
-    status: 'rupture-active',
-    color: '#efbc71',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-3',
-    name: 'Warda Bidha Penne Rigate',
-    meta: '400g • Format familial',
-    price: '2.950 TND',
-    status: 'rupture',
-    color: '#e2c68c',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-4',
-    name: 'Warda Bidha Coquillettes',
-    meta: '500g • Pates fines',
-    price: '2.300 TND',
-    status: 'rupture',
-    color: '#f6e3bb',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-5',
-    name: 'Warda Bidha Farfalle',
-    meta: '400g • Qualite premium',
-    price: '3.100 TND',
-    status: 'rupture',
-    color: '#f2d69a',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-6',
-    name: 'Warda Bidha Linguine',
-    meta: '500g • Long format',
-    price: '2.850 TND',
-    status: 'rupture',
-    color: '#f0cc84',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-7',
-    name: 'Warda Bidha Macaroni',
-    meta: '500g • Tube court',
-    price: '2.700 TND',
-    status: 'rupture',
-    color: '#ebc47a',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-8',
-    name: 'Warda Bidha Vermicelle',
-    meta: '250g • Soupe et dessert',
-    price: '1.950 TND',
-    status: 'rupture-active',
-    color: '#f7dfad',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-9',
-    name: 'Warda Bidha Nouilles Fines',
-    meta: '500g • Texture legere',
-    price: '2.550 TND',
-    status: 'rupture',
-    color: '#f3d8a2',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-10',
-    name: 'Warda Bidha Tagliatelle',
-    meta: '400g • Rubans larges',
-    price: '3.450 TND',
-    status: 'rupture',
-    color: '#e7c27f',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-11',
-    name: 'Warda Bidha Fusilli',
-    meta: '500g • Helicoidal',
-    price: '2.990 TND',
-    status: 'rupture',
-    color: '#f0ce8e',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-12',
-    name: 'Warda Bidha Lasagnes',
-    meta: '500g • Feuilles pretes',
-    price: '4.200 TND',
-    status: 'rupture',
-    color: '#dcb476',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-13',
-    name: 'Warda Bidha Cannelloni',
-    meta: '250g • Pates a farcir',
-    price: '3.850 TND',
-    status: 'rupture',
-    color: '#e9c988',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-14',
-    name: 'Warda Bidha Cheveux d\'Ange',
-    meta: '250g • Coupe extra fine',
-    price: '2.100 TND',
-    status: 'rupture-active',
-    color: '#f5ddac',
-    icon: 'pasta',
-  },
-  {
-    id: 'art-15',
-    name: 'Warda Bidha Mini Penne',
-    meta: '400g • Format enfant',
-    price: '2.650 TND',
-    status: 'rupture',
-    color: '#efd095',
-    icon: 'pasta',
-  },
+  { id: 'art-1', name: 'Warda Bidha Spaghetti N°3', meta: '500g • Semoule dure', price: '2.450 TND', status: 'rupture', color: '#f4d48e', icon: 'pasta' },
+  { id: 'art-2', name: 'Warda Bidha Spaghetti N°5', meta: '500g • Cuisson rapide', price: '2.600 TND', status: 'rupture-active', color: '#efbc71', icon: 'pasta' },
+  { id: 'art-3', name: 'Warda Bidha Penne Rigate', meta: '400g • Format familial', price: '2.950 TND', status: 'rupture', color: '#e2c68c', icon: 'pasta' },
+  { id: 'art-4', name: 'Warda Bidha Coquillettes', meta: '500g • Pates fines', price: '2.300 TND', status: 'rupture', color: '#f6e3bb', icon: 'pasta' },
+  { id: 'art-5', name: 'Warda Bidha Farfalle', meta: '400g • Qualite premium', price: '3.100 TND', status: 'rupture', color: '#f2d69a', icon: 'pasta' },
+  { id: 'art-6', name: 'Warda Bidha Linguine', meta: '500g • Long format', price: '2.850 TND', status: 'rupture', color: '#f0cc84', icon: 'pasta' },
+  { id: 'art-7', name: 'Warda Bidha Macaroni', meta: '500g • Tube court', price: '2.700 TND', status: 'rupture', color: '#ebc47a', icon: 'pasta' },
+  { id: 'art-8', name: 'Warda Bidha Vermicelle', meta: '250g • Soupe et dessert', price: '1.950 TND', status: 'rupture-active', color: '#f7dfad', icon: 'pasta' },
+  { id: 'art-9', name: 'Warda Bidha Nouilles Fines', meta: '500g • Texture legere', price: '2.550 TND', status: 'rupture', color: '#f3d8a2', icon: 'pasta' },
+  { id: 'art-10', name: 'Warda Bidha Tagliatelle', meta: '400g • Rubans larges', price: '3.450 TND', status: 'rupture', color: '#e7c27f', icon: 'pasta' },
+  { id: 'art-11', name: 'Warda Bidha Fusilli', meta: '500g • Helicoidal', price: '2.990 TND', status: 'rupture', color: '#f0ce8e', icon: 'pasta' },
+  { id: 'art-12', name: 'Warda Bidha Lasagnes', meta: '500g • Feuilles pretes', price: '4.200 TND', status: 'rupture', color: '#dcb476', icon: 'pasta' },
+  { id: 'art-13', name: 'Warda Bidha Cannelloni', meta: '250g • Pates a farcir', price: '3.850 TND', status: 'rupture', color: '#e9c988', icon: 'pasta' },
+  { id: 'art-14', name: "Warda Bidha Cheveux d'Ange", meta: '250g • Coupe extra fine', price: '2.100 TND', status: 'rupture-active', color: '#f5ddac', icon: 'pasta' },
+  { id: 'art-15', name: 'Warda Bidha Mini Penne', meta: '400g • Format enfant', price: '2.650 TND', status: 'rupture', color: '#efd095', icon: 'pasta' },
 ];
 
 const parseTndPrice = (priceText) => {
@@ -165,6 +44,7 @@ const parseTndPrice = (priceText) => {
 };
 
 const formatTndPrice = (value) => `${Number(value || 0).toFixed(3)} TND`;
+
 const DEFAULT_FACING_ROWS = 4;
 const DEFAULT_FACING_COLUMNS = 6;
 const MIN_STACK_DEPTH = 1;
@@ -172,8 +52,10 @@ const MAX_STACK_DEPTH = 20;
 
 const createGridCells = (rows, columns, fill = true) =>
   Array.from({ length: rows * columns }, () => fill);
+
 const createSlotAssignments = (rows, columns) =>
   Array.from({ length: rows * columns }, () => ({ productId: null, depth: 0 }));
+
 const getExpectedTargetsFromGrid = (products, totalSlots) => {
   if (!products.length || totalSlots <= 0) return {};
   const targets = {};
@@ -192,7 +74,6 @@ const saveVisitProgress = async (visitId, updates) => {
     const current = existing ? JSON.parse(existing) : {};
     const merged = { ...current, ...updates };
     await AsyncStorage.setItem(VISIT_PROGRESS_KEY(visitId), JSON.stringify(merged));
-    console.log('Visit progress saved:', visitId, merged);
   } catch (e) {
     console.error('Error saving visit progress:', e);
   }
@@ -211,17 +92,26 @@ const loadVisitProgress = async (visitId) => {
 export default function VisitExecutionScreen({ route, navigation }) {
   const { visitId } = route.params;
   const { user } = useAuth();
+
+  // Core state
   const [visit, setVisit] = useState(null);
   const [store, setStore] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notes, setNotes] = useState('');
   const [location, setLocation] = useState(null);
   const [distance, setDistance] = useState(null);
-  const [photos, setPhotos] = useState([]);
+  const [locationChecked, setLocationChecked] = useState(false);
   const [checkInTime, setCheckInTime] = useState(null);
   const [checkOutTime, setCheckOutTime] = useState(null);
-  const [locationChecked, setLocationChecked] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState('00:00:00');
+  const [activeTab, setActiveTab] = useState('events');
+  const [articleQuery, setArticleQuery] = useState('');
+
+  // Photos state
+  const [photos, setPhotos] = useState([]);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
+
+  // Break state
   const [breakStartTime, setBreakStartTime] = useState(null);
   const [breakEndTime, setBreakEndTime] = useState(null);
   const [breakDuration, setBreakDuration] = useState(null);
@@ -229,48 +119,36 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const [breakWindowEnd, setBreakWindowEnd] = useState(null);
   const [breakElapsedTime, setBreakElapsedTime] = useState('00:00:00');
   const [isOnBreak, setIsOnBreak] = useState(false);
-  const [showStockModal, setShowStockModal] = useState(false);
-  const [showPriceModal, setShowPriceModal] = useState(false);
-  const [showSlotAssignModal, setShowSlotAssignModal] = useState(false);
-  const [showAlertModal, setShowAlertModal] = useState(false);
-  const [alertBrand, setAlertBrand] = useState('');
-  const [alertType, setAlertType] = useState('');
-  const [showAlertTypeDropdown, setShowAlertTypeDropdown] = useState(false);
-  const [alertDescription, setAlertDescription] = useState('');
-  const [alertPhoto, setAlertPhoto] = useState(null);
-  const [alertSubmitting, setAlertSubmitting] = useState(false);
-  const [alertCompleted, setAlertCompleted] = useState(false);
-  const [showProductModal, setShowProductModal] = useState(false);
-  const [productName, setProductName] = useState('');
-  const [productBrand, setProductBrand] = useState('');
-  const [productCategory, setProductCategory] = useState('');
-  const [showProductCategoryDropdown, setShowProductCategoryDropdown] = useState(false);
-  const [productPrice, setProductPrice] = useState('');
-  const [productSku, setProductSku] = useState('');
-  const [productDescription, setProductDescription] = useState('');
-  const [productPhoto, setProductPhoto] = useState(null);
-  const [productSubmitting, setProductSubmitting] = useState(false);
-  const [productCompleted, setProductCompleted] = useState(false);
+
+  // Completion state
   const [stockUpdateCompleted, setStockUpdateCompleted] = useState(false);
   const [priceComparisonCompleted, setPriceComparisonCompleted] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState('00:00:00');
-  const [activeTab, setActiveTab] = useState('events');
-  const [articleQuery, setArticleQuery] = useState('');
-  const [competitorName, setCompetitorName] = useState('Concurrent A');
+  const [alertCompleted, setAlertCompleted] = useState(false);
+  const [productCompleted, setProductCompleted] = useState(false);
+
+  // Articles state
   const [articles, setArticles] = useState(() =>
     FAKE_ARTICLES.map((article) => ({
       ...article,
       isRupture: article.status === 'rupture-active',
     }))
   );
+
+  // Price comparison state — FIX: added competitorFacing and photo back
+  const [competitorName, setCompetitorName] = useState('Concurrent A');
   const [priceComparisons, setPriceComparisons] = useState(() =>
     FAKE_ARTICLES.slice(0, 8).map((article) => ({
       id: article.id,
       name: article.name,
       ourPrice: parseTndPrice(article.price),
       competitorPrice: '',
+      competitorFacing: '',
+      photo: null,
     }))
   );
+  const [showPriceModal, setShowPriceModal] = useState(false);
+
+  // Facing grid state
   const [facingGridRows, setFacingGridRows] = useState(String(DEFAULT_FACING_ROWS));
   const [facingGridColumns, setFacingGridColumns] = useState(String(DEFAULT_FACING_COLUMNS));
   const [facingGridCells, setFacingGridCells] = useState(() =>
@@ -282,136 +160,146 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const [activeSlotIndex, setActiveSlotIndex] = useState(null);
   const [activeSlotDepthInput, setActiveSlotDepthInput] = useState('1');
   const [facingProofPhoto, setFacingProofPhoto] = useState(null);
+  const [showStockModal, setShowStockModal] = useState(false);
+  const [showSlotAssignModal, setShowSlotAssignModal] = useState(false);
+
   const facingProducts = articles.slice(0, 8);
   const expectedTargetsFromGrid = getExpectedTargetsFromGrid(facingProducts, facingGridCells.length);
+
+  // Alert modal state
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertBrand, setAlertBrand] = useState('');
+  const [alertType, setAlertType] = useState('');
+  const [showAlertTypeDropdown, setShowAlertTypeDropdown] = useState(false);
+  const [alertDescription, setAlertDescription] = useState('');
+  const [alertPhoto, setAlertPhoto] = useState(null);
+  const [alertSubmitting, setAlertSubmitting] = useState(false);
+
+  // Product modal state
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [productName, setProductName] = useState('');
+  const [productBrand, setProductBrand] = useState('');
+  const [productCategory, setProductCategory] = useState('');
+  const [showProductCategoryDropdown, setShowProductCategoryDropdown] = useState(false);
+  const [productPrice, setProductPrice] = useState('');
+  const [productSku, setProductSku] = useState('');
+  const [productDescription, setProductDescription] = useState('');
+  const [productPhoto, setProductPhoto] = useState(null);
+  const [productSubmitting, setProductSubmitting] = useState(false);
+
+  // ─── Effects ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     fetchVisitData();
     getCurrentLocation();
   }, []);
 
-  // Timer for tracking time spent in store
+  // Visit timer
   useEffect(() => {
     let interval;
     if (checkInTime && !checkOutTime) {
       interval = setInterval(() => {
-        const now = new Date();
-        const checkIn = new Date(checkInTime);
-        const diff = Math.floor((now - checkIn) / 1000); // difference in seconds
-        
-        const hours = Math.floor(diff / 3600);
-        const minutes = Math.floor((diff % 3600) / 60);
-        const seconds = diff % 60;
-        
-        setElapsedTime(
-          `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-        );
+        const diff = Math.floor((new Date() - new Date(checkInTime)) / 1000);
+        setElapsedTime(formatDuration(diff));
       }, 1000);
     } else if (checkInTime && checkOutTime) {
-      // Calculate final time when checked out
-      const checkIn = new Date(checkInTime);
-      const checkOut = new Date(checkOutTime);
-      const diff = Math.floor((checkOut - checkIn) / 1000);
-      
-      const hours = Math.floor(diff / 3600);
-      const minutes = Math.floor((diff % 3600) / 60);
-      const seconds = diff % 60;
-      
-      setElapsedTime(
-        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-      );
+      const diff = Math.floor((new Date(checkOutTime) - new Date(checkInTime)) / 1000);
+      setElapsedTime(formatDuration(diff));
     }
-    
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    return () => { if (interval) clearInterval(interval); };
   }, [checkInTime, checkOutTime]);
 
-  // Timer for tracking break time
+  // Break timer
   useEffect(() => {
     let breakInterval;
     if (isOnBreak && breakStartTime) {
       breakInterval = setInterval(() => {
-        const now = new Date();
-        const breakStart = new Date(breakStartTime);
-        const diff = Math.floor((now - breakStart) / 1000);
-        
-        const hours = Math.floor(diff / 3600);
-        const minutes = Math.floor((diff % 3600) / 60);
-        const seconds = diff % 60;
-        
-        setBreakElapsedTime(
-          `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-        );
+        const diff = Math.floor((new Date() - new Date(breakStartTime)) / 1000);
+        setBreakElapsedTime(formatDuration(diff));
       }, 1000);
     } else if (breakEndTime && breakStartTime) {
-      // Calculate final break duration
-      const breakStart = new Date(breakStartTime);
-      const breakEnd = new Date(breakEndTime);
-      const diff = Math.floor((breakEnd - breakStart) / 1000);
-      
-      const hours = Math.floor(diff / 3600);
-      const minutes = Math.floor((diff % 3600) / 60);
-      const seconds = diff % 60;
-      
-      setBreakElapsedTime(
-        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-      );
+      const diff = Math.floor((new Date(breakEndTime) - new Date(breakStartTime)) / 1000);
+      setBreakElapsedTime(formatDuration(diff));
     }
-    
-    return () => {
-      if (breakInterval) clearInterval(breakInterval);
-    };
+    return () => { if (breakInterval) clearInterval(breakInterval); };
   }, [isOnBreak, breakStartTime, breakEndTime]);
 
-  // Monitor location services status
+  // GPS monitor
   useEffect(() => {
     let locationCheckInterval;
-    
     if (location) {
-      // Check location availability every 3 seconds
       locationCheckInterval = setInterval(async () => {
         try {
           const isEnabled = await Location.hasServicesEnabledAsync();
           if (!isEnabled) {
-            console.log('Location services disabled by user');
             setLocation(null);
             setDistance(null);
             setLocationChecked(true);
-            
-            // Send GPS alert to backoffice
             try {
-              const storeName = store?.name || visit?.store_name || 'Unknown Store';
               await notificationService.createNotification({
                 user: user?.id,
                 title: 'GPS Alert - During Visit',
-                message: `${user?.first_name || user?.username || 'Merchandiser'} disabled GPS during visit at ${storeName}`,
+                message: `${user?.first_name || user?.username || 'Merchandiser'} disabled GPS during visit at ${store?.name || 'Unknown Store'}`,
                 type: 'GPS_ALERT',
-                is_urgent: true
+                is_urgent: true,
               });
-              console.log('GPS alert sent to backoffice');
             } catch (notifError) {
-              console.error('Failed to send GPS alert:', notifError.response?.data || notifError.message);
+              console.error('Failed to send GPS alert:', notifError.message);
             }
-            
-            Alert.alert(
-              'GPS Disabled',
-              'Location services have been turned off. GPS verification unavailable.',
-              [{ text: 'OK' }]
-            );
+            Alert.alert('GPS Disabled', 'Location services have been turned off.', [{ text: 'OK' }]);
           }
         } catch (error) {
           console.error('Error checking location services:', error);
         }
       }, 3000);
     }
-    
-    return () => {
-      if (locationCheckInterval) {
-        clearInterval(locationCheckInterval);
-      }
-    };
+    return () => { if (locationCheckInterval) clearInterval(locationCheckInterval); };
   }, [location]);
+
+  useEffect(() => {
+    if (location && store) calculateDistance(store);
+  }, [location, store]);
+
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+
+  const formatDuration = (totalSeconds) => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const formatTime = (dateString) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).toUpperCase();
+  };
+
+  const getGPSStatus = () => {
+    if (!locationChecked) return { text: 'GPS: CHECKING...', color: '#f59e0b' };
+    if (!location) return { text: 'GPS: DISABLED', color: '#ef4444' };
+    if (!store?.latitude || !store?.longitude) return { text: 'GPS: STORE LOCATION NOT SET', color: '#ef4444' };
+    if (distance === null || distance === undefined) return { text: 'GPS: CALCULATING...', color: '#3b82f6' };
+    return { text: `GPS ACTIVE: ${distance}M FROM STORE`, color: '#3b82f6' };
+  };
+
+  // FIX: restored areRequiredEventsCompleted
+  const areRequiredEventsCompleted = () =>
+    photos.length > 0 && stockUpdateCompleted && priceComparisonCompleted;
+
+  const calculateCompletionPercentage = () => {
+    let completed = 0;
+    const total = 3;
+    if (photos.length > 0) completed++;
+    if (stockUpdateCompleted) completed++;
+    if (priceComparisonCompleted) completed++;
+    return Math.round((completed / total) * 100);
+  };
+
+  // ─── Data fetching ───────────────────────────────────────────────────────────
 
   const fetchVisitData = async () => {
     try {
@@ -419,8 +307,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
       setVisit(visitData);
       setNotes(visitData.notes || '');
       setCheckInTime(visitData.check_in_time || visitData.checked_in_at);
-      
-      // Load break data from today's Schedule (one break per day, not per visit)
+
       try {
         const todaySchedule = await scheduleService.getTodaySchedule();
         if (todaySchedule) {
@@ -429,44 +316,24 @@ export default function VisitExecutionScreen({ route, navigation }) {
           setBreakWindowEnd(todaySchedule.break_window_end);
         }
       } catch (scheduleErr) {
-        // No schedule for today — break not configured by admin
         console.log('No schedule found for today:', scheduleErr.message);
       }
 
-      // Load break times from visit if merchandiser already started/ended break
-      if (visitData.break_start_time) {
-        setBreakStartTime(visitData.break_start_time);
-      }
-      if (visitData.break_end_time) {
-        setBreakEndTime(visitData.break_end_time);
-      }
-      
-      // If visit is completed, set checkout time to stop timer
+      if (visitData.break_start_time) setBreakStartTime(visitData.break_start_time);
+      if (visitData.break_end_time) setBreakEndTime(visitData.break_end_time);
       if (visitData.status === 'completed' && visitData.check_out_time) {
         setCheckOutTime(visitData.check_out_time);
       }
-      
+
       if (visitData.store) {
         const storeData = await storeService.getStore(visitData.store);
         setStore(storeData);
-        
-        console.log('Store data:', {
-          name: storeData.name,
-          latitude: storeData.latitude,
-          longitude: storeData.longitude,
-          lat_type: typeof storeData.latitude,
-          lng_type: typeof storeData.longitude
-        });
-        
-        // Calculate distance if we have location
         if (location && storeData.latitude && storeData.longitude) {
           calculateDistance(storeData);
         }
       }
 
-      // Restore visit progress from local storage
       const savedProgress = await loadVisitProgress(visitId);
-      console.log('Loaded visit progress:', visitId, savedProgress);
       if (savedProgress) {
         if (savedProgress.alertCompleted) setAlertCompleted(true);
         if (savedProgress.productCompleted) setProductCompleted(true);
@@ -475,7 +342,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
         if (savedProgress.photos?.length > 0) setPhotos(savedProgress.photos);
       }
 
-      // Also check server for existing alerts/products for this visit
       try {
         const today = new Date().toISOString().split('T')[0];
         const [alertsRes, productsRes] = await Promise.all([
@@ -485,17 +351,18 @@ export default function VisitExecutionScreen({ route, navigation }) {
         if (alertsRes) {
           const allAlerts = alertsRes.data?.results || alertsRes.data || [];
           const visitAlerts = allAlerts.filter(
-            a => String(a.visit) === String(visitId) || (a.created_at && a.created_at.startsWith(today) && String(a.store) === String(visitData.store))
+            (a) => String(a.visit) === String(visitId) ||
+              (a.created_at?.startsWith(today) && String(a.store) === String(visitData.store))
           );
-          console.log('Server alerts for visit:', visitAlerts.length, 'of', allAlerts.length);
           if (visitAlerts.length > 0) setAlertCompleted(true);
         }
         if (productsRes) {
           const allProducts = productsRes.data?.results || productsRes.data || [];
           const visitProducts = allProducts.filter(
-            p => p.created_at && p.created_at.startsWith(today) && String(p.store) === String(visitData.store) && String(p.created_by) === String(user?.id)
+            (p) => p.created_at?.startsWith(today) &&
+              String(p.store) === String(visitData.store) &&
+              String(p.created_by) === String(user?.id)
           );
-          console.log('Server products for visit:', visitProducts.length, 'of', allProducts.length);
           if (visitProducts.length > 0) setProductCompleted(true);
         }
       } catch (e) {
@@ -517,16 +384,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
         setLocationChecked(true);
         return;
       }
-
-      const currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High
-      });
-      
-      console.log('Current location:', {
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude
-      });
-      
+      const currentLocation = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       setLocation(currentLocation);
       setLocationChecked(true);
     } catch (error) {
@@ -536,110 +394,43 @@ export default function VisitExecutionScreen({ route, navigation }) {
   };
 
   const calculateDistance = (storeData) => {
-    if (!location || !storeData.latitude || !storeData.longitude) {
-      console.log('Cannot calculate distance - missing data:', {
-        hasLocation: !!location,
-        storeLat: storeData.latitude,
-        storeLng: storeData.longitude
-      });
-      return;
-    }
-    
-    // Ensure coordinates are numbers
+    if (!location || !storeData.latitude || !storeData.longitude) return;
     const storeLat = parseFloat(storeData.latitude);
     const storeLng = parseFloat(storeData.longitude);
     const userLat = parseFloat(location.coords.latitude);
     const userLng = parseFloat(location.coords.longitude);
-    
-    // Validate coordinates are valid numbers
-    if (isNaN(storeLat) || isNaN(storeLng) || isNaN(userLat) || isNaN(userLng)) {
-      console.error('Invalid coordinates:', { storeLat, storeLng, userLat, userLng });
-      setDistance(null);
-      return;
-    }
-    
-    // Validate latitude and longitude ranges
+    if (isNaN(storeLat) || isNaN(storeLng) || isNaN(userLat) || isNaN(userLng)) { setDistance(null); return; }
     if (storeLat < -90 || storeLat > 90 || storeLng < -180 || storeLng > 180 ||
-        userLat < -90 || userLat > 90 || userLng < -180 || userLng > 180) {
-      console.error('Coordinates out of range:', { storeLat, storeLng, userLat, userLng });
-      setDistance(null);
-      return;
-    }
-    
-    console.log('Calculating distance:', {
-      userLat,
-      userLng,
-      storeLat,
-      storeLng
-    });
-    
-    const R = 6371e3; // Earth's radius in meters
+        userLat < -90 || userLat > 90 || userLng < -180 || userLng > 180) { setDistance(null); return; }
+    const R = 6371e3;
     const φ1 = userLat * Math.PI / 180;
     const φ2 = storeLat * Math.PI / 180;
     const Δφ = (storeLat - userLat) * Math.PI / 180;
     const Δλ = (storeLng - userLng) * Math.PI / 180;
-
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-    const d = R * c;
-    const roundedDistance = Math.round(d);
-    
-    console.log('Distance calculated:', roundedDistance, 'meters');
-    setDistance(roundedDistance);
+    const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    setDistance(Math.round(R * c));
   };
 
-  useEffect(() => {
-    if (location && store) {
-      calculateDistance(store);
-    }
-  }, [location, store]);
+  // ─── Handlers ────────────────────────────────────────────────────────────────
 
   const handleCheckIn = async () => {
     try {
-      // Check if day has been started (user-scoped key)
       const userId = user?.id;
       const dayStarted = await AsyncStorage.getItem(userId ? `dayStarted_${userId}` : 'dayStarted');
       if (dayStarted !== 'true') {
-        Alert.alert(
-          'Day Not Started',
-          'You must start your work day from the Home screen before checking into a store.',
-          [{ text: 'OK' }]
-        );
+        Alert.alert('Day Not Started', 'You must start your work day from the Home screen before checking into a store.', [{ text: 'OK' }]);
         return;
       }
-
-      if (!location) {
-        Alert.alert('GPS Required', 'Please enable GPS to check in');
-        return;
-      }
-
+      if (!location) { Alert.alert('GPS Required', 'Please enable GPS to check in'); return; }
       if (!store?.latitude || !store?.longitude) {
-        Alert.alert(
-          'Store Location Missing',
-          'This store does not have GPS coordinates set. Please contact your administrator to add the store location.',
-          [{ text: 'OK' }]
-        );
+        Alert.alert('Store Location Missing', 'This store does not have GPS coordinates set.', [{ text: 'OK' }]);
         return;
       }
-
       if (distance === null || distance === undefined) {
         Alert.alert('Location Check', 'Still calculating your distance from the store. Please wait a moment.');
         return;
       }
-
-      // Distance check temporarily disabled for testing
-      // if (distance > 100) {
-      //   Alert.alert(
-      //     'Too Far',
-      //     `You are ${distance}m away from the store. You must be within 100m to check in.\n\nStore: ${store.name}\nStore coordinates: ${store.latitude}, ${store.longitude}`,
-      //     [{ text: 'OK' }]
-      //   );
-      //   return;
-      // }
-
       await visitService.checkIn(visitId);
       setCheckInTime(new Date().toISOString());
       await fetchVisitData();
@@ -650,21 +441,46 @@ export default function VisitExecutionScreen({ route, navigation }) {
     }
   };
 
+  const handleCheckOut = async () => {
+    try {
+      const checkoutTimestamp = new Date().toISOString();
+      setCheckOutTime(checkoutTimestamp);
+      try {
+        const ruptureData = articles
+          .filter((a) => a.isRupture)
+          .map((a) => ({ productId: a.id, productName: a.name, status: 'rupture' }));
+        if (ruptureData.length > 0) await visitService.patchVisit(visitId, { stock_ruptures: ruptureData });
+      } catch (e) { console.error('Failed to save stock_ruptures:', e); }
+      await visitService.checkOut(visitId, notes);
+      try { await AsyncStorage.removeItem(VISIT_PROGRESS_KEY(visitId)); } catch (_) {}
+      Alert.alert('Success', 'Checked out successfully!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+    } catch (error) {
+      console.error('Check-out error:', error);
+      Alert.alert('Error', 'Failed to check out');
+    }
+  };
+
+  const handleSubmitVisit = async () => {
+    try {
+      if (notes !== visit.notes) await visitService.patchVisit(visitId, { notes });
+      Alert.alert('Success', 'Visit data submitted successfully!');
+    } catch (error) {
+      console.error('Submit error:', error);
+      Alert.alert('Error', 'Failed to submit visit data');
+    }
+  };
+
+  // Photo handlers
   const handleTakePhoto = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Camera permission is required');
-        return;
-      }
-
+      if (status !== 'granted') { Alert.alert('Permission Denied', 'Camera permission is required'); return; }
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
       });
-
       if (!result.canceled && result.assets[0]) {
         const newPhotos = [...photos, result.assets[0]];
         setPhotos(newPhotos);
@@ -676,54 +492,81 @@ export default function VisitExecutionScreen({ route, navigation }) {
     }
   };
 
-  const handleOpenPhotoModal = () => {
-    if (!checkInTime) return;
-    setShowPhotoModal(true);
-  };
-
   const handleDeletePhoto = (index) => {
-    Alert.alert(
-      'Delete Photo',
-      'Are you sure you want to delete this photo?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            const newPhotos = photos.filter((_, i) => i !== index);
-            setPhotos(newPhotos);
-            saveVisitProgress(visitId, { photos: newPhotos });
-          }
-        }
-      ]
-    );
+    Alert.alert('Delete Photo', 'Are you sure you want to delete this photo?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          const newPhotos = photos.filter((_, i) => i !== index);
+          setPhotos(newPhotos);
+          saveVisitProgress(visitId, { photos: newPhotos });
+        },
+      },
+    ]);
   };
 
-  const handleOpenStockModal = () => {
-    if (!checkInTime) return;
-    setShowStockModal(true);
+  const handleOpenPhotoModal = () => { if (!checkInTime) return; setShowPhotoModal(true); };
+  const handleOpenStockModal = () => { if (!checkInTime) return; setShowStockModal(true); };
+  const handleCompetitorPrices = () => { if (!checkInTime) return; setShowPriceModal(true); };
+
+  // Break handlers
+  const isCurrentTimeInBreakWindow = () => {
+    if (!breakWindowStart || !breakWindowEnd) return false;
+    const now = new Date();
+    const [sh, sm] = breakWindowStart.split(':').map(Number);
+    const [eh, em] = breakWindowEnd.split(':').map(Number);
+    const cur = now.getHours() * 60 + now.getMinutes();
+    return cur >= sh * 60 + sm && cur <= eh * 60 + em;
   };
 
-  const handleFacingDimensionChange = (field, value) => {
-    const normalized = value.replace(/[^\d]/g, '');
-    const nextRows = Number(field === 'rows' ? normalized || 0 : facingGridRows || 0);
-    const nextColumns = Number(field === 'columns' ? normalized || 0 : facingGridColumns || 0);
-
-    if (field === 'rows') setFacingGridRows(normalized);
-    if (field === 'columns') setFacingGridColumns(normalized);
-
-    if (nextRows <= 0 || nextColumns <= 0) {
-      setFacingGridCells([]);
-      setSlotAssignments([]);
-      return;
+  const handleStartBreak = async () => {
+    try {
+      if (!isCurrentTimeInBreakWindow()) {
+        Alert.alert('Break Window Unavailable', `Breaks are only allowed between ${breakWindowStart} and ${breakWindowEnd}`, [{ text: 'OK' }]);
+        return;
+      }
+      const breakStart = new Date().toISOString();
+      setBreakStartTime(breakStart);
+      setIsOnBreak(true);
+      await visitService.patchVisit(visitId, { break_start_time: breakStart });
+      Alert.alert('Break Started', `Your break of ${breakDuration} minutes has started`);
+    } catch (error) {
+      console.error('Break start error:', error);
+      Alert.alert('Error', 'Failed to start break');
     }
-
-    const nextCells = createGridCells(nextRows, nextColumns, true);
-    setFacingGridCells(nextCells);
-    setSlotAssignments(createSlotAssignments(nextRows, nextColumns));
   };
 
+  const handleEndBreak = async () => {
+    try {
+      if (!breakStartTime) { Alert.alert('Error', 'Break was not started properly'); return; }
+      const breakEnd = new Date().toISOString();
+      const actualDurationMinutes = Math.round((new Date(breakEnd) - new Date(breakStartTime)) / (1000 * 60));
+      const allowedDurationMinutes = breakDuration || 30;
+      const isOvertime = actualDurationMinutes > allowedDurationMinutes;
+      setBreakEndTime(breakEnd);
+      setIsOnBreak(false);
+      await visitService.patchVisit(visitId, { break_end_time: breakEnd, break_took: actualDurationMinutes });
+      if (isOvertime) {
+        const overtimeMinutes = actualDurationMinutes - allowedDurationMinutes;
+        Alert.alert('Break Overtime', `You took ${actualDurationMinutes} minutes, but only ${allowedDurationMinutes} were allowed.\nOvertime: ${overtimeMinutes} minutes`, [{ text: 'OK' }]);
+        await notificationService.createNotification({
+          user: user?.id,
+          title: 'Break Overtime Alert',
+          message: `${user?.first_name || user?.username} took an extra ${overtimeMinutes} minutes break at ${store?.name || 'Unknown Store'}`,
+          type: 'BREAK_ALERT',
+        });
+      } else {
+        Alert.alert('Break Ended', `Break completed in ${actualDurationMinutes} minutes`);
+      }
+    } catch (error) {
+      console.error('Break end error:', error);
+      Alert.alert('Error', 'Failed to end break');
+    }
+  };
+
+  // Facing handlers
   const handleToggleFacingCellVisibility = (cellIndex) => {
     setFacingGridCells((current) => current.map((cell, index) => (index === cellIndex ? !cell : cell)));
   };
@@ -736,8 +579,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
   };
 
   const handleActiveSlotDepthInput = (value) => {
-    const normalized = value.replace(/[^\d]/g, '');
-    setActiveSlotDepthInput(normalized);
+    setActiveSlotDepthInput(value.replace(/[^\d]/g, ''));
   };
 
   const getNormalizedDepth = () => {
@@ -746,38 +588,25 @@ export default function VisitExecutionScreen({ route, navigation }) {
     return Math.max(MIN_STACK_DEPTH, Math.min(MAX_STACK_DEPTH, parsed));
   };
 
-  const handleIncreaseActiveDepth = () => {
-    const next = Math.min(MAX_STACK_DEPTH, getNormalizedDepth() + 1);
-    setActiveSlotDepthInput(String(next));
-  };
-
-  const handleDecreaseActiveDepth = () => {
-    const next = Math.max(MIN_STACK_DEPTH, getNormalizedDepth() - 1);
-    setActiveSlotDepthInput(String(next));
-  };
+  const handleIncreaseActiveDepth = () => setActiveSlotDepthInput(String(Math.min(MAX_STACK_DEPTH, getNormalizedDepth() + 1)));
+  const handleDecreaseActiveDepth = () => setActiveSlotDepthInput(String(Math.max(MIN_STACK_DEPTH, getNormalizedDepth() - 1)));
 
   const handleAssignProductToSlot = (productId) => {
     if (activeSlotIndex === null) return;
     const depth = getNormalizedDepth();
-
     setFacingGridCells((current) => current.map((cell, index) => (index === activeSlotIndex ? true : cell)));
-    setSlotAssignments((current) => current.map((assigned, index) => (
-      index === activeSlotIndex
-        ? { productId, depth }
-        : assigned
-    )));
+    setSlotAssignments((current) => current.map((assigned, index) =>
+      index === activeSlotIndex ? { productId, depth } : assigned
+    ));
     setShowSlotAssignModal(false);
   };
 
   const handleClearSlotAssignment = () => {
     if (activeSlotIndex === null) return;
-
     setFacingGridCells((current) => current.map((cell, index) => (index === activeSlotIndex ? false : cell)));
-    setSlotAssignments((current) => current.map((assigned, index) => (
-      index === activeSlotIndex
-        ? { productId: null, depth: 0 }
-        : assigned
-    )));
+    setSlotAssignments((current) => current.map((assigned, index) =>
+      index === activeSlotIndex ? { productId: null, depth: 0 } : assigned
+    ));
     setShowSlotAssignModal(false);
   };
 
@@ -802,7 +631,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const getFacingCompliance = () => {
     const expected = facingGridCells.length;
     if (!expected) return 0;
-
     const matchedSlots = facingGridCells.reduce((count, isVisible, index) => {
       if (!isVisible) return count;
       const expectedProduct = getShelfProductForIndex(index);
@@ -810,20 +638,17 @@ export default function VisitExecutionScreen({ route, navigation }) {
       if (!assignedProductId || assignedProductId !== expectedProduct?.id) return count;
       return count + 1;
     }, 0);
-
     return Math.round((matchedSlots / expected) * 100);
   };
 
   const getFacingMismatchCount = () => {
     let mismatchCount = 0;
-
     for (let i = 0; i < facingGridCells.length; i += 1) {
       if (!facingGridCells[i]) continue;
       const expectedProduct = getShelfProductForIndex(i);
       const assignedProductId = slotAssignments[i]?.productId;
       if (!assignedProductId || assignedProductId !== expectedProduct?.id) mismatchCount += 1;
     }
-
     return mismatchCount;
   };
 
@@ -843,26 +668,13 @@ export default function VisitExecutionScreen({ route, navigation }) {
     const expected = Number(expectedTargetsFromGrid[productId] || 0);
     const observed = getObservedCountForProduct(productId);
     let remaining = Math.max(expected - observed, 0);
-
-    if (!remaining) {
-      Alert.alert('Already Complete', 'Observed quantity already meets expected target for this product.');
-      return;
-    }
-
-    const visibleSlots = facingGridCells
-      .map((isVisible, index) => (isVisible ? index : null))
-      .filter((index) => index !== null);
-
-    if (!visibleSlots.length) {
-      Alert.alert('No Visible Slots', 'Mark at least one slot as visible before assigning products.');
-      return;
-    }
-
+    if (!remaining) { Alert.alert('Already Complete', 'Observed quantity already meets expected target.'); return; }
+    const visibleSlots = facingGridCells.map((isVisible, index) => (isVisible ? index : null)).filter((index) => index !== null);
+    if (!visibleSlots.length) { Alert.alert('No Visible Slots', 'Mark at least one slot as visible before assigning products.'); return; }
     const nextAssignments = slotAssignments.map((assignment) => ({
       productId: assignment?.productId || null,
       depth: Number(assignment?.depth || 0),
     }));
-
     for (let i = 0; i < visibleSlots.length && remaining > 0; i += 1) {
       const slotIndex = visibleSlots[i];
       const slot = nextAssignments[slotIndex];
@@ -873,7 +685,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
       slot.depth = Number(slot.depth || 0) + toAdd;
       remaining -= toAdd;
     }
-
     for (let i = 0; i < visibleSlots.length && remaining > 0; i += 1) {
       const slotIndex = visibleSlots[i];
       const slot = nextAssignments[slotIndex];
@@ -882,314 +693,175 @@ export default function VisitExecutionScreen({ route, navigation }) {
       nextAssignments[slotIndex] = { productId, depth: toPlace };
       remaining -= toPlace;
     }
-
     setSlotAssignments(nextAssignments);
-
     if (remaining > 0) {
-      Alert.alert('Partial Assignment', `Assigned what fits in visible slots. ${remaining} unit(s) still not placed.`);
+      Alert.alert('Partial Assignment', `Assigned what fits. ${remaining} unit(s) still not placed.`);
       return;
     }
-
     Alert.alert('Assigned', 'Observed grid updated for this product.');
   };
 
   const handleTakeFacingProofPhoto = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Camera permission is required');
-        return;
-      }
-
+      if (status !== 'granted') { Alert.alert('Permission Denied', 'Camera permission is required'); return; }
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
       });
-
-      if (!result.canceled && result.assets?.[0]) {
-        setFacingProofPhoto(result.assets[0]);
-      }
+      if (!result.canceled && result.assets?.[0]) setFacingProofPhoto(result.assets[0]);
     } catch (error) {
       console.error('Facing proof photo error:', error);
-      Alert.alert('Error', 'Failed to capture expected aisle photo');
+      Alert.alert('Error', 'Failed to capture aisle photo');
     }
   };
 
   const handleSaveStockUpdates = () => {
     const hasMissingCells = facingGridCells.some((cell) => !cell);
-    const changedDimensions = Number(facingGridRows || 0) !== DEFAULT_FACING_ROWS
-      || Number(facingGridColumns || 0) !== DEFAULT_FACING_COLUMNS;
-    const hasUpdates = hasMissingCells || changedDimensions;
-    const visibleSlots = facingGridCells
-      .map((isVisible, index) => (isVisible ? index : null))
-      .filter((index) => index !== null);
+    const changedDimensions = Number(facingGridRows || 0) !== DEFAULT_FACING_ROWS || Number(facingGridColumns || 0) !== DEFAULT_FACING_COLUMNS;
+    if (!hasMissingCells && !changedDimensions) { Alert.alert('No Changes', 'No facing updates to save'); return; }
+    const visibleSlots = facingGridCells.map((isVisible, index) => (isVisible ? index : null)).filter((index) => index !== null);
     const unassignedVisibleCount = visibleSlots.filter((index) => !slotAssignments[index]?.productId).length;
-    
-    if (!hasUpdates) {
-      Alert.alert('No Changes', 'No facing updates to save');
-      return;
-    }
-
-    if (unassignedVisibleCount > 0) {
-      Alert.alert('Missing Assignments', `Assign products to all visible slots (${unassignedVisibleCount} remaining).`);
-      return;
-    }
-
-    if (!facingProofPhoto) {
-      Alert.alert('Proof Photo Required', 'Capture one photo of the entire expected aisle before saving facing.');
-      return;
-    }
-
-    Alert.alert(
-      'Save Facing Updates',
-      `Save facing grid update (${facingGridRows || 0} x ${facingGridColumns || 0})?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Save',
-          onPress: async () => {
-            const facingPayload = {
-              rows: Number(facingGridRows || 0),
-              columns: Number(facingGridColumns || 0),
-              totalObservedUnits: getTotalObservedUnits(),
-              proofPhotoUri: facingProofPhoto?.uri || null,
-              productSummary: articles.slice(0, 8).map((product) => {
-                const expected = Number(expectedTargetsFromGrid[product.id] || 0);
-                const observed = getObservedCountForProduct(product.id);
-                return {
-                  productId: product.id,
-                  productName: product.name,
-                  expected,
-                  observed,
-                  gap: observed - expected,
-                };
-              }),
-            };
-            console.log('Facing grid saved:', facingPayload);
-            // Persist facing data to backend
-            try {
-              await visitService.patchVisit(visitId, { facing_data: facingPayload });
-            } catch (e) { console.error('Failed to save facing_data:', e); }
-            setStockUpdateCompleted(true);
-            await saveVisitProgress(visitId, { stockUpdateCompleted: true });
-            setShowStockModal(false);
-            Alert.alert('Success', 'Facing updates saved!');
-          }
-        }
-      ]
-    );
+    if (unassignedVisibleCount > 0) { Alert.alert('Missing Assignments', `Assign products to all visible slots (${unassignedVisibleCount} remaining).`); return; }
+    if (!facingProofPhoto) { Alert.alert('Proof Photo Required', 'Capture one photo of the aisle before saving.'); return; }
+    Alert.alert('Save Facing Updates', `Save facing grid (${facingGridRows} x ${facingGridColumns})?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Save',
+        onPress: async () => {
+          const facingPayload = {
+            rows: Number(facingGridRows || 0),
+            columns: Number(facingGridColumns || 0),
+            totalObservedUnits: getTotalObservedUnits(),
+            proofPhotoUri: facingProofPhoto?.uri || null,
+            productSummary: articles.slice(0, 8).map((product) => {
+              const expected = Number(expectedTargetsFromGrid[product.id] || 0);
+              const observed = getObservedCountForProduct(product.id);
+              return { productId: product.id, productName: product.name, expected, observed, gap: observed - expected };
+            }),
+          };
+          try { await visitService.patchVisit(visitId, { facing_data: facingPayload }); } catch (e) { console.error('Failed to save facing_data:', e); }
+          setStockUpdateCompleted(true);
+          await saveVisitProgress(visitId, { stockUpdateCompleted: true });
+          setShowStockModal(false);
+          Alert.alert('Success', 'Facing updates saved!');
+        },
+      },
+    ]);
   };
 
-  const handleCheckOut = async () => {
-    try {
-      // Set checkout time to stop the timer
-      const checkoutTimestamp = new Date().toISOString();
-      setCheckOutTime(checkoutTimestamp);
-
-      // Save stock rupture data to backend before checkout
-      try {
-        const ruptureData = articles
-          .filter(a => a.isRupture)
-          .map(a => ({ productId: a.id, productName: a.name, status: 'rupture' }));
-        if (ruptureData.length > 0) {
-          await visitService.patchVisit(visitId, { stock_ruptures: ruptureData });
-        }
-      } catch (e) { console.error('Failed to save stock_ruptures:', e); }
-
-      await visitService.checkOut(visitId, notes);
-      // Clean up saved progress after successful checkout
-      try { await AsyncStorage.removeItem(VISIT_PROGRESS_KEY(visitId)); } catch (_) {}
-      Alert.alert('Success', 'Checked out successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() }
-      ]);
-    } catch (error) {
-      console.error('Check-out error:', error);
-      Alert.alert('Error', 'Failed to check out');
-    }
-  };
-
-  const handleSubmitVisit = async () => {
-    try {
-      // Update notes
-      if (notes !== visit.notes) {
-        await visitService.patchVisit(visitId, { notes });
-      }
-
-      Alert.alert('Success', 'Visit data submitted successfully!');
-    } catch (error) {
-      console.error('Submit error:', error);
-      Alert.alert('Error', 'Failed to submit visit data');
-    }
-  };
-
-  const calculateCompletionPercentage = () => {
-    let completed = 0;
-    let total = 3; // Check-in, Photos, Facing Update (Notes are optional)
-
-    if (checkInTime) completed++;
-    if (photos.length >= 4) completed++;
-    if (stockUpdateCompleted) completed++;
-
-    return Math.round((completed / total) * 100);
-  };
-
-  const formatTime = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: true 
-    }).toUpperCase();
-  };
-
-  const getGPSStatus = () => {
-    if (!locationChecked) {
-      return { text: 'GPS: CHECKING...', color: '#f59e0b' };
-    }
-    if (!location) {
-      return { text: 'GPS: DISABLED', color: '#ef4444' };
-    }
-    if (!store?.latitude || !store?.longitude) {
-      return { text: 'GPS: STORE LOCATION NOT SET', color: '#ef4444' };
-    }
-    if (distance === null || distance === undefined) {
-      return { text: 'GPS: CALCULATING...', color: '#3b82f6' };
-    }
-    // Distance check disabled for testing - show distance info only
-    return { text: `GPS ACTIVE: ${distance}M FROM STORE`, color: '#3b82f6' };
-  };
-
-  const handleCompetitorPrices = () => {
-    if (!checkInTime) return;
-    setShowPriceModal(true);
-  };
-
-  const isCurrentTimeInBreakWindow = () => {
-    if (!breakWindowStart || !breakWindowEnd) return false;
-    
-    const now = new Date();
-    const [startHour, startMin] = breakWindowStart.split(':').map(Number);
-    const [endHour, endMin] = breakWindowEnd.split(':').map(Number);
-    
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const startMinutes = startHour * 60 + startMin;
-    const endMinutes = endHour * 60 + endMin;
-    
-    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
-  };
-
-  const handleStartBreak = async () => {
-    try {
-      if (!isCurrentTimeInBreakWindow()) {
-        Alert.alert(
-          'Break Window Unavailable',
-          `Breaks are only allowed between ${breakWindowStart} and ${breakWindowEnd}`,
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-
-      const breakStart = new Date().toISOString();
-      setBreakStartTime(breakStart);
-      setIsOnBreak(true);
-      
-      // Patch visit with break start time
-      await visitService.patchVisit(visitId, {
-        break_start_time: breakStart,
-      });
-      
-      Alert.alert('Break Started', `Your break of ${breakDuration} minutes has started`);
-    } catch (error) {
-      console.error('Break start error:', error);
-      Alert.alert('Error', 'Failed to start break');
-    }
-  };
-
-  const handleEndBreak = async () => {
-    try {
-      if (!breakStartTime) {
-        Alert.alert('Error', 'Break was not started properly');
-        return;
-      }
-
-      const breakEnd = new Date().toISOString();
-      const breakStart = new Date(breakStartTime);
-      const actualDurationMinutes = Math.round((new Date(breakEnd) - breakStart) / (1000 * 60));
-      const allowedDurationMinutes = breakDuration || 30;
-      const isOvertime = actualDurationMinutes > allowedDurationMinutes;
-
-      setBreakEndTime(breakEnd);
-      setIsOnBreak(false);
-      
-      // Patch visit with break end time
-      await visitService.patchVisit(visitId, {
-        break_end_time: breakEnd,
-        break_took: actualDurationMinutes,
-      });
-
-      // If overtime, notify both user and admin
-      if (isOvertime) {
-        const overtimeMinutes = actualDurationMinutes - allowedDurationMinutes;
-        const message = `Break overtime by ${overtimeMinutes} minutes`;
-        
-        // Notify user
-        Alert.alert(
-          'Break Overtime',
-          `You took ${actualDurationMinutes} minutes, but only ${allowedDurationMinutes} were allowed.\nOvertime: ${overtimeMinutes} minutes`,
-          [{ text: 'OK' }]
-        );
-        
-        // Notify admin
-        await notificationService.createNotification({
-          user: user?.id,
-          title: 'Break Overtime Alert',
-          message: `${user?.first_name || user?.username} took an extra ${overtimeMinutes} minutes break at ${store?.name || 'Unknown Store'}`,
-          type: 'BREAK_ALERT',
-        });
-      } else {
-        Alert.alert('Break Ended', `Break completed in ${actualDurationMinutes} minutes`);
-      }
-    } catch (error) {
-      console.error('Break end error:', error);
-      Alert.alert('Error', 'Failed to end break');
-    }
-  };
-
+  // Price comparison handlers
   const handleCompetitorPriceChange = (itemId, value) => {
     const normalizedValue = value.replace(',', '.').replace(/[^\d.]/g, '');
     setPriceComparisons((current) =>
-      current.map((item) =>
-        item.id === itemId
-          ? { ...item, competitorPrice: normalizedValue }
-          : item
-      )
+      current.map((item) => item.id === itemId ? { ...item, competitorPrice: normalizedValue } : item)
     );
   };
 
+  const handleCompetitorFacingChange = (itemId, value) => {
+    const normalizedValue = value.replace(/[^\d]/g, '');
+    setPriceComparisons((current) =>
+      current.map((item) => item.id === itemId ? { ...item, competitorFacing: normalizedValue } : item)
+    );
+  };
+
+  const handlePriceComparisonPhoto = async (itemId) => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') { Alert.alert('Permission refusée', "L'accès à la caméra est requis"); return; }
+      Alert.alert('Ajouter une photo', 'Choisissez la source', [
+        {
+          text: 'Caméra',
+          onPress: async () => {
+            const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.8 });
+            if (!result.canceled && result.assets[0]) {
+              setPriceComparisons((current) => current.map((item) => item.id === itemId ? { ...item, photo: result.assets[0] } : item));
+            }
+          },
+        },
+        {
+          text: 'Galerie',
+          onPress: async () => {
+            const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.8 });
+            if (!result.canceled && result.assets[0]) {
+              setPriceComparisons((current) => current.map((item) => item.id === itemId ? { ...item, photo: result.assets[0] } : item));
+            }
+          },
+        },
+        { text: 'Annuler', style: 'cancel' },
+      ]);
+    } catch (error) {
+      console.error('Photo error:', error);
+    }
+  };
+
   const handleSavePriceComparison = async () => {
-    // Build price comparison payload with filled entries
     const filledComparisons = priceComparisons
-      .filter(pc => pc.competitorPrice && pc.competitorPrice.trim() !== '')
-      .map(pc => ({
+      .filter((pc) => pc.competitorPrice && pc.competitorPrice.trim() !== '')
+      .map((pc) => ({
         productName: pc.name,
         ourPrice: pc.ourPrice,
         competitorPrice: parseFloat(pc.competitorPrice.replace(',', '.')) || 0,
+        competitorFacing: pc.competitorFacing ? parseInt(pc.competitorFacing) : null,
         competitor: competitorName,
+        hasPhoto: !!pc.photo,
       }));
-    // Persist to backend
-    try {
-      await visitService.patchVisit(visitId, { price_comparisons: filledComparisons });
-    } catch (e) { console.error('Failed to save price_comparisons:', e); }
+    try { await visitService.patchVisit(visitId, { price_comparisons: filledComparisons }); } catch (e) { console.error('Failed to save price_comparisons:', e); }
     setPriceComparisonCompleted(true);
     await saveVisitProgress(visitId, { priceComparisonCompleted: true });
     setShowPriceModal(false);
     Alert.alert('Saved', 'Price comparison has been recorded for this visit.');
   };
 
-  // Ajout Produit handlers
+  // Alert handlers
+  const ALERT_TYPES = [
+    { value: 'promotion', label: 'Promotion' },
+    { value: 'price_change', label: 'Changement de prix' },
+    { value: 'new_product', label: 'Nouveau produit' },
+    { value: 'competitor_activity', label: 'Activité concurrent' },
+  ];
+
+  const handleOpenAlertModal = () => {
+    setAlertBrand(''); setAlertType(''); setAlertDescription(''); setAlertPhoto(null); setShowAlertTypeDropdown(false);
+    setShowAlertModal(true);
+  };
+
+  const handleAlertTakePhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) { Alert.alert('Permission requise', "Autorisez l'accès à la caméra."); return; }
+      const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.7 });
+      if (!result.canceled && result.assets?.[0]) setAlertPhoto(result.assets[0]);
+    } catch (err) { console.error('Camera error:', err); }
+  };
+
+  const handleSubmitAlert = async () => {
+    if (!alertBrand.trim()) { Alert.alert('Requis', 'Entrez la marque concurrente.'); return; }
+    if (!alertType) { Alert.alert('Requis', "Sélectionnez un type d'alerte."); return; }
+    if (!alertDescription.trim()) { Alert.alert('Requis', 'Décrivez la situation.'); return; }
+    if (!alertPhoto) { Alert.alert('Requis', 'Ajoutez une photo comme preuve.'); return; }
+    try {
+      const formData = new FormData();
+      formData.append('alert_type', alertType);
+      formData.append('competitor_brand', alertBrand.trim());
+      formData.append('store', visit?.store || store?.id || '');
+      formData.append('visit', visitId || '');
+      formData.append('description', alertDescription.trim());
+      formData.append('photo', { uri: alertPhoto.uri, type: 'image/jpeg', name: 'alert_photo.jpg' });
+      await api.post('/merchandising/competitor-alerts/', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setAlertCompleted(true);
+      await saveVisitProgress(visitId, { alertCompleted: true });
+      setShowAlertModal(false);
+      Alert.alert('Succès', 'Alerte concurrent envoyée avec succès.');
+    } catch (err) {
+      console.error('Alert submit error:', err);
+      Alert.alert('Erreur', err.response?.data?.detail || "Échec de l'envoi.");
+    }
+  };
+
+  // Product handlers
   const PRODUCT_CATEGORIES = [
     { value: 'food', label: 'Alimentaire' },
     { value: 'beauty', label: 'Beauté & Soins' },
@@ -1201,48 +873,25 @@ export default function VisitExecutionScreen({ route, navigation }) {
   ];
 
   const handleAddProduct = () => {
-    setProductName('');
-    setProductBrand('');
-    setProductCategory('');
-    setProductPrice('');
-    setProductSku('');
-    setProductDescription('');
-    setProductPhoto(null);
-    setShowProductCategoryDropdown(false);
-    setShowProductModal(true);
+    setProductName(''); setProductBrand(''); setProductCategory(''); setProductPrice('');
+    setProductSku(''); setProductDescription(''); setProductPhoto(null);
+    setShowProductCategoryDropdown(false); setShowProductModal(true);
   };
 
   const handleProductTakePhoto = async () => {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission requise', 'Autorisez l\'accès à la caméra.');
-        return;
-      }
+      if (!permission.granted) { Alert.alert('Permission requise', "Autorisez l'accès à la caméra."); return; }
       const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.7 });
-      if (!result.canceled && result.assets?.[0]) {
-        setProductPhoto(result.assets[0]);
-      }
-    } catch (err) {
-      console.error('Camera error:', err);
-    }
+      if (!result.canceled && result.assets?.[0]) setProductPhoto(result.assets[0]);
+    } catch (err) { console.error('Camera error:', err); }
   };
 
   const handleSubmitProduct = async () => {
-    if (!productName.trim()) {
-      Alert.alert('Requis', 'Entrez le nom du produit.');
-      return;
-    }
-    if (!productCategory) {
-      Alert.alert('Requis', 'Sélectionnez une catégorie.');
-      return;
-    }
-    if (!productPrice.trim()) {
-      Alert.alert('Requis', 'Entrez le prix du produit.');
-      return;
-    }
+    if (!productName.trim()) { Alert.alert('Requis', 'Entrez le nom du produit.'); return; }
+    if (!productCategory) { Alert.alert('Requis', 'Sélectionnez une catégorie.'); return; }
+    if (!productPrice.trim()) { Alert.alert('Requis', 'Entrez le prix du produit.'); return; }
     try {
-      setProductSubmitting(true);
       const sku = productSku.trim() || `SKU-${Date.now()}`;
       const data = {
         name: productName.trim(),
@@ -1262,123 +911,20 @@ export default function VisitExecutionScreen({ route, navigation }) {
     } catch (err) {
       console.error('Product submit error:', err);
       const detail = err.response?.data;
-      const msg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || 'Échec de l\'ajout.');
+      const msg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || "Échec de l'ajout.");
       Alert.alert('Erreur', msg);
-    } finally {
-      setProductSubmitting(false);
-    }
-  };
-
-  // Alerte Concurrent handlers
-  const ALERT_TYPES = [
-    { value: 'promotion', label: 'Promotion' },
-    { value: 'price_change', label: 'Changement de prix' },
-    { value: 'new_product', label: 'Nouveau produit' },
-    { value: 'competitor_activity', label: 'Activité concurrent' },
-  ];
-
-  const handleOpenAlertModal = () => {
-    setAlertBrand('');
-    setAlertType('');
-    setAlertDescription('');
-    setAlertPhoto(null);
-    setShowAlertTypeDropdown(false);
-    setShowAlertModal(true);
-  };
-
-  const handleAlertPickImage = async () => {
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission requise', 'Autorisez l\'accès aux photos.');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.7,
-      });
-      if (!result.canceled && result.assets?.[0]) {
-        setAlertPhoto(result.assets[0]);
-      }
-    } catch (err) {
-      console.error('Image picker error:', err);
-    }
-  };
-
-  const handleAlertTakePhoto = async () => {
-    try {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission requise', 'Autorisez l\'accès à la caméra.');
-        return;
-      }
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        quality: 0.7,
-      });
-      if (!result.canceled && result.assets?.[0]) {
-        setAlertPhoto(result.assets[0]);
-      }
-    } catch (err) {
-      console.error('Camera error:', err);
-    }
-  };
-
-  const handleSubmitAlert = async () => {
-    if (!alertBrand.trim()) {
-      Alert.alert('Requis', 'Entrez la marque concurrente.');
-      return;
-    }
-    if (!alertType) {
-      Alert.alert('Requis', 'Sélectionnez un type d\'alerte.');
-      return;
-    }
-    if (!alertDescription.trim()) {
-      Alert.alert('Requis', 'Décrivez la situation.');
-      return;
-    }
-    if (!alertPhoto) {
-      Alert.alert('Requis', 'Ajoutez une photo comme preuve.');
-      return;
-    }
-    try {
-      setAlertSubmitting(true);
-      const formData = new FormData();
-      formData.append('alert_type', alertType);
-      formData.append('competitor_brand', alertBrand.trim());
-      formData.append('store', visit?.store || store?.id || '');
-      formData.append('visit', visitId || '');
-      formData.append('description', alertDescription.trim());
-      formData.append('photo', {
-        uri: alertPhoto.uri,
-        type: 'image/jpeg',
-        name: 'alert_photo.jpg',
-      });
-      await api.post('/merchandising/competitor-alerts/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      setAlertCompleted(true);
-      await saveVisitProgress(visitId, { alertCompleted: true });
-      setShowAlertModal(false);
-      Alert.alert('Succès', 'Alerte concurrent envoyée avec succès.');
-    } catch (err) {
-      console.error('Alert submit error:', err);
-      Alert.alert('Erreur', err.response?.data?.detail || 'Échec de l\'envoi.');
-    } finally {
-      setAlertSubmitting(false);
     }
   };
 
   const handleToggleArticleRupture = (articleId) => {
     setArticles((currentArticles) =>
       currentArticles.map((article) =>
-        article.id === articleId
-          ? { ...article, isRupture: !article.isRupture }
-          : article
+        article.id === articleId ? { ...article, isRupture: !article.isRupture } : article
       )
     );
   };
+
+  // ─── Render helpers ──────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -1396,21 +942,23 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const isVisitCompleted = visit?.status === 'completed';
   const canCheckOut = isCheckedIn && !isVisitCompleted;
   const scheduleLabel = visit?.scheduled_date ? formatTime(visit.scheduled_date) : 'Not scheduled';
+
   const visitStatusConfig = isVisitCompleted
     ? { label: 'VISITE TERMINEE', color: '#16a34a', bg: '#dcfce7' }
     : isCheckedIn
       ? { label: 'VISITE ACTIVE', color: '#ffffff', bg: '#2563eb' }
       : { label: 'VISITE PLANIFIEE', color: '#1d4ed8', bg: '#dbeafe' };
+
   const quickActions = [
     {
-      key: 'photo',
-      title: 'Anomalie Photo',
-      icon: 'camera-outline',
-      accent: '#2563eb',
-      background: '#dbeafe',
-      onPress: handleOpenPhotoModal,
+      key: 'anomaly',
+      title: 'Anomalie',
+      icon: 'alert-octagon-outline',
+      accent: '#2563eb', // Red accent
+      background: '#dbeafe', // Light red background
+      onPress: () => navigation.navigate('ReportAnomaly', { visitId }),
       disabled: !isCheckedIn || isVisitCompleted,
-      completed: photos.length > 0,
+      completed: false,
     },
     {
       key: 'facing',
@@ -1452,16 +1000,8 @@ export default function VisitExecutionScreen({ route, navigation }) {
       disabled: !isCheckedIn || isVisitCompleted,
       completed: alertCompleted,
     },
-    {
-      key: 'other',
-      title: 'Autre',
-      icon: 'dots-horizontal',
-      accent: '#cbd5e1',
-      background: '#f8fafc',
-      onPress: null,
-      disabled: true,
-    },
   ];
+
   const recentActivities = [
     isCheckedIn && {
       key: 'checkin',
@@ -1479,14 +1019,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
       iconColor: '#10b981',
       iconBackground: '#e8fbf2',
     },
-    photos.length > 0 && {
-      key: 'photos',
-      title: 'Anomalie Photo',
-      subtitle: `${store?.name || visit?.store_name || 'Magasin'} • ${photos.length} photo${photos.length > 1 ? 's' : ''}`,
-      icon: 'camera-outline',
-      iconColor: '#2563eb',
-      iconBackground: '#dbeafe',
-    },
     notes?.trim() && {
       key: 'notes',
       title: 'Infos magasin',
@@ -1497,16 +1029,30 @@ export default function VisitExecutionScreen({ route, navigation }) {
     },
   ].filter(Boolean);
 
+  const filteredArticles = articles.filter((article) => {
+    const haystack = `${article.name} ${article.meta}`.toLowerCase();
+    return haystack.includes(articleQuery.trim().toLowerCase());
+  });
+
+  // FIX: use areRequiredEventsCompleted in footer disabled logic
+  const footerButtonLabel = isVisitCompleted
+    ? 'VISITE CLOTUREE'
+    : isCheckedIn
+      ? 'CLOTURER LA VISITE'
+      : 'DEMARRER LA VISITE';
+
+  const footerButtonDisabled =
+    isVisitCompleted || (isCheckedIn && (!canCheckOut || !areRequiredEventsCompleted()));
+
+  const footerButtonHandler = isCheckedIn ? handleCheckOut : handleCheckIn;
+
   const renderEventsTab = () => (
     <>
       <View style={styles.quickGrid}>
         {quickActions.map((action) => (
           <TouchableOpacity
             key={action.key}
-            style={[
-              styles.quickActionCard,
-              action.disabled && styles.quickActionCardDisabled,
-            ]}
+            style={[styles.quickActionCard, action.disabled && styles.quickActionCardDisabled]}
             activeOpacity={0.85}
             disabled={action.disabled || !action.onPress}
             onPress={action.onPress || undefined}
@@ -1569,23 +1115,16 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
       {filteredArticles.map((article) => {
         const isActive = article.isRupture;
-
         return (
-          <TouchableOpacity
-            key={article.id}
-            style={[styles.articleCard, isActive && styles.articleCardActive]}
-            activeOpacity={0.9}
-          >
+          <TouchableOpacity key={article.id} style={[styles.articleCard, isActive && styles.articleCardActive]} activeOpacity={0.9}>
             <View style={[styles.articleThumb, { backgroundColor: article.color }]}>
               <MaterialCommunityIcons name={article.icon} size={28} color="#ffffff" />
             </View>
-
             <View style={styles.articleDetails}>
               <Text style={styles.articleName} numberOfLines={1}>{article.name}</Text>
               <Text style={styles.articleMeta}>{article.meta}</Text>
               <Text style={styles.articlePrice}>{article.price}</Text>
             </View>
-
             <TouchableOpacity
               style={[styles.ruptureBadge, isActive && styles.ruptureBadgeActive]}
               activeOpacity={0.85}
@@ -1644,7 +1183,9 @@ export default function VisitExecutionScreen({ route, navigation }) {
         disabled={isVisitCompleted}
       >
         <MaterialCommunityIcons name="content-save-outline" size={18} color={isVisitCompleted ? '#94a3b8' : '#111827'} />
-        <Text style={[styles.secondaryButtonText, isVisitCompleted && styles.secondaryButtonTextDisabled]}>Enregistrer les notes</Text>
+        <Text style={[styles.secondaryButtonText, isVisitCompleted && styles.secondaryButtonTextDisabled]}>
+          Enregistrer les notes
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -1655,21 +1196,12 @@ export default function VisitExecutionScreen({ route, navigation }) {
     return renderEventsTab();
   };
 
-  const footerButtonLabel = isVisitCompleted
-    ? 'VISITE CLOTUREE'
-    : isCheckedIn
-      ? 'CLOTURER LA VISITE'
-      : 'DEMARRER LA VISITE';
-  const footerButtonDisabled = isVisitCompleted || (isCheckedIn && !canCheckOut);
-  const footerButtonHandler = isCheckedIn ? handleCheckOut : handleCheckIn;
-  const filteredArticles = articles.filter((article) => {
-    const haystack = `${article.name} ${article.meta}`.toLowerCase();
-    return haystack.includes(articleQuery.trim().toLowerCase());
-  });
+  // ─── Main render ─────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
             <MaterialCommunityIcons name="chevron-left" size={28} color="#111" />
@@ -1686,24 +1218,19 @@ export default function VisitExecutionScreen({ route, navigation }) {
               <MaterialCommunityIcons name="check-circle" size={24} color="#10b981" />
               <View style={styles.completedBannerContent}>
                 <Text style={styles.completedBannerTitle}>Visit Completed</Text>
-                <Text style={styles.completedBannerText}>
-                  This visit has been completed and is now read-only
-                </Text>
+                <Text style={styles.completedBannerText}>This visit has been completed and is now read-only</Text>
               </View>
             </View>
           )}
 
+          {/* Hero card */}
           <View style={styles.heroCard}>
             <View style={styles.heroTopRow}>
               <View style={styles.heroTextWrap}>
-                <Text style={styles.storeName}>
-                  {store?.name || visit?.store_name || 'Unknown Store'}
-                </Text>
+                <Text style={styles.storeName}>{store?.name || visit?.store_name || 'Unknown Store'}</Text>
                 <View style={styles.addressRow}>
                   <MaterialCommunityIcons name="map-marker-outline" size={14} color="#6b7280" />
-                  <Text style={styles.storeAddress}>
-                    {store?.address || store?.location || 'Address not available'}
-                  </Text>
+                  <Text style={styles.storeAddress}>{store?.address || store?.location || 'Address not available'}</Text>
                 </View>
               </View>
               <View style={[styles.visitStatusChip, { backgroundColor: visitStatusConfig.bg }]}>
@@ -1725,6 +1252,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
             </View>
           </View>
 
+          {/* Tab bar */}
           <View style={styles.tabBar}>
             {[
               { key: 'articles', label: 'Articles' },
@@ -1751,31 +1279,27 @@ export default function VisitExecutionScreen({ route, navigation }) {
           </View>
         </ScrollView>
 
+        {/* Footer */}
         <View style={styles.footerCtaWrap}>
+          {isCheckedIn && !isVisitCompleted && !areRequiredEventsCompleted() && (
+            <Text style={styles.footerHelperText}>
+              Complete Photos, Facing & Price Comparison to check out
+            </Text>
+          )}
           <TouchableOpacity
             style={[styles.footerCtaButton, footerButtonDisabled && styles.footerCtaButtonDisabled]}
             onPress={footerButtonHandler}
             disabled={footerButtonDisabled}
             activeOpacity={0.9}
           >
-            <MaterialCommunityIcons
-              name={isCheckedIn ? 'logout-variant' : 'login-variant'}
-              size={20}
-              color="#fff"
-            />
+            <MaterialCommunityIcons name={isCheckedIn ? 'logout-variant' : 'login-variant'} size={20} color="#fff" />
             <Text style={styles.footerCtaText}>{footerButtonLabel}</Text>
           </TouchableOpacity>
-
         </View>
       </View>
 
-      {/* Photo Modal */}
-      <Modal
-        visible={showPhotoModal}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowPhotoModal(false)}
-      >
+      {/* ── Photo Modal ─────────────────────────────────────────────────────── */}
+      <Modal visible={showPhotoModal} animationType="slide" transparent={false} onRequestClose={() => setShowPhotoModal(false)}>
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={() => setShowPhotoModal(false)}>
@@ -1799,10 +1323,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
                 {photos.map((photo, index) => (
                   <View key={index} style={styles.photoCard}>
                     <Image source={{ uri: photo.uri }} style={styles.photoImage} />
-                    <TouchableOpacity
-                      style={styles.deletePhotoButton}
-                      onPress={() => handleDeletePhoto(index)}
-                    >
+                    <TouchableOpacity style={styles.deletePhotoButton} onPress={() => handleDeletePhoto(index)}>
                       <MaterialCommunityIcons name="delete" size={20} color="#fff" />
                     </TouchableOpacity>
                     <Text style={styles.photoLabel}>Photo {index + 1}</Text>
@@ -1824,13 +1345,8 @@ export default function VisitExecutionScreen({ route, navigation }) {
         </SafeAreaView>
       </Modal>
 
-      {/* Facing Update Modal */}
-      <Modal
-        visible={showStockModal}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowStockModal(false)}
-      >
+      {/* ── Facing Modal ─────────────────────────────────────────────────────── */}
+      <Modal visible={showStockModal} animationType="slide" transparent={false} onRequestClose={() => setShowStockModal(false)}>
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={() => setShowStockModal(false)}>
@@ -1842,16 +1358,12 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
           <View style={styles.facingSummaryBox}>
             <Text style={styles.facingSummaryLabel}>Facing Compliance</Text>
-            <Text style={styles.facingSummaryValue}>
-              {getFacingCompliance()}
-              %
-            </Text>
+            <Text style={styles.facingSummaryValue}>{getFacingCompliance()}%</Text>
           </View>
 
           <ScrollView style={styles.modalContent}>
             <View style={styles.unifiedFacingCard}>
               <Text style={styles.comparisonLabel}>EXPECTED GRID</Text>
-
               <Text style={styles.unifiedFacingHint}>Tap slot to assign product. Long press slot to toggle missing/visible.</Text>
 
               <View style={styles.facingProofRow}>
@@ -1866,13 +1378,9 @@ export default function VisitExecutionScreen({ route, navigation }) {
                 )}
               </View>
 
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.shelfCompareScroll}
-                contentContainerStyle={styles.shelfCompareContent}
-              >
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.shelfCompareScroll} contentContainerStyle={styles.shelfCompareContent}>
                 <View style={styles.shelfCompareRow}>
+                  {/* Expected Panel */}
                   <View style={styles.shelfPanel}>
                     <Text style={styles.shelfPanelTitle}>Expected</Text>
                     <View style={styles.facingGridPreviewWrap}>
@@ -1886,19 +1394,12 @@ export default function VisitExecutionScreen({ route, navigation }) {
                                 {Array.from({ length: Number(facingGridColumns || 0) }).map((__, colIndex) => {
                                   const cellIndex = rowIndex * Number(facingGridColumns || 0) + colIndex;
                                   const product = getShelfProductForIndex(cellIndex);
-
                                   return (
                                     <View
                                       key={`expected-cell-${rowIndex}-${colIndex}`}
-                                      style={[
-                                        styles.facingGridCell,
-                                        styles.facingGridCellFilled,
-                                        { backgroundColor: product?.color || '#34d399' },
-                                      ]}
+                                      style={[styles.facingGridCell, styles.facingGridCellFilled, { backgroundColor: product?.color || '#34d399' }]}
                                     >
-                                      <Text style={styles.facingProductText}>
-                                        {getProductSlotLabel(product?.name)}
-                                      </Text>
+                                      <Text style={styles.facingProductText}>{getProductSlotLabel(product?.name)}</Text>
                                     </View>
                                   );
                                 })}
@@ -1912,6 +1413,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
                     </View>
                   </View>
 
+                  {/* Observed Panel */}
                   <View style={styles.shelfPanel}>
                     <Text style={styles.shelfPanelTitle}>Observed</Text>
                     <View style={styles.facingGridPreviewWrap}>
@@ -1931,7 +1433,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
                                   const isMismatch = visible && assignedProduct && assignedProduct.id !== expectedProduct?.id;
                                   const isUnassigned = visible && !assignedProduct;
                                   const displayProduct = assignedProduct || expectedProduct;
-
                                   return (
                                     <TouchableOpacity
                                       key={`observed-cell-${rowIndex}-${colIndex}`}
@@ -1972,26 +1473,22 @@ export default function VisitExecutionScreen({ route, navigation }) {
               </ScrollView>
 
               <View style={styles.facingLegendRow}>
-                <View style={styles.facingLegendItem}>
-                  <View style={[styles.facingLegendDot, styles.facingGridCellFilled]} />
-                  <Text style={styles.facingLegendText}>Visible</Text>
-                </View>
-                <View style={styles.facingLegendItem}>
-                  <View style={[styles.facingLegendDot, styles.facingGridCellMissing]} />
-                  <Text style={styles.facingLegendText}>Missing</Text>
-                </View>
-                <View style={styles.facingLegendItem}>
-                  <View style={[styles.facingLegendDot, styles.facingGridCellMismatch]} />
-                  <Text style={styles.facingLegendText}>Mismatch</Text>
-                </View>
+                {[
+                  { style: styles.facingGridCellFilled, label: 'Visible' },
+                  { style: styles.facingGridCellMissing, label: 'Missing' },
+                  { style: styles.facingGridCellMismatch, label: 'Mismatch' },
+                ].map((item) => (
+                  <View key={item.label} style={styles.facingLegendItem}>
+                    <View style={[styles.facingLegendDot, item.style]} />
+                    <Text style={styles.facingLegendText}>{item.label}</Text>
+                  </View>
+                ))}
               </View>
 
               <Text style={styles.unifiedFacingStats}>
                 Visible: {facingGridCells.filter(Boolean).length} / {facingGridCells.length} • Missing: {facingGridCells.filter((cell) => !cell).length} • Mismatch: {getFacingMismatchCount()}
               </Text>
-              <Text style={styles.unifiedFacingStats}>
-                Units observed (stacked): {getTotalObservedUnits()}
-              </Text>
+              <Text style={styles.unifiedFacingStats}>Units observed (stacked): {getTotalObservedUnits()}</Text>
 
               <View style={styles.productQtySection}>
                 <Text style={styles.comparisonLabel}>EXPECTED VS OBSERVED BY PRODUCT</Text>
@@ -1999,7 +1496,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
                   const expected = Number(expectedTargetsFromGrid[product.id] || 0);
                   const observed = getObservedCountForProduct(product.id);
                   const gap = observed - expected;
-
                   return (
                     <View key={`qty-${product.id}`} style={styles.productQtyItem}>
                       <View style={styles.productQtyRow}>
@@ -2008,27 +1504,17 @@ export default function VisitExecutionScreen({ route, navigation }) {
                           <Text style={styles.productQtyName} numberOfLines={1}>{product.name}</Text>
                           <Text style={styles.productQtyMeta}>Observed: {observed}</Text>
                         </View>
-
                         <View style={styles.productQtyExpectedWrap}>
                           <Text style={styles.productQtyExpectedLabel}>Expected</Text>
                           <View style={styles.productQtyExpectedStatic}>
                             <Text style={styles.productQtyExpectedStaticText}>{expected}</Text>
                           </View>
                         </View>
-
-                        <View style={[
-                          styles.productQtyGapBadge,
-                          gap < 0 ? styles.productQtyGapNegative : styles.productQtyGapPositive,
-                        ]}>
+                        <View style={[styles.productQtyGapBadge, gap < 0 ? styles.productQtyGapNegative : styles.productQtyGapPositive]}>
                           <Text style={styles.productQtyGapText}>{gap >= 0 ? `+${gap}` : `${gap}`}</Text>
                         </View>
                       </View>
-
-                      <TouchableOpacity
-                        style={styles.productQtyAssignButton}
-                        onPress={() => handleAssignProductFromSummary(product.id)}
-                        activeOpacity={0.85}
-                      >
+                      <TouchableOpacity style={styles.productQtyAssignButton} onPress={() => handleAssignProductFromSummary(product.id)} activeOpacity={0.85}>
                         <MaterialCommunityIcons name="playlist-plus" size={14} color="#1d4ed8" />
                         <Text style={styles.productQtyAssignText}>Assign</Text>
                       </TouchableOpacity>
@@ -2040,23 +1526,16 @@ export default function VisitExecutionScreen({ route, navigation }) {
           </ScrollView>
 
           <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.saveButton]}
-              onPress={handleSaveStockUpdates}
-            >
+            <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={handleSaveStockUpdates}>
               <MaterialCommunityIcons name="content-save" size={20} color="#fff" />
-              <Text style={styles.saveButtonText}>
-                Save Facing Grid
-              </Text>
+              <Text style={styles.saveButtonText}>Save Facing Grid</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.closeButton]}
-              onPress={() => setShowStockModal(false)}
-            >
+            <TouchableOpacity style={[styles.modalButton, styles.closeButton]} onPress={() => setShowStockModal(false)}>
               <Text style={styles.closeButtonText}>Close</Text>
             </TouchableOpacity>
           </View>
 
+          {/* Slot assign overlay */}
           {showSlotAssignModal && (
             <View style={styles.slotAssignOverlay}>
               <View style={styles.slotAssignCard}>
@@ -2066,7 +1545,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
                     <MaterialCommunityIcons name="close" size={22} color="#334155" />
                   </TouchableOpacity>
                 </View>
-
                 <View style={styles.depthControlRow}>
                   <Text style={styles.depthControlLabel}>Units stacked in this slot</Text>
                   <View style={styles.depthControlActions}>
@@ -2086,14 +1564,9 @@ export default function VisitExecutionScreen({ route, navigation }) {
                     </TouchableOpacity>
                   </View>
                 </View>
-
                 <ScrollView style={styles.slotAssignList}>
                   {articles.slice(0, 12).map((product) => (
-                    <TouchableOpacity
-                      key={product.id}
-                      style={styles.slotAssignItem}
-                      onPress={() => handleAssignProductToSlot(product.id)}
-                    >
+                    <TouchableOpacity key={product.id} style={styles.slotAssignItem} onPress={() => handleAssignProductToSlot(product.id)}>
                       <View style={[styles.slotAssignColor, { backgroundColor: product.color }]} />
                       <View style={styles.slotAssignTextWrap}>
                         <Text style={styles.slotAssignName}>{product.name}</Text>
@@ -2102,7 +1575,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
-
                 <TouchableOpacity style={styles.slotAssignMissingButton} onPress={handleClearSlotAssignment}>
                   <MaterialCommunityIcons name="delete-outline" size={18} color="#b91c1c" />
                   <Text style={styles.slotAssignMissingText}>Mark Slot as Missing</Text>
@@ -2113,50 +1585,46 @@ export default function VisitExecutionScreen({ route, navigation }) {
         </SafeAreaView>
       </Modal>
 
-      <Modal
-        visible={showPriceModal}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowPriceModal(false)}
-      >
+      {/* ── Price Modal ──────────────────────────────────────────────────────── */}
+      <Modal visible={showPriceModal} animationType="slide" transparent={false} onRequestClose={() => setShowPriceModal(false)}>
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={() => setShowPriceModal(false)}>
               <MaterialCommunityIcons name="close" size={28} color="#111" />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Price Comparison</Text>
+            <Text style={styles.modalTitle}>Prix Concurrents</Text>
             <View style={{ width: 28 }} />
           </View>
 
-          <ScrollView style={styles.modalContent}>
-            <Text style={styles.comparisonLabel}>COMPETITOR NAME</Text>
+          <ScrollView style={styles.modalContent} contentContainerStyle={{ padding: 16 }}>
+            <Text style={styles.comparisonLabel}>NOM DU CONCURRENT</Text>
             <TextInput
               style={styles.comparisonInput}
               value={competitorName}
               onChangeText={setCompetitorName}
-              placeholder="Enter competitor store"
+              placeholder="Entrer le nom du concurrent"
               placeholderTextColor="#9ca3af"
             />
 
-            <Text style={styles.comparisonLabel}>PASTA PRICE MATRIX</Text>
+            <Text style={styles.comparisonLabel}>COMPARAISON DES PRIX</Text>
             {priceComparisons.map((item) => {
               const parsedCompetitorPrice = Number(item.competitorPrice);
               const hasCompetitorPrice = item.competitorPrice !== '' && Number.isFinite(parsedCompetitorPrice);
               const diff = hasCompetitorPrice ? parsedCompetitorPrice - item.ourPrice : null;
-              const isPositiveDiff = hasCompetitorPrice && diff >= 0;
+              const isEqual = hasCompetitorPrice && diff === 0;
+              const weAreCheaper = hasCompetitorPrice && diff > 0;
+              const competitorCheaper = hasCompetitorPrice && diff < 0;
 
               return (
                 <View key={item.id} style={styles.comparisonCard}>
                   <Text style={styles.comparisonProductName}>{item.name}</Text>
-
                   <View style={styles.comparisonPriceRow}>
                     <View style={styles.comparisonPriceBox}>
-                      <Text style={styles.comparisonPriceLabel}>Our Price</Text>
+                      <Text style={styles.comparisonPriceLabel}>Notre Prix</Text>
                       <Text style={styles.comparisonPriceValue}>{formatTndPrice(item.ourPrice)}</Text>
                     </View>
-
                     <View style={styles.comparisonPriceBox}>
-                      <Text style={styles.comparisonPriceLabel}>{competitorName || 'Competitor'}</Text>
+                      <Text style={styles.comparisonPriceLabel}>{competitorName || 'Concurrent'}</Text>
                       <TextInput
                         style={styles.comparisonPriceInput}
                         value={item.competitorPrice}
@@ -2168,20 +1636,54 @@ export default function VisitExecutionScreen({ route, navigation }) {
                     </View>
                   </View>
 
-                  <View style={[
-                    styles.comparisonDiffBadge,
-                    hasCompetitorPrice
-                      ? (isPositiveDiff ? styles.comparisonDiffPositive : styles.comparisonDiffNegative)
-                      : styles.comparisonDiffNeutral,
-                  ]}>
-                    <Text style={styles.comparisonDiffText}>
-                      {!hasCompetitorPrice
-                        ? 'Enter competitor price'
-                        : isPositiveDiff
-                          ? `Our price lower by ${formatTndPrice(Math.abs(diff))}`
-                          : `Competitor lower by ${formatTndPrice(Math.abs(diff))}`}
-                    </Text>
+                  {hasCompetitorPrice && (
+                    <View style={[
+                      styles.comparisonDiffBadge,
+                      weAreCheaper ? styles.comparisonDiffPositive : competitorCheaper ? styles.comparisonDiffNegative : styles.comparisonDiffNeutral,
+                    ]}>
+                      <Text style={[
+                        styles.comparisonDiffText,
+                        weAreCheaper && { color: '#16a34a' },
+                        competitorCheaper && { color: '#dc2626' },
+                        isEqual && { color: '#6b7280' },
+                      ]}>
+                        {weAreCheaper
+                          ? `✅ On est moins cher (${formatTndPrice(Math.abs(diff))})`
+                          : competitorCheaper
+                            ? `❌ Concurrent moins cher (${formatTndPrice(Math.abs(diff))})`
+                            : '➡️ Même prix'}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* FIX: Competitor Facing field restored */}
+                  <View style={styles.comparisonFacingRow}>
+                    <Text style={styles.comparisonFacingLabel}>Facing Concurrent</Text>
+                    <TextInput
+                      style={styles.comparisonFacingInput}
+                      value={item.competitorFacing}
+                      onChangeText={(value) => handleCompetitorFacingChange(item.id, value)}
+                      placeholder="0"
+                      placeholderTextColor="#9ca3af"
+                      keyboardType="number-pad"
+                    />
                   </View>
+
+                  {/* FIX: Photo field restored */}
+                  {item.photo ? (
+                    <View style={styles.comparisonPhotoPreviewWrap}>
+                      <Image source={{ uri: item.photo.uri }} style={styles.comparisonPhotoPreview} />
+                      <TouchableOpacity style={styles.comparisonPhotoChangeBtn} onPress={() => handlePriceComparisonPhoto(item.id)}>
+                        <MaterialCommunityIcons name="camera-retake-outline" size={16} color="#2563eb" />
+                        <Text style={styles.comparisonPhotoChangeBtnText}>Changer</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity style={styles.comparisonPhotoBtn} onPress={() => handlePriceComparisonPhoto(item.id)}>
+                      <MaterialCommunityIcons name="camera-plus-outline" size={18} color="#6b7280" />
+                      <Text style={styles.comparisonPhotoBtnText}>Prendre une Photo</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               );
             })}
@@ -2189,23 +1691,18 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
           <View style={styles.modalFooter}>
             <TouchableOpacity
-              style={[styles.modalButton, styles.saveButton, { marginRight: 0 }]}
+              style={{ backgroundColor: '#2563eb', borderRadius: 12, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' }}
               onPress={handleSavePriceComparison}
             >
-              <MaterialCommunityIcons name="scale-balance" size={20} color="#fff" />
-              <Text style={styles.saveButtonText}>Save Comparison</Text>
+              <MaterialCommunityIcons name="check-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Soumettre la Comparaison</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
       </Modal>
 
-      {/* Alerte Concurrent Modal */}
-      <Modal
-        visible={showAlertModal}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowAlertModal(false)}
-      >
+      {/* ── Alert Modal ──────────────────────────────────────────────────────── */}
+      <Modal visible={showAlertModal} animationType="slide" transparent={false} onRequestClose={() => setShowAlertModal(false)}>
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={() => setShowAlertModal(false)}>
@@ -2216,7 +1713,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
           </View>
 
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
-            {/* Info Card */}
             <View style={styles.alertInfoCard}>
               <View style={styles.alertInfoRow}>
                 <MaterialCommunityIcons name="store" size={18} color="#6b7280" />
@@ -2231,76 +1727,35 @@ export default function VisitExecutionScreen({ route, navigation }) {
               </View>
             </View>
 
-            {/* Competitor Brand */}
             <Text style={styles.alertSectionLabel}>Marque concurrente *</Text>
-            <TextInput
-              style={styles.alertInput}
-              placeholder="Ex: Coca-Cola, Danone..."
-              placeholderTextColor="#9ca3af"
-              value={alertBrand}
-              onChangeText={setAlertBrand}
-            />
+            <TextInput style={styles.alertInput} placeholder="Ex: Coca-Cola, Danone..." placeholderTextColor="#9ca3af" value={alertBrand} onChangeText={setAlertBrand} />
 
-            {/* Alert Type Dropdown */}
             <Text style={styles.alertSectionLabel}>Type d'alerte *</Text>
-            <TouchableOpacity
-              style={styles.alertDropdown}
-              onPress={() => setShowAlertTypeDropdown(!showAlertTypeDropdown)}
-            >
+            <TouchableOpacity style={styles.alertDropdown} onPress={() => setShowAlertTypeDropdown(!showAlertTypeDropdown)}>
               <Text style={alertType ? styles.alertDropdownText : styles.alertDropdownPlaceholder}>
-                {alertType ? ALERT_TYPES.find(t => t.value === alertType)?.label : 'Sélectionner le type...'}
+                {alertType ? ALERT_TYPES.find((t) => t.value === alertType)?.label : 'Sélectionner le type...'}
               </Text>
-              <MaterialCommunityIcons
-                name={showAlertTypeDropdown ? 'chevron-up' : 'chevron-down'}
-                size={22}
-                color="#6b7280"
-              />
+              <MaterialCommunityIcons name={showAlertTypeDropdown ? 'chevron-up' : 'chevron-down'} size={22} color="#6b7280" />
             </TouchableOpacity>
             {showAlertTypeDropdown && (
               <View style={styles.alertDropdownList}>
                 {ALERT_TYPES.map((type) => (
                   <TouchableOpacity
                     key={type.value}
-                    style={[
-                      styles.alertDropdownItem,
-                      alertType === type.value && styles.alertDropdownItemActive,
-                    ]}
-                    onPress={() => {
-                      setAlertType(type.value);
-                      setShowAlertTypeDropdown(false);
-                    }}
+                    style={[styles.alertDropdownItem, alertType === type.value && styles.alertDropdownItemActive]}
+                    onPress={() => { setAlertType(type.value); setShowAlertTypeDropdown(false); }}
                   >
-                    <Text style={[
-                      styles.alertDropdownItemText,
-                      alertType === type.value && styles.alertDropdownItemTextActive,
-                    ]}>
-                      {type.label}
-                    </Text>
-                    {alertType === type.value && (
-                      <MaterialCommunityIcons name="check" size={18} color="#2563eb" />
-                    )}
+                    <Text style={[styles.alertDropdownItemText, alertType === type.value && styles.alertDropdownItemTextActive]}>{type.label}</Text>
+                    {alertType === type.value && <MaterialCommunityIcons name="check" size={18} color="#2563eb" />}
                   </TouchableOpacity>
                 ))}
               </View>
             )}
 
-            {/* Description */}
             <Text style={styles.alertSectionLabel}>Description *</Text>
-            <TextInput
-              style={styles.alertTextInput}
-              placeholder="Décrivez la situation observée..."
-              placeholderTextColor="#9ca3af"
-              value={alertDescription}
-              onChangeText={setAlertDescription}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
+            <TextInput style={styles.alertTextInput} placeholder="Décrivez la situation observée..." placeholderTextColor="#9ca3af" value={alertDescription} onChangeText={setAlertDescription} multiline numberOfLines={4} textAlignVertical="top" />
 
-            {/* Photo */}
-            <Text style={styles.alertSectionLabel}>
-              Photo (preuve visuelle) *
-            </Text>
+            <Text style={styles.alertSectionLabel}>Photo (preuve visuelle) *</Text>
             {alertPhoto ? (
               <View style={styles.alertPhotoContainer}>
                 <Image source={{ uri: alertPhoto.uri }} style={styles.alertPhotoPreview} />
@@ -2315,28 +1770,16 @@ export default function VisitExecutionScreen({ route, navigation }) {
               </TouchableOpacity>
             )}
 
-            {/* Submit */}
-            <TouchableOpacity
-              style={[styles.alertSubmitBtn, alertSubmitting && { opacity: 0.6 }]}
-              onPress={handleSubmitAlert}
-              disabled={alertSubmitting}
-            >
+            <TouchableOpacity style={styles.alertSubmitBtn} onPress={handleSubmitAlert}>
               <MaterialCommunityIcons name="send" size={20} color="#fff" />
-              <Text style={styles.alertSubmitBtnText}>
-                {alertSubmitting ? 'Envoi en cours...' : 'Envoyer l\'alerte'}
-              </Text>
+              <Text style={styles.alertSubmitBtnText}>Envoyer l'alerte</Text>
             </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
       </Modal>
 
-      {/* Ajout Produit Modal */}
-      <Modal
-        visible={showProductModal}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowProductModal(false)}
-      >
+      {/* ── Product Modal ────────────────────────────────────────────────────── */}
+      <Modal visible={showProductModal} animationType="slide" transparent={false} onRequestClose={() => setShowProductModal(false)}>
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={() => setShowProductModal(false)}>
@@ -2347,104 +1790,43 @@ export default function VisitExecutionScreen({ route, navigation }) {
           </View>
 
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
-            {/* Product Name */}
             <Text style={styles.alertSectionLabel}>Nom du produit *</Text>
-            <TextInput
-              style={styles.alertInput}
-              placeholder="Ex: Lait Délice 1L..."
-              placeholderTextColor="#9ca3af"
-              value={productName}
-              onChangeText={setProductName}
-            />
+            <TextInput style={styles.alertInput} placeholder="Ex: Lait Délice 1L..." placeholderTextColor="#9ca3af" value={productName} onChangeText={setProductName} />
 
-            {/* Brand */}
             <Text style={styles.alertSectionLabel}>Marque</Text>
-            <TextInput
-              style={styles.alertInput}
-              placeholder="Ex: Délice, Vitalait..."
-              placeholderTextColor="#9ca3af"
-              value={productBrand}
-              onChangeText={setProductBrand}
-            />
+            <TextInput style={styles.alertInput} placeholder="Ex: Délice, Vitalait..." placeholderTextColor="#9ca3af" value={productBrand} onChangeText={setProductBrand} />
 
-            {/* Category Dropdown */}
             <Text style={styles.alertSectionLabel}>Catégorie *</Text>
-            <TouchableOpacity
-              style={styles.alertDropdown}
-              onPress={() => setShowProductCategoryDropdown(!showProductCategoryDropdown)}
-            >
+            <TouchableOpacity style={styles.alertDropdown} onPress={() => setShowProductCategoryDropdown(!showProductCategoryDropdown)}>
               <Text style={productCategory ? styles.alertDropdownText : styles.alertDropdownPlaceholder}>
-                {productCategory ? PRODUCT_CATEGORIES.find(c => c.value === productCategory)?.label : 'Sélectionner...'}
+                {productCategory ? PRODUCT_CATEGORIES.find((c) => c.value === productCategory)?.label : 'Sélectionner...'}
               </Text>
-              <MaterialCommunityIcons
-                name={showProductCategoryDropdown ? 'chevron-up' : 'chevron-down'}
-                size={22}
-                color="#6b7280"
-              />
+              <MaterialCommunityIcons name={showProductCategoryDropdown ? 'chevron-up' : 'chevron-down'} size={22} color="#6b7280" />
             </TouchableOpacity>
             {showProductCategoryDropdown && (
               <View style={styles.alertDropdownList}>
                 {PRODUCT_CATEGORIES.map((cat) => (
                   <TouchableOpacity
                     key={cat.value}
-                    style={[
-                      styles.alertDropdownItem,
-                      productCategory === cat.value && styles.alertDropdownItemActive,
-                    ]}
-                    onPress={() => {
-                      setProductCategory(cat.value);
-                      setShowProductCategoryDropdown(false);
-                    }}
+                    style={[styles.alertDropdownItem, productCategory === cat.value && styles.alertDropdownItemActive]}
+                    onPress={() => { setProductCategory(cat.value); setShowProductCategoryDropdown(false); }}
                   >
-                    <Text style={[
-                      styles.alertDropdownItemText,
-                      productCategory === cat.value && styles.alertDropdownItemTextActive,
-                    ]}>
-                      {cat.label}
-                    </Text>
-                    {productCategory === cat.value && (
-                      <MaterialCommunityIcons name="check" size={18} color="#2563eb" />
-                    )}
+                    <Text style={[styles.alertDropdownItemText, productCategory === cat.value && styles.alertDropdownItemTextActive]}>{cat.label}</Text>
+                    {productCategory === cat.value && <MaterialCommunityIcons name="check" size={18} color="#2563eb" />}
                   </TouchableOpacity>
                 ))}
               </View>
             )}
 
-            {/* Price */}
             <Text style={styles.alertSectionLabel}>Prix (TND) *</Text>
-            <TextInput
-              style={styles.alertInput}
-              placeholder="Ex: 2.450"
-              placeholderTextColor="#9ca3af"
-              value={productPrice}
-              onChangeText={setProductPrice}
-              keyboardType="decimal-pad"
-            />
+            <TextInput style={styles.alertInput} placeholder="Ex: 2.450" placeholderTextColor="#9ca3af" value={productPrice} onChangeText={setProductPrice} keyboardType="decimal-pad" />
 
-            {/* SKU */}
             <Text style={styles.alertSectionLabel}>Code / SKU</Text>
-            <TextInput
-              style={styles.alertInput}
-              placeholder="Optionnel - code barre..."
-              placeholderTextColor="#9ca3af"
-              value={productSku}
-              onChangeText={setProductSku}
-            />
+            <TextInput style={styles.alertInput} placeholder="Optionnel - code barre..." placeholderTextColor="#9ca3af" value={productSku} onChangeText={setProductSku} />
 
-            {/* Description */}
             <Text style={styles.alertSectionLabel}>Description</Text>
-            <TextInput
-              style={styles.alertTextInput}
-              placeholder="Description du produit..."
-              placeholderTextColor="#9ca3af"
-              value={productDescription}
-              onChangeText={setProductDescription}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
+            <TextInput style={styles.alertTextInput} placeholder="Description du produit..." placeholderTextColor="#9ca3af" value={productDescription} onChangeText={setProductDescription} multiline numberOfLines={3} textAlignVertical="top" />
 
-            {/* Photo */}
             <Text style={styles.alertSectionLabel}>Photo du produit</Text>
             {productPhoto ? (
               <View style={styles.alertPhotoContainer}>
@@ -2460,16 +1842,13 @@ export default function VisitExecutionScreen({ route, navigation }) {
               </TouchableOpacity>
             )}
 
-            {/* Submit */}
             <TouchableOpacity
               style={[styles.alertSubmitBtn, productSubmitting && { opacity: 0.6 }]}
               onPress={handleSubmitProduct}
               disabled={productSubmitting}
             >
               <MaterialCommunityIcons name="plus-circle" size={20} color="#fff" />
-              <Text style={styles.alertSubmitBtnText}>
-                {productSubmitting ? 'Ajout en cours...' : 'Ajouter le produit'}
-              </Text>
+              <Text style={styles.alertSubmitBtnText}>{productSubmitting ? 'Ajout en cours...' : 'Ajouter le produit'}</Text>
             </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
@@ -2479,1504 +1858,222 @@ export default function VisitExecutionScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    backgroundColor: '#fff',
-  },
-  headerButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1f2937',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 14,
-  },
-  contentContainer: {
-    paddingBottom: 120,
-  },
-  completedBanner: {
-    backgroundColor: '#d1fae5',
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#86efac',
-  },
-  completedBannerContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  completedBannerTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#065f46',
-    marginBottom: 4,
-  },
-  completedBannerText: {
-    fontSize: 13,
-    color: '#047857',
-    lineHeight: 18,
-  },
-  heroCard: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    elevation: 4,
-  },
-  heroTopRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  heroTextWrap: {
-    flex: 1,
-  },
-  storeName: {
-    fontSize: 27,
-    fontWeight: '800',
-    color: '#1f2937',
-    marginBottom: 6,
-  },
-  addressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  storeAddress: {
-    fontSize: 14,
-    color: '#6b7280',
-    flex: 1,
-  },
-  visitStatusChip: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    minWidth: 96,
-    alignItems: 'center',
-  },
-  visitStatusChipText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  heroMetaRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
-  },
-  timerBox: {
-    flex: 1.15,
-    borderRadius: 18,
-    backgroundColor: '#fff5f5',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-  },
-  progressBox: {
-    flex: 0.85,
-    borderRadius: 18,
-    backgroundColor: '#f4f7fb',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-  },
-  timerValue: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#111111',
-    letterSpacing: 1,
-  },
-  timerLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 4,
-    fontWeight: '600',
-  },
-  progressValue: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#111827',
-  },
-  progressLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 4,
-    fontWeight: '600',
-  },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#faf5f5',
-    borderRadius: 18,
-    padding: 4,
-    marginBottom: 18,
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: 14,
-    alignItems: 'center',
-  },
-  tabButtonActive: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  tabButtonText: {
-    fontSize: 13,
-    color: '#94a3b8',
-    fontWeight: '700',
-  },
-  tabButtonTextActive: {
-    color: '#2563eb',
-  },
-  quickGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  quickActionCard: {
-    width: '48.2%',
-    backgroundColor: '#ffffff',
-    borderRadius: 22,
-    paddingVertical: 26,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    marginBottom: 14,
-    minHeight: 112,
-    borderWidth: 1,
-    borderColor: '#edf0f5',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    elevation: 2,
-    position: 'relative',
-  },
-  quickActionCardDisabled: {
-    opacity: 0.55,
-    borderStyle: 'dashed',
-  },
-  quickActionIconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  quickActionTitle: {
-    textAlign: 'center',
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  quickActionTitleDisabled: {
-    color: '#94a3b8',
-  },
-  quickActionDoneBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#dcfce7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  activitySection: {
-    marginBottom: 10,
-  },
-  sectionEyebrow: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#b7bfd0',
-    letterSpacing: 1,
-    marginBottom: 12,
-  },
-  activityCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 18,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#eef2f7',
-  },
-  emptyActivityCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#eef2f7',
-  },
-  emptyActivityText: {
-    color: '#94a3b8',
-    fontSize: 14,
-  },
-  activityIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#334155',
-    marginBottom: 3,
-  },
-  activitySubtitle: {
-    fontSize: 12,
-    color: '#94a3b8',
-  },
-  tabPanel: {
-    marginBottom: 18,
-  },
-  articleToolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-    gap: 10,
-  },
-  searchBox: {
-    flex: 1,
-    height: 46,
-    borderRadius: 15,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#edf1f6',
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#334155',
-    paddingVertical: 0,
-  },
-  filterButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 15,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#edf1f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  articleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#eef2f7',
-    paddingHorizontal: 10,
-    paddingVertical: 14,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.03,
-    shadowRadius: 12,
-    elevation: 2,
-  },
-  articleCardActive: {
-    borderColor: '#fecaca',
-    backgroundColor: '#fffdfd',
-  },
-  articleThumb: {
-    width: 52,
-    height: 52,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  articleDetails: {
-    flex: 1,
-    paddingRight: 10,
-  },
-  articleName: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#334155',
-  },
-  articleMeta: {
-    fontSize: 12,
-    color: '#94a3b8',
-    marginTop: 3,
-  },
-  articlePrice: {
-    fontSize: 22,
-    lineHeight: 24,
-    fontWeight: '800',
-    color: '#2f67ff',
-    marginTop: 6,
-  },
-  ruptureBadge: {
-    minWidth: 78,
-    height: 34,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#dce4ef',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    backgroundColor: '#ffffff',
-  },
-  ruptureBadgeActive: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
-  },
-  ruptureBadgeText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#b2bed1',
-  },
-  ruptureBadgeTextActive: {
-    color: '#ffffff',
-  },
-  emptyArticleState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 34,
-    backgroundColor: '#ffffff',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#eef2f7',
-  },
-  emptyArticleText: {
-    fontSize: 14,
-    color: '#94a3b8',
-    marginTop: 10,
-  },
-  comparisonLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#94a3b8',
-    letterSpacing: 0.6,
-    marginBottom: 8,
-    marginTop: 6,
-  },
-  comparisonInput: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: '#0f172a',
-    marginBottom: 12,
-  },
-  comparisonCard: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 14,
-    marginBottom: 12,
-  },
-  comparisonProductName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 10,
-  },
-  comparisonPriceRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 10,
-  },
-  comparisonPriceBox: {
-    flex: 1,
-  },
-  comparisonPriceLabel: {
-    fontSize: 12,
-    color: '#64748b',
-    marginBottom: 6,
-    fontWeight: '600',
-  },
-  comparisonPriceValue: {
-    fontSize: 14,
-    color: '#2563eb',
-    fontWeight: '700',
-    backgroundColor: '#eff6ff',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
-  comparisonPriceInput: {
-    fontSize: 14,
-    color: '#111827',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: '#fff',
-  },
-  comparisonDiffBadge: {
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-  },
-  comparisonDiffPositive: {
-    backgroundColor: '#dcfce7',
-  },
-  comparisonDiffNegative: {
-    backgroundColor: '#fee2e2',
-  },
-  comparisonDiffNeutral: {
-    backgroundColor: '#f1f5f9',
-  },
-  comparisonDiffText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  infoCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#eef2f7',
-    padding: 16,
-    marginBottom: 18,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  infoLabel: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  infoValue: {
-    fontSize: 13,
-    color: '#0f172a',
-    fontWeight: '700',
-    maxWidth: '58%',
-    textAlign: 'right',
-  },
-  notesInput: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 16,
-    fontSize: 14,
-    color: '#111',
-    minHeight: 150,
-    borderWidth: 1,
-    borderColor: '#eef2f7',
-    marginBottom: 14,
-  },
-  secondaryButton: {
-    borderRadius: 16,
-    backgroundColor: '#f4f7fb',
-    paddingVertical: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  secondaryButtonDisabled: {
-    backgroundColor: '#f8fafc',
-  },
-  secondaryButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  secondaryButtonTextDisabled: {
-    color: '#94a3b8',
-  },
-  syncStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  syncText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2563eb',
-    marginLeft: 6,
-    letterSpacing: 0.5,
-  },
-  footerCtaWrap: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 18,
-    backgroundColor: '#ffffff',
-  },
-  footerCtaButton: {
-    height: 56,
-    borderRadius: 18,
-    backgroundColor: '#2563eb',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#2563eb',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  footerCtaButtonDisabled: {
-    backgroundColor: '#93c5fd',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  footerCtaText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#ffffff',
-    marginLeft: 8,
-    letterSpacing: 0.5,
-  },
-  footerHelperText: {
-    textAlign: 'center',
-    color: '#94a3b8',
-    fontSize: 12,
-    marginTop: 8,
-  },
-  // Modal Styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111',
-  },
-  modalContent: {
-    flex: 1,
-    padding: 16,
-  },
-  modalFooter: {
-    padding: 16,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-  },
-  modalButton: {
-    backgroundColor: '#2563eb',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  modalButtonSuccess: {
-    backgroundColor: '#10b981',
-  },
-  modalButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  // Alert Modal Styles
-  alertInfoCard: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  alertInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  alertInfoLabel: {
-    fontSize: 13,
-    color: '#6b7280',
-    width: 70,
-  },
-  alertInfoValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-    flex: 1,
-  },
-  alertInfoDivider: {
-    height: 1,
-    backgroundColor: '#e5e7eb',
-    marginVertical: 10,
-  },
-  alertDescriptionHint: {
-    fontSize: 13,
-    color: '#6b7280',
-    lineHeight: 19,
-    marginBottom: 4,
-    marginTop: 12,
-  },
-  alertSectionLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#374151',
-    marginBottom: 8,
-    marginTop: 16,
-  },
-  alertInput: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 14,
-    fontSize: 14,
-    color: '#111',
-    marginBottom: 4,
-  },
-  alertDropdown: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 14,
-    marginBottom: 4,
-  },
-  alertDropdownText: {
-    fontSize: 14,
-    color: '#111',
-    fontWeight: '500',
-  },
-  alertDropdownPlaceholder: {
-    fontSize: 14,
-    color: '#9ca3af',
-  },
-  alertDropdownList: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    marginBottom: 4,
-    overflow: 'hidden',
-  },
-  alertDropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  alertDropdownItemActive: {
-    backgroundColor: '#eff6ff',
-  },
-  alertDropdownItemText: {
-    fontSize: 14,
-    color: '#374151',
-  },
-  alertDropdownItemTextActive: {
-    color: '#2563eb',
-    fontWeight: '600',
-  },
-  alertTextInput: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 14,
-    fontSize: 14,
-    color: '#111',
-    minHeight: 100,
-    marginBottom: 4,
-  },
-  alertPhotoContainer: {
-    alignItems: 'center',
-    marginBottom: 16,
-    position: 'relative',
-  },
-  alertPhotoPreview: {
-    width: '100%',
-    height: 220,
-    borderRadius: 12,
-  },
-  alertRemovePhoto: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-  },
-  alertPhotoButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
-  },
-  alertPhotoBtn: {
-    flex: 1,
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 20,
-    borderRadius: 12,
-    backgroundColor: '#f0f5ff',
-    borderWidth: 1.5,
-    borderColor: '#dbeafe',
-    borderStyle: 'dashed',
-  },
-  alertPhotoBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#2563eb',
-  },
-  alertSubmitBtn: {
-    backgroundColor: '#2563eb',
-    borderRadius: 12,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 20,
-    marginBottom: 30,
-  },
-  alertSubmitBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-
-  // Photo Modal Styles
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 80,
-  },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginTop: 16,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#9ca3af',
-    marginTop: 8,
-  },
-  photoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  photoCard: {
-    width: '48%',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 8,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  photoImage: {
-    width: '100%',
-    height: 150,
-    borderRadius: 8,
-    backgroundColor: '#e5e7eb',
-  },
-  deletePhotoButton: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: '#2563eb',
-    borderRadius: 20,
-    padding: 6,
-  },
-  photoLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  photoCount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  // Stock Modal Styles
-  stockList: {
-    padding: 16,
-  },
-  facingSummaryBox: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 2,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: '#eff6ff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  facingSummaryLabel: {
-    fontSize: 13,
-    color: '#1e3a8a',
-    fontWeight: '700',
-  },
-  facingSummaryValue: {
-    fontSize: 18,
-    color: '#2563eb',
-    fontWeight: '800',
-  },
-  unifiedFacingCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 14,
-  },
-  unifiedFacingExpectedText: {
-    fontSize: 14,
-    color: '#0f172a',
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  unifiedFacingHint: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 10,
-    marginBottom: 8,
-  },
-  facingProofRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 10,
-  },
-  facingProofButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#eff6ff',
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  facingProofButtonText: {
-    marginLeft: 6,
-    fontSize: 12,
-    color: '#1d4ed8',
-    fontWeight: '700',
-  },
-  facingProofThumb: {
-    width: 42,
-    height: 42,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-  },
-  unifiedFacingStats: {
-    fontSize: 12,
-    color: '#334155',
-    fontWeight: '700',
-    marginTop: 10,
-  },
-  productQtySection: {
-    marginTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    paddingTop: 10,
-  },
-  productQtyItem: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-    paddingBottom: 8,
-    marginBottom: 4,
-  },
-  productQtyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    gap: 8,
-  },
-  productQtySwatch: {
-    width: 12,
-    height: 12,
-    borderRadius: 3,
-  },
-  productQtyInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
-  productQtyName: {
-    fontSize: 12,
-    color: '#0f172a',
-    fontWeight: '700',
-  },
-  productQtyMeta: {
-    fontSize: 11,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  productQtyExpectedWrap: {
-    width: 76,
-  },
-  productQtyExpectedLabel: {
-    fontSize: 10,
-    color: '#64748b',
-    marginBottom: 3,
-    fontWeight: '700',
-  },
-  productQtyExpectedInput: {
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 8,
-    backgroundColor: '#fff',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    fontSize: 12,
-    color: '#0f172a',
-    textAlign: 'center',
-  },
-  productQtyExpectedStatic: {
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 8,
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    alignItems: 'center',
-  },
-  productQtyExpectedStaticText: {
-    fontSize: 12,
-    color: '#0f172a',
-    fontWeight: '700',
-  },
-  productQtyGapBadge: {
-    minWidth: 42,
-    borderRadius: 999,
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-  },
-  productQtyGapPositive: {
-    backgroundColor: '#dcfce7',
-  },
-  productQtyGapNegative: {
-    backgroundColor: '#fee2e2',
-  },
-  productQtyGapText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#334155',
-  },
-  productQtyAssignButton: {
-    alignSelf: 'flex-end',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#eff6ff',
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginRight: 2,
-  },
-  productQtyAssignText: {
-    marginLeft: 6,
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#1d4ed8',
-  },
-  stockItem: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  stockItemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  stockItemInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  stockSku: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginBottom: 4,
-  },
-  stockName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111',
-  },
-  facingExpectedBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: '#f1f5f9',
-  },
-  facingExpectedText: {
-    fontSize: 11,
-    color: '#334155',
-    fontWeight: '700',
-  },
-  stockStatusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  stockStatusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#fff',
-    textTransform: 'uppercase',
-  },
-  stockItemBody: {
-    gap: 12,
-  },
-  facingMetricRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-  },
-  facingGridInputRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  facingGridInputBlock: {
-    flex: 1,
-  },
-  facingSmallInput: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 15,
-    color: '#111827',
-    marginTop: 6,
-  },
-  facingGridPreviewWrap: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 12,
-    gap: 10,
-  },
-  shelfCompareRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  shelfCompareScroll: {
-    marginHorizontal: -2,
-  },
-  shelfCompareContent: {
-    paddingHorizontal: 2,
-  },
-  shelfPanel: {
-    flex: 1,
-    minWidth: 280,
-  },
-  shelfPanelTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#64748b',
-    marginBottom: 6,
-  },
-  shelfFrame: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-  },
-  shelfRail: {
-    width: 6,
-    borderRadius: 4,
-    backgroundColor: '#94a3b8',
-    marginHorizontal: 4,
-  },
-  shelfGridArea: {
-    flex: 1,
-    gap: 10,
-  },
-  shelfRowBlock: {
-    gap: 6,
-  },
-  shelfLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748b',
-    marginLeft: 2,
-  },
-  facingGridRowPreview: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  shelfPlank: {
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#d1d5db',
-    marginTop: 2,
-  },
-  facingGridCell: {
-    width: 34,
-    height: 44,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  facingCellContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  facingProductText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  facingDepthText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#ffffff',
-    marginTop: 2,
-  },
-  facingGridCellFilled: {
-    backgroundColor: '#34d399',
-    borderColor: '#10b981',
-  },
-  facingGridCellMissing: {
-    backgroundColor: '#ffffff',
-    borderColor: '#cbd5e1',
-    borderStyle: 'dashed',
-  },
-  facingGridCellMismatch: {
-    borderColor: '#f59e0b',
-    borderWidth: 2,
-  },
-  facingGridCellUnassigned: {
-    borderColor: '#f97316',
-    borderWidth: 2,
-    backgroundColor: '#fde68a',
-  },
-  facingLegendRow: {
-    flexDirection: 'row',
-    gap: 16,
-    marginTop: 10,
-    flexWrap: 'wrap',
-  },
-  facingLegendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  facingLegendDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 4,
-    borderWidth: 1,
-  },
-  facingLegendText: {
-    fontSize: 12,
-    color: '#475569',
-    fontWeight: '700',
-  },
-  slotAssignOverlay: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: 'rgba(15,23,42,0.45)',
-    justifyContent: 'flex-end',
-    zIndex: 50,
-  },
-  slotAssignCard: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 20,
-    maxHeight: '72%',
-  },
-  slotAssignHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  depthControlRow: {
-    marginBottom: 12,
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#f8fafc',
-  },
-  depthControlLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#475569',
-    marginBottom: 8,
-  },
-  depthControlActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-  },
-  depthControlButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffffff',
-  },
-  depthControlInput: {
-    width: 54,
-    marginHorizontal: 8,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 8,
-    backgroundColor: '#ffffff',
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0f172a',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-  },
-  slotAssignTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0f172a',
-  },
-  slotAssignList: {
-    maxHeight: 360,
-  },
-  slotAssignItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eef2f7',
-  },
-  slotAssignColor: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
-    marginRight: 10,
-  },
-  slotAssignTextWrap: {
-    flex: 1,
-  },
-  slotAssignName: {
-    fontSize: 13,
-    color: '#0f172a',
-    fontWeight: '700',
-  },
-  slotAssignMeta: {
-    fontSize: 11,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  slotAssignMissingButton: {
-    marginTop: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    backgroundColor: '#fef2f2',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-  },
-  slotAssignMissingText: {
-    marginLeft: 6,
-    color: '#b91c1c',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  stockCurrentInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-  },
-  stockLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  stockValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111',
-  },
-  stockInputContainer: {
-    gap: 8,
-  },
-  stockInput: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: '#111',
-  },
-  toggleStatusButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  toggleStatusText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  facingToggleRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  facingToggleChip: {
-    flex: 1,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#fff',
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  facingToggleChipActive: {
-    backgroundColor: '#fee2e2',
-    borderColor: '#f87171',
-  },
-  facingToggleText: {
-    fontSize: 12,
-    color: '#475569',
-    fontWeight: '700',
-  },
-  facingToggleTextActive: {
-    color: '#b91c1c',
-  },
-  emptyStock: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyStockText: {
-    fontSize: 16,
-    color: '#9ca3af',
-    marginTop: 12,
-  },
-  saveButton: {
-    backgroundColor: '#2563eb',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    flex: 1,
-    marginRight: 8,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  closeButton: {
-    backgroundColor: '#f3f4f6',
-    flex: 0.5,
-  },
-  closeButtonText: {
-    color: '#374151',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  safe: { flex: 1, backgroundColor: '#ffffff' },
+  container: { flex: 1, backgroundColor: '#ffffff' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, paddingVertical: 10, backgroundColor: '#fff' },
+  headerButton: { padding: 8 },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#1f2937' },
+  content: { flex: 1, paddingHorizontal: 14 },
+  contentContainer: { paddingBottom: 120 },
+  completedBanner: { backgroundColor: '#d1fae5', borderRadius: 18, padding: 16, marginBottom: 14, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#86efac' },
+  completedBannerContent: { flex: 1, marginLeft: 12 },
+  completedBannerTitle: { fontSize: 16, fontWeight: '700', color: '#065f46', marginBottom: 4 },
+  completedBannerText: { fontSize: 13, color: '#047857', lineHeight: 18 },
+  heroCard: { backgroundColor: '#fff', borderRadius: 20, padding: 18, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.06, shadowRadius: 18, elevation: 4 },
+  heroTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  heroTextWrap: { flex: 1 },
+  storeName: { fontSize: 27, fontWeight: '800', color: '#1f2937', marginBottom: 6 },
+  addressRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  storeAddress: { fontSize: 14, color: '#6b7280', flex: 1 },
+  visitStatusChip: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, minWidth: 96, alignItems: 'center' },
+  visitStatusChipText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  heroMetaRow: { flexDirection: 'row', gap: 12, marginTop: 16 },
+  timerBox: { flex: 1.15, borderRadius: 18, backgroundColor: '#fff5f5', paddingVertical: 14, paddingHorizontal: 14 },
+  progressBox: { flex: 0.85, borderRadius: 18, backgroundColor: '#f4f7fb', paddingVertical: 14, paddingHorizontal: 14 },
+  timerValue: { fontSize: 22, fontWeight: '800', color: '#111111', letterSpacing: 1 },
+  timerLabel: { fontSize: 12, color: '#6b7280', marginTop: 4, fontWeight: '600' },
+  progressValue: { fontSize: 22, fontWeight: '800', color: '#111827' },
+  progressLabel: { fontSize: 12, color: '#6b7280', marginTop: 4, fontWeight: '600' },
+  tabBar: { flexDirection: 'row', backgroundColor: '#faf5f5', borderRadius: 18, padding: 4, marginBottom: 18 },
+  tabButton: { flex: 1, paddingVertical: 11, borderRadius: 14, alignItems: 'center' },
+  tabButtonActive: { backgroundColor: '#ffffff', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 10, elevation: 2 },
+  tabButtonText: { fontSize: 13, color: '#94a3b8', fontWeight: '700' },
+  tabButtonTextActive: { color: '#2563eb' },
+  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 20 },
+  quickActionCard: { width: '48.2%', backgroundColor: '#ffffff', borderRadius: 22, paddingVertical: 26, paddingHorizontal: 14, alignItems: 'center', marginBottom: 14, minHeight: 112, borderWidth: 1, borderColor: '#edf0f5', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 2, position: 'relative' },
+  quickActionCardDisabled: { opacity: 0.55, borderStyle: 'dashed' },
+  quickActionIconWrap: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  quickActionTitle: { textAlign: 'center', fontSize: 15, fontWeight: '700', color: '#334155' },
+  quickActionTitleDisabled: { color: '#94a3b8' },
+  quickActionDoneBadge: { position: 'absolute', top: 12, right: 12, width: 20, height: 20, borderRadius: 10, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center' },
+  activitySection: { marginBottom: 10 },
+  sectionEyebrow: { fontSize: 12, fontWeight: '700', color: '#b7bfd0', letterSpacing: 1, marginBottom: 12 },
+  activityCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 14, borderRadius: 18, marginBottom: 12, borderWidth: 1, borderColor: '#eef2f7' },
+  emptyActivityCard: { backgroundColor: '#ffffff', borderRadius: 18, padding: 18, borderWidth: 1, borderColor: '#eef2f7' },
+  emptyActivityText: { color: '#94a3b8', fontSize: 14 },
+  activityIconWrap: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  activityContent: { flex: 1 },
+  activityTitle: { fontSize: 14, fontWeight: '800', color: '#334155', marginBottom: 3 },
+  activitySubtitle: { fontSize: 12, color: '#94a3b8' },
+  tabPanel: { marginBottom: 18 },
+  articleToolbar: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 10 },
+  searchBox: { flex: 1, height: 46, borderRadius: 15, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#edf1f6', paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center' },
+  searchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: '#334155', paddingVertical: 0 },
+  filterButton: { width: 46, height: 46, borderRadius: 15, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#edf1f6', alignItems: 'center', justifyContent: 'center' },
+  articleCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#eef2f7', paddingHorizontal: 10, paddingVertical: 14, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.03, shadowRadius: 12, elevation: 2 },
+  articleCardActive: { borderColor: '#fecaca', backgroundColor: '#fffdfd' },
+  articleThumb: { width: 52, height: 52, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  articleDetails: { flex: 1, paddingRight: 10 },
+  articleName: { fontSize: 14, fontWeight: '800', color: '#334155' },
+  articleMeta: { fontSize: 12, color: '#94a3b8', marginTop: 3 },
+  articlePrice: { fontSize: 22, lineHeight: 24, fontWeight: '800', color: '#2f67ff', marginTop: 6 },
+  ruptureBadge: { minWidth: 78, height: 34, borderRadius: 12, borderWidth: 1, borderColor: '#dce4ef', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, backgroundColor: '#ffffff' },
+  ruptureBadgeActive: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  ruptureBadgeText: { fontSize: 12, fontWeight: '800', color: '#b2bed1' },
+  ruptureBadgeTextActive: { color: '#ffffff' },
+  emptyArticleState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 34, backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#eef2f7' },
+  emptyArticleText: { fontSize: 14, color: '#94a3b8', marginTop: 10 },
+  infoCard: { backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 1, borderColor: '#eef2f7', padding: 16, marginBottom: 18 },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
+  infoLabel: { fontSize: 13, color: '#64748b', fontWeight: '600' },
+  infoValue: { fontSize: 13, color: '#0f172a', fontWeight: '700', maxWidth: '58%', textAlign: 'right' },
+  notesInput: { backgroundColor: '#fff', borderRadius: 18, padding: 16, fontSize: 14, color: '#111', minHeight: 150, borderWidth: 1, borderColor: '#eef2f7', marginBottom: 14 },
+  secondaryButton: { borderRadius: 16, backgroundColor: '#f4f7fb', paddingVertical: 14, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 },
+  secondaryButtonDisabled: { backgroundColor: '#f8fafc' },
+  secondaryButtonText: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  secondaryButtonTextDisabled: { color: '#94a3b8' },
+  syncStatus: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  syncText: { fontSize: 12, fontWeight: '600', color: '#2563eb', marginLeft: 6, letterSpacing: 0.5 },
+  footerCtaWrap: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 18, backgroundColor: '#ffffff' },
+  footerHelperText: { textAlign: 'center', color: '#94a3b8', fontSize: 12, marginBottom: 8 },
+  footerCtaButton: { height: 56, borderRadius: 18, backgroundColor: '#2563eb', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', shadowColor: '#2563eb', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16, elevation: 6 },
+  footerCtaButtonDisabled: { backgroundColor: '#93c5fd', shadowOpacity: 0, elevation: 0 },
+  footerCtaText: { fontSize: 16, fontWeight: '800', color: '#ffffff', marginLeft: 8, letterSpacing: 0.5 },
+  modalContainer: { flex: 1, backgroundColor: '#f8f9fa' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#111' },
+  modalContent: { flex: 1, padding: 16 },
+  modalFooter: { padding: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e5e7eb', flexDirection: 'row' },
+  modalButton: { backgroundColor: '#2563eb', borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
+  modalButtonSuccess: { backgroundColor: '#10b981' },
+  modalButtonText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 80 },
+  emptyStateText: { fontSize: 18, fontWeight: '600', color: '#6b7280', marginTop: 16 },
+  emptyStateSubtext: { fontSize: 14, color: '#9ca3af', marginTop: 8 },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  photoCard: { width: '48%', backgroundColor: '#fff', borderRadius: 12, padding: 8, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
+  photoImage: { width: '100%', height: 150, borderRadius: 8, backgroundColor: '#e5e7eb' },
+  deletePhotoButton: { position: 'absolute', top: 12, right: 12, backgroundColor: '#2563eb', borderRadius: 20, padding: 6 },
+  photoLabel: { fontSize: 12, fontWeight: '600', color: '#6b7280', marginTop: 8, textAlign: 'center' },
+  photoCount: { fontSize: 14, fontWeight: '600', color: '#6b7280', marginBottom: 12, textAlign: 'center' },
+  facingSummaryBox: { marginHorizontal: 16, marginTop: 12, marginBottom: 2, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#eff6ff', borderRadius: 12, borderWidth: 1, borderColor: '#bfdbfe', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  facingSummaryLabel: { fontSize: 13, color: '#1e3a8a', fontWeight: '700' },
+  facingSummaryValue: { fontSize: 18, color: '#2563eb', fontWeight: '800' },
+  unifiedFacingCard: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', padding: 14 },
+  unifiedFacingHint: { fontSize: 12, color: '#64748b', marginTop: 10, marginBottom: 8 },
+  facingProofRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  facingProofButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  facingProofButtonText: { marginLeft: 6, fontSize: 12, color: '#1d4ed8', fontWeight: '700' },
+  facingProofThumb: { width: 42, height: 42, borderRadius: 8, borderWidth: 1, borderColor: '#cbd5e1' },
+  unifiedFacingStats: { fontSize: 12, color: '#334155', fontWeight: '700', marginTop: 10 },
+  productQtySection: { marginTop: 14, borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 10 },
+  productQtyItem: { borderBottomWidth: 1, borderBottomColor: '#f1f5f9', paddingBottom: 8, marginBottom: 4 },
+  productQtyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 8 },
+  productQtySwatch: { width: 12, height: 12, borderRadius: 3 },
+  productQtyInfo: { flex: 1, minWidth: 0 },
+  productQtyName: { fontSize: 12, color: '#0f172a', fontWeight: '700' },
+  productQtyMeta: { fontSize: 11, color: '#64748b', marginTop: 2 },
+  productQtyExpectedWrap: { width: 76 },
+  productQtyExpectedLabel: { fontSize: 10, color: '#64748b', marginBottom: 3, fontWeight: '700' },
+  productQtyExpectedStatic: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, backgroundColor: '#f8fafc', paddingHorizontal: 8, paddingVertical: 6, alignItems: 'center' },
+  productQtyExpectedStaticText: { fontSize: 12, color: '#0f172a', fontWeight: '700' },
+  productQtyGapBadge: { minWidth: 42, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 8, alignItems: 'center' },
+  productQtyGapPositive: { backgroundColor: '#dcfce7' },
+  productQtyGapNegative: { backgroundColor: '#fee2e2' },
+  productQtyGapText: { fontSize: 11, fontWeight: '800', color: '#334155' },
+  productQtyAssignButton: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginRight: 2 },
+  productQtyAssignText: { marginLeft: 6, fontSize: 11, fontWeight: '700', color: '#1d4ed8' },
+  comparisonLabel: { fontSize: 12, fontWeight: '700', color: '#94a3b8', letterSpacing: 0.6, marginBottom: 8, marginTop: 6 },
+  comparisonInput: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#0f172a', marginBottom: 12 },
+  comparisonCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e5e7eb', padding: 14, marginBottom: 12 },
+  comparisonProductName: { fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 10 },
+  comparisonPriceRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
+  comparisonPriceBox: { flex: 1 },
+  comparisonPriceLabel: { fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: '600' },
+  comparisonPriceValue: { fontSize: 14, color: '#2563eb', fontWeight: '700', backgroundColor: '#eff6ff', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 10 },
+  comparisonPriceInput: { fontSize: 14, color: '#111827', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fff' },
+  comparisonDiffBadge: { borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10 },
+  comparisonDiffPositive: { backgroundColor: '#dcfce7' },
+  comparisonDiffNegative: { backgroundColor: '#fee2e2' },
+  comparisonDiffNeutral: { backgroundColor: '#f1f5f9' },
+  comparisonDiffText: { fontSize: 12, fontWeight: '700', color: '#334155' },
+  comparisonFacingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  comparisonFacingLabel: { fontSize: 12, fontWeight: '600', color: '#64748b' },
+  comparisonFacingInput: { fontSize: 14, color: '#111827', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#fff', width: 70, textAlign: 'center' },
+  comparisonPhotoBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: '#e5e7eb', borderStyle: 'dashed', backgroundColor: '#f9fafb' },
+  comparisonPhotoBtnText: { fontSize: 13, fontWeight: '600', color: '#6b7280' },
+  comparisonPhotoPreviewWrap: { marginTop: 10, borderRadius: 10, overflow: 'hidden', position: 'relative' },
+  comparisonPhotoPreview: { width: '100%', height: 140, borderRadius: 10, backgroundColor: '#e5e7eb' },
+  comparisonPhotoChangeBtn: { position: 'absolute', bottom: 8, right: 8, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },
+  comparisonPhotoChangeBtnText: { fontSize: 11, fontWeight: '600', color: '#2563eb' },
+  shelfCompareRow: { flexDirection: 'row', gap: 10 },
+  shelfCompareScroll: { marginHorizontal: -2 },
+  shelfCompareContent: { paddingHorizontal: 2 },
+  shelfPanel: { flex: 1, minWidth: 280 },
+  shelfPanelTitle: { fontSize: 12, fontWeight: '700', color: '#64748b', marginBottom: 6 },
+  shelfFrame: { flexDirection: 'row', alignItems: 'stretch' },
+  shelfRail: { width: 6, borderRadius: 4, backgroundColor: '#94a3b8', marginHorizontal: 4 },
+  shelfGridArea: { flex: 1, gap: 10 },
+  shelfRowBlock: { gap: 6 },
+  shelfLabel: { fontSize: 11, fontWeight: '700', color: '#64748b', marginLeft: 2 },
+  facingGridRowPreview: { flexDirection: 'row', gap: 8 },
+  shelfPlank: { height: 5, borderRadius: 3, backgroundColor: '#d1d5db', marginTop: 2 },
+  facingGridPreviewWrap: { backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', padding: 12, gap: 10 },
+  facingGridCell: { width: 34, height: 44, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  facingCellContent: { alignItems: 'center', justifyContent: 'center' },
+  facingProductText: { fontSize: 10, fontWeight: '800', color: '#ffffff' },
+  facingDepthText: { fontSize: 9, fontWeight: '800', color: '#ffffff', marginTop: 2 },
+  facingGridCellFilled: { backgroundColor: '#34d399', borderColor: '#10b981' },
+  facingGridCellMissing: { backgroundColor: '#ffffff', borderColor: '#cbd5e1', borderStyle: 'dashed' },
+  facingGridCellMismatch: { borderColor: '#f59e0b', borderWidth: 2 },
+  facingGridCellUnassigned: { borderColor: '#f97316', borderWidth: 2, backgroundColor: '#fde68a' },
+  facingLegendRow: { flexDirection: 'row', gap: 16, marginTop: 10, flexWrap: 'wrap' },
+  facingLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  facingLegendDot: { width: 14, height: 14, borderRadius: 4, borderWidth: 1 },
+  facingLegendText: { fontSize: 12, color: '#475569', fontWeight: '700' },
+  slotAssignOverlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'flex-end', zIndex: 50 },
+  slotAssignCard: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 20, maxHeight: '72%' },
+  slotAssignHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  depthControlRow: { marginBottom: 12, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  depthControlLabel: { fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 8 },
+  depthControlActions: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' },
+  depthControlButton: { width: 30, height: 30, borderRadius: 8, borderWidth: 1, borderColor: '#cbd5e1', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' },
+  depthControlInput: { width: 54, marginHorizontal: 8, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, backgroundColor: '#ffffff', textAlign: 'center', fontSize: 13, fontWeight: '700', color: '#0f172a', paddingVertical: 6, paddingHorizontal: 8 },
+  slotAssignTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
+  slotAssignList: { maxHeight: 360 },
+  slotAssignItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eef2f7' },
+  slotAssignColor: { width: 16, height: 16, borderRadius: 4, marginRight: 10 },
+  slotAssignTextWrap: { flex: 1 },
+  slotAssignName: { fontSize: 13, color: '#0f172a', fontWeight: '700' },
+  slotAssignMeta: { fontSize: 11, color: '#64748b', marginTop: 2 },
+  slotAssignMissingButton: { marginTop: 12, borderRadius: 10, borderWidth: 1, borderColor: '#fecaca', backgroundColor: '#fef2f2', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10 },
+  slotAssignMissingText: { marginLeft: 6, color: '#b91c1c', fontSize: 13, fontWeight: '700' },
+  saveButton: { backgroundColor: '#2563eb', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, flex: 1, marginRight: 8 },
+  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  closeButton: { backgroundColor: '#f3f4f6', flex: 0.5 },
+  closeButtonText: { color: '#374151', fontSize: 16, fontWeight: '600', textAlign: 'center', paddingVertical: 16 },
+  alertInfoCard: { backgroundColor: '#f8fafc', borderRadius: 12, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#e5e7eb' },
+  alertInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  alertInfoLabel: { fontSize: 13, color: '#6b7280', width: 70 },
+  alertInfoValue: { fontSize: 14, fontWeight: '600', color: '#111827', flex: 1 },
+  alertInfoDivider: { height: 1, backgroundColor: '#e5e7eb', marginVertical: 10 },
+  alertSectionLabel: { fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 8, marginTop: 16 },
+  alertInput: { backgroundColor: '#f9fafb', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', padding: 14, fontSize: 14, color: '#111', marginBottom: 4 },
+  alertDropdown: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f9fafb', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', padding: 14, marginBottom: 4 },
+  alertDropdownText: { fontSize: 14, color: '#111', fontWeight: '500' },
+  alertDropdownPlaceholder: { fontSize: 14, color: '#9ca3af' },
+  alertDropdownList: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', marginBottom: 4, overflow: 'hidden' },
+  alertDropdownItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  alertDropdownItemActive: { backgroundColor: '#eff6ff' },
+  alertDropdownItemText: { fontSize: 14, color: '#374151' },
+  alertDropdownItemTextActive: { color: '#2563eb', fontWeight: '600' },
+  alertTextInput: { backgroundColor: '#f9fafb', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', padding: 14, fontSize: 14, color: '#111', minHeight: 100, marginBottom: 4 },
+  alertPhotoContainer: { alignItems: 'center', marginBottom: 16, position: 'relative' },
+  alertPhotoPreview: { width: '100%', height: 220, borderRadius: 12 },
+  alertRemovePhoto: { position: 'absolute', top: 8, right: 8 },
+  alertPhotoBtn: { flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 20, borderRadius: 12, backgroundColor: '#f0f5ff', borderWidth: 1.5, borderColor: '#dbeafe', borderStyle: 'dashed' },
+  alertPhotoBtnText: { fontSize: 13, fontWeight: '600', color: '#2563eb' },
+  alertSubmitBtn: { backgroundColor: '#2563eb', borderRadius: 12, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 20, marginBottom: 30 },
+  alertSubmitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });
