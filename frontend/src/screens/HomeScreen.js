@@ -1,4 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useContext } from 'react';
+import { AppState } from 'react-native';
+import { DailyContext } from '../contexts/DailyContext';
 import {
   View,
   Text,
@@ -26,6 +28,15 @@ import { shareAsync } from 'expo-sharing';
 const statusWebSocketRef = { current: null };
 
 export default function HomeScreen() {
+  // Daily context
+  const {
+    timeWorked, setTimeWorked,
+    progress, setProgress,
+    storeVisits, setStoreVisits,
+    schedule, setSchedule,
+    route, setRoute,
+    resetDailyState
+  } = useContext(DailyContext);
   const { user } = useAuth();
   const navigation = useNavigation();
 
@@ -204,10 +215,58 @@ export default function HomeScreen() {
   };
 
 
+  // On mount, check for daily reset and load data
   useEffect(() => {
-    loadDayStatus();
-    fetchHomeData();
-    checkLocationPermission();
+    const checkAndResetDay = async () => {
+      // Check last reset date
+      const today = new Date().toISOString().slice(0, 10);
+      const lastReset = await AsyncStorage.getItem('lastResetDate');
+      if (lastReset !== today) {
+        // Clear all daily state and AsyncStorage keys
+        await resetDailyState();
+        await AsyncStorage.removeItem(userKey('dayStarted'));
+        await AsyncStorage.removeItem(userKey('dayStartTime'));
+        setElapsedTime('00:00:00');
+        setDayStarted(false);
+        setDayStartTime(null);
+        setTodayVisits([]);
+        setTodayStores([]);
+        setProgress(0);
+        setStoreVisits({ visited: 0, total: 0 });
+        setSchedule([]);
+        setRoute([]);
+      }
+      loadDayStatus();
+      fetchHomeData();
+      checkLocationPermission();
+    };
+    checkAndResetDay();
+
+    // AppState listener for app resume
+    const handleAppStateChange = async (nextAppState) => {
+      if (nextAppState === 'active') {
+        const today = new Date().toISOString().slice(0, 10);
+        const lastReset = await AsyncStorage.getItem('lastResetDate');
+        if (lastReset !== today) {
+          await resetDailyState();
+          await AsyncStorage.removeItem(userKey('dayStarted'));
+          await AsyncStorage.removeItem(userKey('dayStartTime'));
+          setElapsedTime('00:00:00');
+          setDayStarted(false);
+          setDayStartTime(null);
+          setTodayVisits([]);
+          setTodayStores([]);
+          setProgress(0);
+          setStoreVisits({ visited: 0, total: 0 });
+          setSchedule([]);
+          setRoute([]);
+          loadDayStatus();
+          fetchHomeData();
+        }
+      }
+    };
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
   }, []);
   
   // Refresh data when user changes
@@ -216,6 +275,31 @@ export default function HomeScreen() {
       fetchHomeData();
     }
   }, [user?.id]);
+
+  // At midnight, reset daily state
+  useEffect(() => {
+    const now = new Date();
+    // Calculate local midnight (next day, 00:00:00 local time)
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0); // next local midnight
+    const msUntilMidnight = midnight - now;
+    const timer = setTimeout(async () => {
+      await resetDailyState();
+      await AsyncStorage.removeItem(userKey('dayStarted'));
+      await AsyncStorage.removeItem(userKey('dayStartTime'));
+      setElapsedTime('00:00:00');
+      setDayStarted(false);
+      setDayStartTime(null);
+      setTodayVisits([]);
+      setTodayStores([]);
+      setProgress(0);
+      setStoreVisits({ visited: 0, total: 0 });
+      setSchedule([]);
+      setRoute([]);
+      fetchHomeData();
+    }, msUntilMidnight);
+    return () => clearTimeout(timer);
+  }, []);
   
   // Start GPS tracking
   useEffect(() => {
@@ -457,27 +541,52 @@ export default function HomeScreen() {
       interval = setInterval(() => {
         const elapsed = Date.now() - dayStartTime;
         setElapsedTime(formatElapsedTime(elapsed));
+        setTimeWorked(formatElapsedTime(elapsed));
       }, 1000);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [dayStarted, dayStartTime]);
+  }, [dayStarted, dayStartTime, setTimeWorked]);
 
   const loadDayStatus = async () => {
     try {
       const startTime = await AsyncStorage.getItem(userKey('dayStartTime'));
       const started = await AsyncStorage.getItem(userKey('dayStarted'));
+      let validToday = false;
       if (started === 'true' && startTime) {
-        setDayStarted(true);
-        setDayStartTime(parseInt(startTime));
+        const startDate = new Date(parseInt(startTime));
+        const today = new Date();
+        if (
+          startDate.getFullYear() === today.getFullYear() &&
+          startDate.getMonth() === today.getMonth() &&
+          startDate.getDate() === today.getDate()
+        ) {
+          validToday = true;
+          setDayStarted(true);
+          setDayStartTime(parseInt(startTime));
+        }
       }
-      // Load break state
-      const breakStart = await AsyncStorage.getItem(userKey('breakStartTime'));
-      const breakEnd = await AsyncStorage.getItem(userKey('breakEndTime'));
-      if (breakStart) setBreakStartTime(parseInt(breakStart));
-      if (breakEnd) setBreakEndTime(parseInt(breakEnd));
-      if (breakStart && !breakEnd) setIsOnBreak(true);
+      if (!validToday) {
+        // Not a valid session for today, clear everything
+        await AsyncStorage.removeItem(userKey('dayStarted'));
+        await AsyncStorage.removeItem(userKey('dayStartTime'));
+        setDayStarted(false);
+        setDayStartTime(null);
+        setElapsedTime('00:00:00');
+      }
+      // Load break state only if validToday
+      if (validToday) {
+        const breakStart = await AsyncStorage.getItem(userKey('breakStartTime'));
+        const breakEnd = await AsyncStorage.getItem(userKey('breakEndTime'));
+        if (breakStart) setBreakStartTime(parseInt(breakStart));
+        if (breakEnd) setBreakEndTime(parseInt(breakEnd));
+        if (breakStart && !breakEnd) setIsOnBreak(true);
+      } else {
+        setBreakStartTime(null);
+        setBreakEndTime(null);
+        setIsOnBreak(false);
+      }
     } catch (error) {
       console.error('Error loading day status:', error);
     }
@@ -675,13 +784,16 @@ export default function HomeScreen() {
       const todayCompleted = completedTodayVisits.length;
       const todayPercent = todayTotal > 0 ? Math.round((todayCompleted / todayTotal) * 100) : 0;
       const todayRemaining = todayTotal - todayCompleted;
-      
+
+      setProgress(todayPercent);
+      setStoreVisits({ visited: todayCompleted, total: todayTotal });
+
       const monthlyTotal = monthlyVisits.length;
       const monthlyCompleted = completedMonthlyVisits.length;
-      
+
       // Count active reports (visits in progress)
       const activeReports = userVisits.filter(v => v.status === 'in_progress').length;
-      
+
       const dashboardData = {
         userName: user?.first_name || user?.username || "User",
         monthlyTargets: monthlyCompleted,
@@ -1257,7 +1369,7 @@ export default function HomeScreen() {
           {dayStarted && (
             <View style={styles.progressItem}>
               <MaterialCommunityIcons name="clock-outline" size={16} color="#666" />
-              <Text style={styles.estimatedTime}>Time worked: {elapsedTime}</Text>
+              <Text style={styles.estimatedTime}>Time worked: {timeWorked}</Text>
             </View>
           )}
         </View>
@@ -1349,10 +1461,13 @@ export default function HomeScreen() {
                 <Text style={styles.breakCompletedText}>Pause terminée ✓</Text>
               </View>
             )}
-            <TouchableOpacity style={styles.endDayBtn} onPress={handleStartDay}>
-              <MaterialCommunityIcons name="stop-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.endDayText}>End Workday</Text>
-            </TouchableOpacity>
+            {/* Only show End Workday if dayStarted is true */}
+            {dayStarted && (
+              <TouchableOpacity style={styles.endDayBtn} onPress={handleStartDay}>
+                <MaterialCommunityIcons name="stop-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.endDayText}>End Workday</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
