@@ -1,0 +1,47 @@
+.table-actions {
+  padding: 0.95rem 1rem;
+  display: flex;
+  justify-content: flex-end;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-surface-soft);
+}
+
+.btn-primary {
+  padding: 0.62rem 1.05rem;
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 600;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 8px 16px rgba(79, 70, 229, 0.25);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 22px rgba(79, 70, 229, 0.3);
+}
+
+.stock-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.stock-badge.in-stock {
+  background-color: #e8f5e9;
+  color: #388e3c;
+}
+
+.stock-badge.out-of-stock {
+  background-color: #ffebee;
+  color: #d32f2f;
+}
+
+.action-btn.delete {
+  background-color: #f44336;
+  color: white;
+}

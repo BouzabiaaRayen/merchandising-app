@@ -1,0 +1,57 @@
+.visit-status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.visit-status-badge.scheduled {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.visit-status-badge.in-progress {
+  background-color: #fff8e1;
+  color: #f57f17;
+}
+
+.visit-status-badge.completed {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.visit-status-badge.cancelled {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+/* Schedule Visit Form */
+.form-group textarea {
+  width: 100%;
+  padding: 0.625rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.2s;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.form-group textarea:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.success-message {
+  padding: 1rem;
+  background-color: #d1fae5;
+  color: #065f46;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+  border: 1px solid #a7f3d0;
+}
+
