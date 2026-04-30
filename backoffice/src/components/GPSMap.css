@@ -23,16 +23,16 @@
 }
 
 .map-loading {
-  color: #3b82f6;
+  color: var(--info);
 }
 
 .map-error {
-  color: #ef4444;
-  border: 2px solid #fecaca;
+  color: var(--danger);
+  border: 2px solid var(--danger);
 }
 
 .map-empty {
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 /* Custom marker styles */
@@ -57,7 +57,7 @@
   height: 30px;
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
-  background: #6b7280;
+  background: var(--text-secondary);
 }
 
 .marker-pin::after {
@@ -73,15 +73,15 @@
 }
 
 .marker-pin.active::before {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  background: linear-gradient(135deg, var(--success) 0%, var(--success) 100%);
 }
 
 .marker-pin.completed::before {
-  background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+  background: linear-gradient(135deg, var(--info) 0%, var(--brand) 100%);
 }
 
 .marker-pin.alert::before {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  background: linear-gradient(135deg, var(--danger) 0%, var(--danger) 100%);
   animation: pulse 2s infinite;
 }
 
@@ -103,8 +103,8 @@
 .store-pin {
   width: 30px;
   height: 30px;
-  background: #ffffff;
-  border: 2px solid #8b5cf6;
+  background: var(--bg-surface);
+  border: 2px solid var(--brand);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -126,43 +126,43 @@
 .map-popup h3 {
   margin: 0 0 0.5rem 0;
   font-size: 0.875rem;
-  color: #1f2937;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 .map-popup p {
   margin: 0.25rem 0;
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 .map-popup strong {
-  color: #374151;
+  color: var(--text-primary);
 }
 
 .map-popup .status-active,
 .map-popup .status-in_progress {
-  color: #10b981;
+  color: var(--success);
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .map-popup .status-completed {
-  color: #3b82f6;
+  color: var(--info);
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .map-popup .status-alert,
 .map-popup .status-delayed {
-  color: #ef4444;
+  color: var(--danger);
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .map-popup.store-popup h3 {
-  color: #8b5cf6;
-  border-bottom: 2px solid #8b5cf6;
+  color: var(--brand);
+  border-bottom: 2px solid var(--brand);
   padding-bottom: 0.25rem;
   margin-bottom: 0.5rem;
 }
@@ -170,9 +170,9 @@
 .map-popup .coordinates {
   margin-top: 0.5rem;
   padding-top: 0.5rem;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--border-soft);
   font-size: 0.7rem;
-  color: #9ca3af;
+  color: var(--text-secondary);
   font-family: monospace;
 }
 

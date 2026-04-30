@@ -11,12 +11,12 @@ import './SupervisorDashboard.css';
 // Custom icons
 const createMerchantIcon = (status) => {
   const colors = {
-    active: '#4CAF50',
-    paused: '#FF9800',
-    offline: '#9E9E9E',
+    active: 'var(--success)',
+    paused: 'var(--warning)',
+    offline: 'var(--text-secondary)',
   };
 
-  const color = colors[status] || '#9E9E9E';
+  const color = colors[status] || 'var(--text-secondary)';
 
   return L.divIcon({
     html: `

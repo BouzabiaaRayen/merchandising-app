@@ -53,9 +53,9 @@ const LeaveRequests = () => {
   };
 
   const statusMeta = (status) => {
-    if (status === 'approved') return { label: 'APPROUVÉ', bg: '#E6F7EE', color: '#1F9D57' };
-    if (status === 'rejected') return { label: 'REFUSÉ', bg: '#FDEBEC', color: '#E02424' };
-    return { label: 'EN ATTENTE', bg: '#FFF4DB', color: '#D08700' };
+    if (status === 'approved') return { label: 'APPROUVÉ', bg: 'var(--bg-surface-soft)', color: 'var(--success)' };
+    if (status === 'rejected') return { label: 'REFUSÉ', bg: 'var(--bg-surface-soft)', color: 'var(--danger)' };
+    return { label: 'EN ATTENTE', bg: 'var(--bg-surface-soft)', color: 'var(--warning)' };
   };
 
   const resolveDocumentUrl = (req) => {
@@ -103,26 +103,26 @@ const LeaveRequests = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: '12px', marginBottom: '20px' }}>
             <div style={{ background: 'white', borderRadius: '12px', padding: '14px' }}>
-              <div style={{ color: '#D08700', fontWeight: 700 }}>En attente</div>
+              <div style={{ color: 'var(--warning)', fontWeight: 700 }}>En attente</div>
               <div style={{ fontSize: '24px', fontWeight: 700 }}>{counts.pending}</div>
             </div>
             <div style={{ background: 'white', borderRadius: '12px', padding: '14px' }}>
-              <div style={{ color: '#1F9D57', fontWeight: 700 }}>Approuvées</div>
+              <div style={{ color: 'var(--success)', fontWeight: 700 }}>Approuvées</div>
               <div style={{ fontSize: '24px', fontWeight: 700 }}>{counts.approved}</div>
             </div>
             <div style={{ background: 'white', borderRadius: '12px', padding: '14px' }}>
-              <div style={{ color: '#E02424', fontWeight: 700 }}>Refusées</div>
+              <div style={{ color: 'var(--danger)', fontWeight: 700 }}>Refusées</div>
               <div style={{ fontSize: '24px', fontWeight: 700 }}>{counts.rejected}</div>
             </div>
           </div>
 
           <div style={{ background: 'white', borderRadius: '12px', padding: '1.5rem' }}>
             {loading ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Chargement...</div>
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>Chargement...</div>
             ) : error ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#E02424' }}>{error}</div>
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--danger)' }}>{error}</div>
             ) : requests.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Aucune demande de congé</div>
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>Aucune demande de congé</div>
             ) : (
               <table className="data-table">
                 <thead>

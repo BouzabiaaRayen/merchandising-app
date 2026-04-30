@@ -6,6 +6,18 @@
   background-color: #e0e7ff;
 }
 
+[data-theme='dark'] .unread-row {
+  background-color: rgba(79, 70, 229, 0.2);
+}
+
+[data-theme='dark'] .unread-row:hover {
+  background-color: rgba(79, 70, 229, 0.28);
+}
+
+[data-theme='dark'] .unread-row td {
+  color: var(--text-primary);
+}
+
 .unread-count {
   color: #b91c1c;
   font-weight: 700;
@@ -29,9 +41,19 @@
   color: #4338ca;
 }
 
+[data-theme='dark'] .notif-type-badge {
+  background-color: rgba(129, 140, 248, 0.22);
+  color: #c7d2fe;
+}
+
 .notif-type-badge.urgent {
   background-color: #fee2e2;
   color: #b91c1c;
+}
+
+[data-theme='dark'] .notif-type-badge.urgent {
+  background-color: rgba(239, 68, 68, 0.22);
+  color: #fca5a5;
 }
 
 .notif-type-badge.info {
@@ -39,7 +61,17 @@
   color: #1d4ed8;
 }
 
+[data-theme='dark'] .notif-type-badge.info {
+  background-color: rgba(59, 130, 246, 0.22);
+  color: #93c5fd;
+}
+
 .notif-type-badge.warning {
   background-color: #fef3c7;
   color: #b45309;
+}
+
+[data-theme='dark'] .notif-type-badge.warning {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
 }

@@ -14,10 +14,10 @@ const CATEGORY_LABELS = {
 };
 
 const STATUS_META = {
-  pending: { label: 'PENDING', bg: '#FFF4DB', color: '#D08700' },
-  in_progress: { label: 'IN PROGRESS', bg: '#DBEAFE', color: '#2563EB' },
-  resolved: { label: 'RESOLVED', bg: '#E6F7EE', color: '#1F9D57' },
-  rejected: { label: 'REJECTED', bg: '#FDEBEC', color: '#E02424' },
+  pending: { label: 'PENDING', bg: 'var(--bg-surface-soft)', color: 'var(--warning)' },
+  in_progress: { label: 'IN PROGRESS', bg: 'var(--bg-surface-soft)', color: 'var(--info)' },
+  resolved: { label: 'RESOLVED', bg: 'var(--bg-surface-soft)', color: 'var(--success)' },
+  rejected: { label: 'REJECTED', bg: 'var(--bg-surface-soft)', color: 'var(--danger)' },
 };
 
 const Complaints = () => {
@@ -141,11 +141,11 @@ const Complaints = () => {
           {/* Table */}
           <div style={{ background: 'white', borderRadius: '12px', padding: '1.5rem' }}>
             {loading ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Loading...</div>
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>Loading...</div>
             ) : error ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#E02424' }}>{error}</div>
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--danger)' }}>{error}</div>
             ) : filtered.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No complaints found</div>
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>No complaints found</div>
             ) : (
               <table className="data-table">
                 <thead>
@@ -173,11 +173,11 @@ const Complaints = () => {
                         </td>
                         <td>
                           {c.photo ? (
-                            <a href={c.photo} target="_blank" rel="noreferrer" style={{ color: '#2563EB', fontWeight: 600, textDecoration: 'none' }}>
+                            <a href={c.photo} target="_blank" rel="noreferrer" style={{ color: 'var(--info)', fontWeight: 600, textDecoration: 'none' }}>
                               View
                             </a>
                           ) : (
-                            <span style={{ color: '#94a3b8' }}>None</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>None</span>
                           )}
                         </td>
                         <td>
@@ -232,7 +232,7 @@ const Complaints = () => {
                   <h2 style={{ margin: 0 }}>Complaint #{selectedComplaint.id}</h2>
                   <button
                     onClick={() => setSelectedComplaint(null)}
-                    style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#64748b' }}
+                  style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text-secondary)' }}
                   >
                     ✕
                   </button>

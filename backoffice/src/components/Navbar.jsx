@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Bell, Settings, User, LogOut, ChevronDown } from 'lucide-react';
+import { Search, Bell, Settings, User, LogOut, ChevronDown, Moon, Sun } from 'lucide-react';
 import { notificationService, authService } from '../services/apiService';
 import { getAvatarUrl } from '../services/supabaseClient';
 import './Navbar.css';
@@ -12,7 +12,13 @@ const Navbar = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [theme, setTheme] = useState(localStorage.getItem('backoffice-theme') || 'light');
   const menuRef = useRef(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('backoffice-theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -74,6 +80,10 @@ const Navbar = () => {
     navigate('/notifications');
   };
 
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
   const getBreadcrumb = () => {
     const path = location.pathname;
     if (path.includes('dashboard')) return 'Dashboard Overview';
@@ -113,6 +123,17 @@ const Navbar = () => {
           </div>
           
           <div className="navbar-actions">
+            <button
+              className="icon-btn theme-toggle-btn"
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              onClick={toggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              <span className="icon">
+                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              </span>
+            </button>
+
             <button 
               className="icon-btn notification-btn" 
               title="Notifications"

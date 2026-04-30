@@ -401,7 +401,7 @@ const Dashboard = () => {
                         </div>
                       ))
                     ) : (
-                      <div style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
                         No recent activities to display
                       </div>
                     )}

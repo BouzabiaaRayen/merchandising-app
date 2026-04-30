@@ -25,6 +25,11 @@
   animation: pulse-alert 2s infinite;
 }
 
+[data-theme='dark'] .stat-card.alert-active {
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  background: linear-gradient(135deg, #1f1725 0%, #2f1d28 100%);
+}
+
 @keyframes pulse-alert {
   0%, 100% {
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
@@ -125,8 +130,8 @@
 
 .stat-badge {
   padding: 0.25rem 0.5rem;
-  background-color: #f3f4f6;
-  color: #6b7280;
+  background-color: var(--bg-surface-soft);
+  color: var(--text-secondary);
   border-radius: 6px;
   font-size: 0.7rem;
   font-weight: 600;
@@ -205,9 +210,9 @@
 
 .map-container {
   height: 400px;
-  background: #f8fafc;
+  background: var(--bg-surface-soft);
   border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-soft);
   overflow: hidden;
   position: relative;
 }
@@ -232,7 +237,7 @@
   position: absolute;
   bottom: 1rem;
   left: 1rem;
-  background: white;
+  background: var(--bg-surface);
   padding: 1rem;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -246,7 +251,7 @@
   gap: 0.5rem;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #4b5563;
+  color: var(--text-secondary);
 }
 
 .legend-dot {
@@ -285,8 +290,8 @@
 }
 
 .activity-item:hover {
-  background-color: #f8fafc;
-  border-color: #e2e8f0;
+  background-color: var(--bg-surface-soft);
+  border-color: var(--border-soft);
 }
 
 .activity-icon {

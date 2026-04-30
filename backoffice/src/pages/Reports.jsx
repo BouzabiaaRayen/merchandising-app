@@ -137,7 +137,7 @@ const Reports = () => {
                 <div style={{ fontSize: '0.94rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
                   Aucun document disponible
                 </div>
-                <div style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                   Les rapports générés par les merchandisers apparaîtront ici
                 </div>
               </div>

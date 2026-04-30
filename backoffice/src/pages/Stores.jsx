@@ -333,7 +333,7 @@ const Stores = () => {
                   >
                     Previous
                   </button>
-                  <span className="page-info">
+                  <span className="pagination-info">
                     Page {currentPage} of {totalPages}
                   </span>
                   <button

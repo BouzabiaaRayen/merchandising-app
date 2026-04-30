@@ -453,8 +453,8 @@ const VisitsTracking = () => {
                           />
                         </div>
                         <label htmlFor={`store_${store.id}`} style={{ marginLeft: 8, width: '100%', cursor: 'pointer', textAlign: 'left' }}>
-                          <div style={{ fontWeight: 500, color: '#222', textAlign: 'left' }}>{store.name}</div>
-                          <div style={{ fontSize: '12px', color: '#888', marginTop: 1, textAlign: 'left' }}>{store.address}</div>
+                          <div style={{ fontWeight: 500, color: 'var(--text-primary)', textAlign: 'left' }}>{store.name}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: 1, textAlign: 'left' }}>{store.address}</div>
                         </label>
                       </div>
                     ))}
@@ -494,51 +494,51 @@ const VisitsTracking = () => {
                       padding: 0,
                       overflow: 'hidden',
                       fontFamily: 'Inter, Arial, sans-serif',
-                      color: '#23272f',
+                      color: 'var(--text-primary)',
                       transition: 'box-shadow 0.2s',
                     }}>
                       {/* Header */}
                       <div style={{ background: '#f8fafc', color: accent, padding: '14px 24px', fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', borderBottom: '1px solid #ececec', letterSpacing: 0.1 }}>
                         <span role="img" aria-label="calendar" style={{ marginRight: 10, fontSize: 18 }}>🗓️</span>
-                        Route Feasibility <span style={{ color: '#b0b4ba', marginLeft: 8, fontWeight: 400 }}>(8 AM - 5:30 PM)</span>
+                        Route Feasibility <span style={{ color: 'var(--text-secondary)', marginLeft: 8, fontWeight: 400 }}>(8 AM - 5:30 PM)</span>
                       </div>
                       <div style={{ padding: '22px 24px 12px 24px' }}>
                         {/* Store Visits */}
-                        <div style={{ fontWeight: 500, marginBottom: 10, color: '#7b7f87', fontSize: 13 }}>Store Visits</div>
+                        <div style={{ fontWeight: 500, marginBottom: 10, color: 'var(--text-secondary)', fontSize: 13 }}>Store Visits</div>
                         <div style={{ marginBottom: 18 }}>
                           {formData.stores.map((id, idx) => {
                             const store = stores.find(s => s.id === id);
                             return store ? (
                               <div key={id} style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
-                                <span style={{ fontWeight: 500, minWidth: 18, fontSize: 13, color: '#b0b4ba' }}>{idx + 1}.</span>
-                                <span style={{ marginLeft: 10, flex: 1, fontSize: 14, color: '#23272f' }}>{store.name}</span>
+                                <span style={{ fontWeight: 500, minWidth: 18, fontSize: 13, color: 'var(--text-secondary)' }}>{idx + 1}.</span>
+                                <span style={{ marginLeft: 10, flex: 1, fontSize: 14, color: 'var(--text-primary)' }}>{store.name}</span>
                                 <input
                                   type="number"
                                   min={10}
                                   max={180}
                                   value={visitDurations[id] || 30}
                                   onChange={e => handleDurationChange(id, e.target.value)}
-                                  style={{ width: 38, marginLeft: 10, height: 22, borderRadius: 8, border: '1px solid #ececec', paddingLeft: 4, fontSize: 13, background: '#f8fafc', color: '#23272f' }}
+                                style={{ width: 38, marginLeft: 10, height: 22, borderRadius: 8, border: '1px solid var(--border-soft)', paddingLeft: 4, fontSize: 13, background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
                                   title="Visit duration (minutes)"
                                 />
-                                <span style={{ marginLeft: 5, fontSize: 12, color: '#b0b4ba' }}>min</span>
+                                <span style={{ marginLeft: 5, fontSize: 12, color: 'var(--text-secondary)' }}>min</span>
                               </div>
                             ) : null;
                           })}
                         </div>
                         {/* Travel Times */}
-                        <div style={{ fontWeight: 500, marginBottom: 10, color: '#7b7f87', fontSize: 13 }}>Travel Times (GPS-based)</div>
+                        <div style={{ fontWeight: 500, marginBottom: 10, color: 'var(--text-secondary)', fontSize: 13 }}>Travel Times (GPS-based)</div>
                         <div style={{ marginBottom: 18 }}>
-                          {travelSegments.length === 0 && <div style={{ color: '#b0b4ba', fontSize: 12 }}>N/A</div>}
+                          {travelSegments.length === 0 && <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>N/A</div>}
                           {travelSegments.map((seg, idx) => (
                             <div key={idx} style={{ color: accent, fontSize: 12.5, display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-                              <span style={{ minWidth: 70, color: '#b0b4ba' }}>{seg.from?.name} <span style={{ color: '#d1d5db' }}>→</span> {seg.to?.name}:</span>
+                              <span style={{ minWidth: 70, color: 'var(--text-secondary)' }}>{seg.from?.name} <span style={{ color: 'var(--border-soft)' }}>→</span> {seg.to?.name}:</span>
                               <span style={{ color: accent, fontWeight: 500, marginLeft: 8 }}>{seg.mins} min</span>
                             </div>
                           ))}
                         </div>
                         {/* Totals */}
-                        <div style={{ marginBottom: 2, fontSize: 13.5, color: '#23272f', display: 'block' }}>
+                        <div style={{ marginBottom: 2, fontSize: 13.5, color: 'var(--text-primary)', display: 'block' }}>
                           <div><b>Total Visits:</b> {formData.stores.length}</div>
                           <div><b>Total Travel:</b> {travelTime} min</div>
                           <div><b>Total Visit Time:</b> {visitTime} min</div>

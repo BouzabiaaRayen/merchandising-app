@@ -370,7 +370,7 @@ const Visits = () => {
                   />
                 </div>
 
-                <h3 style={{marginBottom: '15px', marginTop: '20px', fontSize: '14px', fontWeight: '600', color: '#374151'}}>Break Management</h3>
+                <h3 style={{marginBottom: '15px', marginTop: '20px', fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)'}}>Break Management</h3>
 
                 <div className="form-group">
                   <label htmlFor="break_duration">Break Duration (minutes)</label>

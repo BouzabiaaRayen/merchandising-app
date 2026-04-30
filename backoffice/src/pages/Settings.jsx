@@ -66,8 +66,8 @@ const Settings = () => {
           <div style={{ background: 'white', padding: '2rem', borderRadius: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
               <div>
-                <h3 style={{ margin: 0, color: '#1e293b' }}>Backoffice Alerts</h3>
-                <p style={{ margin: '0.5rem 0 0', color: '#64748b' }}>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Backoffice Alerts</h3>
+                <p style={{ margin: '0.5rem 0 0', color: 'var(--text-secondary)' }}>
                   Turn bell notifications on or off for this backoffice session.
                 </p>
               </div>

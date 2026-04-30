@@ -11,6 +11,8 @@ const Login = () => {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [remember, setRemember] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -85,33 +87,57 @@ const Login = () => {
           {error && <div className="error-message">{error}</div>}
           
           <div className="form-group">
-            <label htmlFor="username">Username</label>
-            <input
-              type="text"
-              id="username"
-              name="username"
-              value={credentials.username}
-              onChange={handleChange}
-              required
-              autoFocus
-            />
+            <label htmlFor="username">Email Address</label>
+            <div className="input-with-icon">
+              <input
+                type="text"
+                id="username"
+                name="username"
+                value={credentials.username}
+                onChange={handleChange}
+                required
+                autoFocus
+                aria-label="Email address"
+              />
+            </div>
           </div>
 
           <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              type="password"
-              id="password"
-              name="password"
-              value={credentials.password}
-              onChange={handleChange}
-              required
-            />
+            <div className="label-row">
+              <label htmlFor="password">Password</label>
+              <a className="forgot-link" href="#" onClick={(e)=>{e.preventDefault(); /* TODO: forgot */}}>Forgot password?</a>
+            </div>
+            <div className="input-with-icon">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                id="password"
+                name="password"
+                value={credentials.password}
+                onChange={handleChange}
+                required
+                placeholder="********"
+                aria-label="Password"
+              />
+              <button type="button" className="password-toggle" onClick={() => setShowPassword(s => !s)} aria-pressed={showPassword} aria-label="Show or hide password">
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </div>
+
+          <div className="form-row small-row">
+            <label className="checkbox-label">
+              <input type="checkbox" checked={remember} onChange={(e)=>setRemember(e.target.checked)} />
+              <span>Remember me for 30 days</span>
+            </label>
           </div>
 
           <button type="submit" disabled={loading} className="login-btn">
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? 'Signing in...' : 'Sign In →'}
           </button>
+
+          
+
+          <div className="register-link">Don't have an account? <a href="#">Request Access</a></div>
         </form>
       </div>
     </div>
