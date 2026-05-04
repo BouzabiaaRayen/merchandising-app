@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Store, MapPin, FileText,
-  BarChart3, CalendarDays, AlertTriangle, Settings,
+  BarChart3, TrendingUp, CalendarDays, AlertTriangle, Settings,
   ChevronLeft, ChevronRight, Zap,
 } from 'lucide-react';
 import './Sidebar.css';
@@ -71,6 +71,14 @@ const Sidebar = () => {
         >
           <span className="nav-icon"><BarChart3 size={18} /></span>
           {!isCollapsed && <span>Reporting</span>}
+        </NavLink>
+        <NavLink
+          to="/performance"
+          className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
+          title="Performance"
+        >
+          <span className="nav-icon"><TrendingUp size={18} /></span>
+          {!isCollapsed && <span>Performance</span>}
         </NavLink>
         <NavLink
           to="/leave-requests"

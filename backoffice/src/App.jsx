@@ -10,6 +10,7 @@ import Inventory from './pages/Inventory';
 import Notifications from './pages/Notifications';
 import Documents from './pages/Documents';
 import Reports from './pages/Reports';
+import Performance from './pages/Performance';
 import LeaveRequests from './pages/LeaveRequests';
 import Complaints from './pages/Complaints';
 import Settings from './pages/Settings';
@@ -31,6 +32,7 @@ function App() {
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         <Route path="/documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+        <Route path="/performance" element={<ProtectedRoute><Performance /></ProtectedRoute>} />
         <Route path="/leave-requests" element={<ProtectedRoute><LeaveRequests /></ProtectedRoute>} />
         <Route path="/complaints" element={<ProtectedRoute><Complaints /></ProtectedRoute>} />
         <Route path="/schedules" element={<ProtectedRoute><Complaints /></ProtectedRoute>} />

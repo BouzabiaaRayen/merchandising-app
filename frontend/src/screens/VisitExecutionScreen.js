@@ -47,6 +47,7 @@ const formatTndPrice = (value) => `${Number(value || 0).toFixed(3)} TND`;
 
 const DEFAULT_FACING_ROWS = 4;
 const DEFAULT_FACING_COLUMNS = 6;
+const OWNER_BRANDS = ['Warda', 'Lepidor', 'Spiga', "Moulin d'Or", 'Saida'];
 const MIN_STACK_DEPTH = 1;
 const MAX_STACK_DEPTH = 20;
 
@@ -135,7 +136,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
   );
 
   // Price comparison state — FIX: added competitorFacing and photo back
-  const [competitorName, setCompetitorName] = useState('Concurrent A');
+  const [competitorName, setCompetitorName] = useState('Warda');
   const [priceComparisons, setPriceComparisons] = useState(() =>
     FAKE_ARTICLES.slice(0, 8).map((article) => ({
       id: article.id,
@@ -162,9 +163,18 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const [facingProofPhoto, setFacingProofPhoto] = useState(null);
   const [showStockModal, setShowStockModal] = useState(false);
   const [showSlotAssignModal, setShowSlotAssignModal] = useState(false);
+  const [simpleFacingCounts, setSimpleFacingCounts] = useState({});
 
   const facingProducts = articles.slice(0, 8);
   const expectedTargetsFromGrid = getExpectedTargetsFromGrid(facingProducts, facingGridCells.length);
+
+  const buildInitialSimpleFacingCounts = () => {
+    const next = {};
+    facingProducts.forEach((product) => {
+      next[product.id] = Number(expectedTargetsFromGrid[product.id] || 0);
+    });
+    return next;
+  };
 
   // Alert modal state
   const [showAlertModal, setShowAlertModal] = useState(false);
@@ -508,7 +518,11 @@ export default function VisitExecutionScreen({ route, navigation }) {
   };
 
   const handleOpenPhotoModal = () => { if (!checkInTime) return; setShowPhotoModal(true); };
-  const handleOpenStockModal = () => { if (!checkInTime) return; setShowStockModal(true); };
+  const handleOpenStockModal = () => {
+    if (!checkInTime) return;
+    setSimpleFacingCounts(buildInitialSimpleFacingCounts());
+    setShowStockModal(true);
+  };
   const handleCompetitorPrices = () => { if (!checkInTime) return; setShowPriceModal(true); };
 
   // Break handlers
@@ -664,6 +678,37 @@ export default function VisitExecutionScreen({ route, navigation }) {
       return total + Number(assignment?.depth || 0);
     }, 0);
 
+  const getSimpleObservedCountForProduct = (productId) => Number(simpleFacingCounts[productId] || 0);
+
+  const getSimpleTotalObservedUnits = () =>
+    facingProducts.reduce((sum, product) => sum + getSimpleObservedCountForProduct(product.id), 0);
+
+  const getSimpleFacingCompliance = () => {
+    const expectedTotal = facingProducts.reduce((sum, product) => sum + Number(expectedTargetsFromGrid[product.id] || 0), 0);
+    if (!expectedTotal) return 0;
+    const matchedTotal = facingProducts.reduce((sum, product) => {
+      const expected = Number(expectedTargetsFromGrid[product.id] || 0);
+      const observed = getSimpleObservedCountForProduct(product.id);
+      return sum + Math.min(expected, observed);
+    }, 0);
+    return Math.round((matchedTotal / expectedTotal) * 100);
+  };
+
+  const handleSimpleFacingCountChange = (productId, value) => {
+    const normalized = value.replace(/[^\d]/g, '');
+    setSimpleFacingCounts((current) => ({
+      ...current,
+      [productId]: normalized === '' ? 0 : Number(normalized),
+    }));
+  };
+
+  const handleSimpleFacingAdjust = (productId, delta) => {
+    setSimpleFacingCounts((current) => {
+      const nextValue = Math.max(0, Number(current[productId] || 0) + delta);
+      return { ...current, [productId]: nextValue };
+    });
+  };
+
   const handleAssignProductFromSummary = (productId) => {
     const expected = Number(expectedTargetsFromGrid[productId] || 0);
     const observed = getObservedCountForProduct(productId);
@@ -719,26 +764,26 @@ export default function VisitExecutionScreen({ route, navigation }) {
   };
 
   const handleSaveStockUpdates = () => {
-    const hasMissingCells = facingGridCells.some((cell) => !cell);
-    const changedDimensions = Number(facingGridRows || 0) !== DEFAULT_FACING_ROWS || Number(facingGridColumns || 0) !== DEFAULT_FACING_COLUMNS;
-    if (!hasMissingCells && !changedDimensions) { Alert.alert('No Changes', 'No facing updates to save'); return; }
-    const visibleSlots = facingGridCells.map((isVisible, index) => (isVisible ? index : null)).filter((index) => index !== null);
-    const unassignedVisibleCount = visibleSlots.filter((index) => !slotAssignments[index]?.productId).length;
-    if (unassignedVisibleCount > 0) { Alert.alert('Missing Assignments', `Assign products to all visible slots (${unassignedVisibleCount} remaining).`); return; }
-    if (!facingProofPhoto) { Alert.alert('Proof Photo Required', 'Capture one photo of the aisle before saving.'); return; }
-    Alert.alert('Save Facing Updates', `Save facing grid (${facingGridRows} x ${facingGridColumns})?`, [
+    const totalObserved = getSimpleTotalObservedUnits();
+    if (totalObserved <= 0) {
+      Alert.alert('No Data', 'Add observed facings for at least one product before saving.');
+      return;
+    }
+
+    Alert.alert('Save Facing Updates', 'Save quick facing counts for this visit?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Save',
         onPress: async () => {
           const facingPayload = {
+            mode: 'simple',
             rows: Number(facingGridRows || 0),
             columns: Number(facingGridColumns || 0),
-            totalObservedUnits: getTotalObservedUnits(),
+            totalObservedUnits: totalObserved,
             proofPhotoUri: facingProofPhoto?.uri || null,
-            productSummary: articles.slice(0, 8).map((product) => {
+            productSummary: facingProducts.map((product) => {
               const expected = Number(expectedTargetsFromGrid[product.id] || 0);
-              const observed = getObservedCountForProduct(product.id);
+              const observed = getSimpleObservedCountForProduct(product.id);
               return { productId: product.id, productName: product.name, expected, observed, gap: observed - expected };
             }),
           };
@@ -1357,20 +1402,20 @@ export default function VisitExecutionScreen({ route, navigation }) {
           </View>
 
           <View style={styles.facingSummaryBox}>
-            <Text style={styles.facingSummaryLabel}>Facing Compliance</Text>
-            <Text style={styles.facingSummaryValue}>{getFacingCompliance()}%</Text>
+            <Text style={styles.facingSummaryLabel}>Quick Compliance</Text>
+            <Text style={styles.facingSummaryValue}>{getSimpleFacingCompliance()}%</Text>
           </View>
 
           <ScrollView style={styles.modalContent}>
             <View style={styles.unifiedFacingCard}>
-              <Text style={styles.comparisonLabel}>EXPECTED GRID</Text>
-              <Text style={styles.unifiedFacingHint}>Tap slot to assign product. Long press slot to toggle missing/visible.</Text>
+              <Text style={styles.comparisonLabel}>SAISI FACING RAPIDE</Text>
+              <Text style={styles.unifiedFacingHint}>Count facings per product. Use +/- for quick entry.</Text>
 
               <View style={styles.facingProofRow}>
                 <TouchableOpacity style={styles.facingProofButton} onPress={handleTakeFacingProofPhoto}>
                   <MaterialCommunityIcons name="camera-outline" size={16} color="#1d4ed8" />
                   <Text style={styles.facingProofButtonText}>
-                    {facingProofPhoto ? 'Retake Expected Aisle Photo' : 'Capture Expected Aisle Photo'}
+                    {facingProofPhoto ? 'Retake Aisle Photo' : 'Add Aisle Photo (optional)'}
                   </Text>
                 </TouchableOpacity>
                 {facingProofPhoto && (
@@ -1378,210 +1423,58 @@ export default function VisitExecutionScreen({ route, navigation }) {
                 )}
               </View>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.shelfCompareScroll} contentContainerStyle={styles.shelfCompareContent}>
-                <View style={styles.shelfCompareRow}>
-                  {/* Expected Panel */}
-                  <View style={styles.shelfPanel}>
-                    <Text style={styles.shelfPanelTitle}>Expected</Text>
-                    <View style={styles.facingGridPreviewWrap}>
-                      <View style={styles.shelfFrame}>
-                        <View style={styles.shelfRail} />
-                        <View style={styles.shelfGridArea}>
-                          {Array.from({ length: Number(facingGridRows || 0) }).map((_, rowIndex) => (
-                            <View key={`expected-row-${rowIndex}`} style={styles.shelfRowBlock}>
-                              <Text style={styles.shelfLabel}>Shelf {rowIndex + 1}</Text>
-                              <View style={styles.facingGridRowPreview}>
-                                {Array.from({ length: Number(facingGridColumns || 0) }).map((__, colIndex) => {
-                                  const cellIndex = rowIndex * Number(facingGridColumns || 0) + colIndex;
-                                  const product = getShelfProductForIndex(cellIndex);
-                                  return (
-                                    <View
-                                      key={`expected-cell-${rowIndex}-${colIndex}`}
-                                      style={[styles.facingGridCell, styles.facingGridCellFilled, { backgroundColor: product?.color || '#34d399' }]}
-                                    >
-                                      <Text style={styles.facingProductText}>{getProductSlotLabel(product?.name)}</Text>
-                                    </View>
-                                  );
-                                })}
-                              </View>
-                              <View style={styles.shelfPlank} />
-                            </View>
-                          ))}
-                        </View>
-                        <View style={styles.shelfRail} />
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Observed Panel */}
-                  <View style={styles.shelfPanel}>
-                    <Text style={styles.shelfPanelTitle}>Observed</Text>
-                    <View style={styles.facingGridPreviewWrap}>
-                      <View style={styles.shelfFrame}>
-                        <View style={styles.shelfRail} />
-                        <View style={styles.shelfGridArea}>
-                          {Array.from({ length: Number(facingGridRows || 0) }).map((_, rowIndex) => (
-                            <View key={`observed-row-${rowIndex}`} style={styles.shelfRowBlock}>
-                              <Text style={styles.shelfLabel}>Shelf {rowIndex + 1}</Text>
-                              <View style={styles.facingGridRowPreview}>
-                                {Array.from({ length: Number(facingGridColumns || 0) }).map((__, colIndex) => {
-                                  const cellIndex = rowIndex * Number(facingGridColumns || 0) + colIndex;
-                                  const visible = Boolean(facingGridCells[cellIndex]);
-                                  const expectedProduct = getShelfProductForIndex(cellIndex);
-                                  const assignedProduct = getAssignedProductForIndex(cellIndex);
-                                  const assignedDepth = getAssignedDepthForIndex(cellIndex);
-                                  const isMismatch = visible && assignedProduct && assignedProduct.id !== expectedProduct?.id;
-                                  const isUnassigned = visible && !assignedProduct;
-                                  const displayProduct = assignedProduct || expectedProduct;
-                                  return (
-                                    <TouchableOpacity
-                                      key={`observed-cell-${rowIndex}-${colIndex}`}
-                                      activeOpacity={0.8}
-                                      onPress={() => handleOpenSlotAssignment(cellIndex)}
-                                      onLongPress={() => handleToggleFacingCellVisibility(cellIndex)}
-                                      style={[
-                                        styles.facingGridCell,
-                                        visible ? styles.facingGridCellFilled : styles.facingGridCellMissing,
-                                        visible && { backgroundColor: displayProduct?.color || '#34d399' },
-                                        isMismatch && styles.facingGridCellMismatch,
-                                        isUnassigned && styles.facingGridCellUnassigned,
-                                      ]}
-                                    >
-                                      {visible && (
-                                        <View style={styles.facingCellContent}>
-                                          <Text style={styles.facingProductText}>
-                                            {isUnassigned ? '???' : getProductSlotLabel(displayProduct?.name)}
-                                          </Text>
-                                          {!isUnassigned && assignedDepth > 1 && (
-                                            <Text style={styles.facingDepthText}>x{assignedDepth}</Text>
-                                          )}
-                                        </View>
-                                      )}
-                                    </TouchableOpacity>
-                                  );
-                                })}
-                              </View>
-                              <View style={styles.shelfPlank} />
-                            </View>
-                          ))}
-                        </View>
-                        <View style={styles.shelfRail} />
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              </ScrollView>
-
-              <View style={styles.facingLegendRow}>
-                {[
-                  { style: styles.facingGridCellFilled, label: 'Visible' },
-                  { style: styles.facingGridCellMissing, label: 'Missing' },
-                  { style: styles.facingGridCellMismatch, label: 'Mismatch' },
-                ].map((item) => (
-                  <View key={item.label} style={styles.facingLegendItem}>
-                    <View style={[styles.facingLegendDot, item.style]} />
-                    <Text style={styles.facingLegendText}>{item.label}</Text>
-                  </View>
-                ))}
-              </View>
-
-              <Text style={styles.unifiedFacingStats}>
-                Visible: {facingGridCells.filter(Boolean).length} / {facingGridCells.length} • Missing: {facingGridCells.filter((cell) => !cell).length} • Mismatch: {getFacingMismatchCount()}
-              </Text>
-              <Text style={styles.unifiedFacingStats}>Units observed (stacked): {getTotalObservedUnits()}</Text>
-
-              <View style={styles.productQtySection}>
-                <Text style={styles.comparisonLabel}>EXPECTED VS OBSERVED BY PRODUCT</Text>
+              <View style={styles.simpleFacingList}>
                 {facingProducts.map((product) => {
                   const expected = Number(expectedTargetsFromGrid[product.id] || 0);
-                  const observed = getObservedCountForProduct(product.id);
+                  const observed = getSimpleObservedCountForProduct(product.id);
                   const gap = observed - expected;
                   return (
-                    <View key={`qty-${product.id}`} style={styles.productQtyItem}>
-                      <View style={styles.productQtyRow}>
+                    <View key={`simple-facing-${product.id}`} style={styles.simpleFacingCard}>
+                      <View style={styles.simpleFacingTopRow}>
                         <View style={[styles.productQtySwatch, { backgroundColor: product.color }]} />
-                        <View style={styles.productQtyInfo}>
-                          <Text style={styles.productQtyName} numberOfLines={1}>{product.name}</Text>
-                          <Text style={styles.productQtyMeta}>Observed: {observed}</Text>
-                        </View>
-                        <View style={styles.productQtyExpectedWrap}>
-                          <Text style={styles.productQtyExpectedLabel}>Expected</Text>
-                          <View style={styles.productQtyExpectedStatic}>
-                            <Text style={styles.productQtyExpectedStaticText}>{expected}</Text>
-                          </View>
+                        <View style={styles.simpleFacingTextWrap}>
+                          <Text style={styles.simpleFacingName} numberOfLines={1}>{product.name}</Text>
+                          <Text style={styles.simpleFacingMeta}>Expected: {expected}</Text>
                         </View>
                         <View style={[styles.productQtyGapBadge, gap < 0 ? styles.productQtyGapNegative : styles.productQtyGapPositive]}>
                           <Text style={styles.productQtyGapText}>{gap >= 0 ? `+${gap}` : `${gap}`}</Text>
                         </View>
                       </View>
-                      <TouchableOpacity style={styles.productQtyAssignButton} onPress={() => handleAssignProductFromSummary(product.id)} activeOpacity={0.85}>
-                        <MaterialCommunityIcons name="playlist-plus" size={14} color="#1d4ed8" />
-                        <Text style={styles.productQtyAssignText}>Assign</Text>
-                      </TouchableOpacity>
+
+                      <View style={styles.simpleFacingControls}>
+                        <TouchableOpacity style={styles.simpleFacingBtn} onPress={() => handleSimpleFacingAdjust(product.id, -1)}>
+                          <MaterialCommunityIcons name="minus" size={16} color="#334155" />
+                        </TouchableOpacity>
+                        <TextInput
+                          style={styles.simpleFacingInput}
+                          value={String(observed)}
+                          onChangeText={(value) => handleSimpleFacingCountChange(product.id, value)}
+                          keyboardType="number-pad"
+                          placeholder="0"
+                          placeholderTextColor="#94a3b8"
+                        />
+                        <TouchableOpacity style={styles.simpleFacingBtn} onPress={() => handleSimpleFacingAdjust(product.id, 1)}>
+                          <MaterialCommunityIcons name="plus" size={16} color="#334155" />
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   );
                 })}
               </View>
+
+              <Text style={styles.unifiedFacingStats}>Total observed units: {getSimpleTotalObservedUnits()}</Text>
             </View>
           </ScrollView>
 
           <View style={styles.modalFooter}>
             <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={handleSaveStockUpdates}>
               <MaterialCommunityIcons name="content-save" size={20} color="#fff" />
-              <Text style={styles.saveButtonText}>Save Facing Grid</Text>
+              <Text style={styles.saveButtonText}>Save Quick Facing</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.modalButton, styles.closeButton]} onPress={() => setShowStockModal(false)}>
               <Text style={styles.closeButtonText}>Close</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Slot assign overlay */}
-          {showSlotAssignModal && (
-            <View style={styles.slotAssignOverlay}>
-              <View style={styles.slotAssignCard}>
-                <View style={styles.slotAssignHeader}>
-                  <Text style={styles.slotAssignTitle}>Assign Product to Slot</Text>
-                  <TouchableOpacity onPress={() => setShowSlotAssignModal(false)}>
-                    <MaterialCommunityIcons name="close" size={22} color="#334155" />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.depthControlRow}>
-                  <Text style={styles.depthControlLabel}>Units stacked in this slot</Text>
-                  <View style={styles.depthControlActions}>
-                    <TouchableOpacity style={styles.depthControlButton} onPress={handleDecreaseActiveDepth}>
-                      <MaterialCommunityIcons name="minus" size={16} color="#334155" />
-                    </TouchableOpacity>
-                    <TextInput
-                      style={styles.depthControlInput}
-                      value={activeSlotDepthInput}
-                      onChangeText={handleActiveSlotDepthInput}
-                      keyboardType="numeric"
-                      placeholder="1"
-                      placeholderTextColor="#94a3b8"
-                    />
-                    <TouchableOpacity style={styles.depthControlButton} onPress={handleIncreaseActiveDepth}>
-                      <MaterialCommunityIcons name="plus" size={16} color="#334155" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                <ScrollView style={styles.slotAssignList}>
-                  {articles.slice(0, 12).map((product) => (
-                    <TouchableOpacity key={product.id} style={styles.slotAssignItem} onPress={() => handleAssignProductToSlot(product.id)}>
-                      <View style={[styles.slotAssignColor, { backgroundColor: product.color }]} />
-                      <View style={styles.slotAssignTextWrap}>
-                        <Text style={styles.slotAssignName}>{product.name}</Text>
-                        <Text style={styles.slotAssignMeta}>{product.meta}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-                <TouchableOpacity style={styles.slotAssignMissingButton} onPress={handleClearSlotAssignment}>
-                  <MaterialCommunityIcons name="delete-outline" size={18} color="#b91c1c" />
-                  <Text style={styles.slotAssignMissingText}>Mark Slot as Missing</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
         </SafeAreaView>
       </Modal>
 
@@ -1598,11 +1491,26 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
           <ScrollView style={styles.modalContent} contentContainerStyle={{ padding: 16 }}>
             <Text style={styles.comparisonLabel}>NOM DU CONCURRENT</Text>
+            <View style={styles.ownerChipWrap}>
+              {OWNER_BRANDS.map((brand) => {
+                const isActive = competitorName === brand;
+                return (
+                  <TouchableOpacity
+                    key={brand}
+                    style={[styles.ownerChip, isActive && styles.ownerChipActive]}
+                    onPress={() => setCompetitorName(brand)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.ownerChipText, isActive && styles.ownerChipTextActive]}>{brand}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
             <TextInput
               style={styles.comparisonInput}
               value={competitorName}
               onChangeText={setCompetitorName}
-              placeholder="Entrer le nom du concurrent"
+              placeholder="Entrer le nom du concurrent (marque)"
               placeholderTextColor="#9ca3af"
             />
 
@@ -1984,7 +1892,21 @@ const styles = StyleSheet.create({
   productQtyGapText: { fontSize: 11, fontWeight: '800', color: '#334155' },
   productQtyAssignButton: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginRight: 2 },
   productQtyAssignText: { marginLeft: 6, fontSize: 11, fontWeight: '700', color: '#1d4ed8' },
+  simpleFacingList: { marginTop: 12, gap: 10 },
+  simpleFacingCard: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 10, backgroundColor: '#f8fafc' },
+  simpleFacingTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  simpleFacingTextWrap: { flex: 1, minWidth: 0 },
+  simpleFacingName: { fontSize: 13, fontWeight: '700', color: '#0f172a' },
+  simpleFacingMeta: { marginTop: 2, fontSize: 11, color: '#64748b', fontWeight: '600' },
+  simpleFacingControls: { marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  simpleFacingBtn: { width: 34, height: 34, borderRadius: 8, borderWidth: 1, borderColor: '#cbd5e1', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
+  simpleFacingInput: { width: 68, height: 34, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, backgroundColor: '#fff', textAlign: 'center', fontWeight: '700', color: '#0f172a' },
   comparisonLabel: { fontSize: 12, fontWeight: '700', color: '#94a3b8', letterSpacing: 0.6, marginBottom: 8, marginTop: 6 },
+  ownerChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  ownerChip: { borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  ownerChipActive: { borderColor: '#2563eb', backgroundColor: '#dbeafe' },
+  ownerChipText: { fontSize: 12, fontWeight: '700', color: '#334155' },
+  ownerChipTextActive: { color: '#1d4ed8' },
   comparisonInput: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#0f172a', marginBottom: 12 },
   comparisonCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e5e7eb', padding: 14, marginBottom: 12 },
   comparisonProductName: { fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 10 },
