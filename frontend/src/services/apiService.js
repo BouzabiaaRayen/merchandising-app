@@ -185,6 +185,44 @@ export const inventoryService = {
 };
 
 // ---------------------------------------------------------------------------
+// Merchandising AI
+// ---------------------------------------------------------------------------
+export const merchandisingAiService = {
+  getHealth: (params = {}) =>
+    api.get('/merchandising/ai/detect/', { params }).then(r => r.data),
+
+  detectShelf: (file, options = {}) => {
+    const formData = new FormData();
+    formData.append('file', {
+      uri: file.uri,
+      type: file.mimeType || file.type || 'image/jpeg',
+      name: file.fileName || file.name || `shelf_${Date.now()}.jpg`,
+    });
+
+    const params = {};
+
+    if (options.confidence !== undefined && options.confidence !== null && options.confidence !== '') {
+      params.confidence = options.confidence;
+    }
+
+    if (options.imgsz !== undefined && options.imgsz !== null && options.imgsz !== '') {
+      params.imgsz = options.imgsz;
+    }
+
+    if (options.store !== undefined && options.store !== null && options.store !== '') {
+      params.store = options.store;
+    }
+
+    return api.post('/merchandising/ai/detect/', formData, {
+      params,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    }).then(r => r.data);
+  },
+};
+
+// ---------------------------------------------------------------------------
 // GPS
 // ---------------------------------------------------------------------------
 export const gpsService = {

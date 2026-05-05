@@ -11,14 +11,17 @@ import {
   Alert,
   Modal,
   Image,
+  Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import { visitService, storeService, notificationService, scheduleService, productService } from '../services/apiService';
+import { visitService, storeService, notificationService, scheduleService, productService, merchandisingAiService } from '../services/apiService';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import AIShelfAnalysisSection from '../components/AIShelfAnalysisSection';
+import { getStockRupturesFromAiResult, normalizeAiDetectionResponse } from '../services/merchandisingAIMapper';
 
 const FAKE_ARTICLES = [
   { id: 'art-1', name: 'Warda Bidha Spaghetti N°3', meta: '500g • Semoule dure', price: '2.450 TND', status: 'rupture', color: '#f4d48e', icon: 'pasta' },
@@ -106,8 +109,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const [checkOutTime, setCheckOutTime] = useState(null);
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
   const [activeTab, setActiveTab] = useState('events');
-  const [articleQuery, setArticleQuery] = useState('');
-
   // Photos state
   const [photos, setPhotos] = useState([]);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -165,6 +166,17 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const [showSlotAssignModal, setShowSlotAssignModal] = useState(false);
   const [simpleFacingCounts, setSimpleFacingCounts] = useState({});
 
+  // AI shelf analysis state
+  const [aiPendingImage, setAiPendingImage] = useState(null);
+  const [aiAnalyzedImage, setAiAnalyzedImage] = useState(null);
+  const [aiAnalysisResult, setAiAnalysisResult] = useState(null);
+  const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
+  const [aiAnalysisError, setAiAnalysisError] = useState('');
+  const [aiHealthState, setAiHealthState] = useState('checking');
+  const [aiShowAdvancedSettings, setAiShowAdvancedSettings] = useState(false);
+  const [aiShowOverlay, setAiShowOverlay] = useState(true);
+  const [aiSettings, setAiSettings] = useState({ confidence: '', imgsz: '' });
+
   const facingProducts = articles.slice(0, 8);
   const expectedTargetsFromGrid = getExpectedTargetsFromGrid(facingProducts, facingGridCells.length);
 
@@ -202,6 +214,10 @@ export default function VisitExecutionScreen({ route, navigation }) {
   useEffect(() => {
     fetchVisitData();
     getCurrentLocation();
+  }, []);
+
+  useEffect(() => {
+    checkAiServiceHealth();
   }, []);
 
   // Visit timer
@@ -350,6 +366,10 @@ export default function VisitExecutionScreen({ route, navigation }) {
         if (savedProgress.stockUpdateCompleted) setStockUpdateCompleted(true);
         if (savedProgress.priceComparisonCompleted) setPriceComparisonCompleted(true);
         if (savedProgress.photos?.length > 0) setPhotos(savedProgress.photos);
+        if (savedProgress.aiPendingImage) setAiPendingImage(savedProgress.aiPendingImage);
+        if (savedProgress.aiAnalyzedImage) setAiAnalyzedImage(savedProgress.aiAnalyzedImage);
+        if (savedProgress.aiAnalysisResult) setAiAnalysisResult(savedProgress.aiAnalysisResult);
+        if (savedProgress.aiAnalysisSettings) setAiSettings(savedProgress.aiAnalysisSettings);
       }
 
       try {
@@ -424,6 +444,125 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
 
+  const checkAiServiceHealth = async () => {
+    try {
+      setAiHealthState('checking');
+      await merchandisingAiService.getHealth();
+      setAiHealthState('healthy');
+    } catch (error) {
+      console.error('AI health check failed:', error?.message || error);
+      setAiHealthState('error');
+    }
+  };
+
+  const persistAiProgress = async (updates) => {
+    try {
+      await saveVisitProgress(visitId, updates);
+    } catch (error) {
+      console.error('Failed to persist AI analysis progress:', error);
+    }
+  };
+
+  const handleAiSettingsChange = (key, value) => {
+    const nextSettings = { ...aiSettings, [key]: value };
+    setAiSettings(nextSettings);
+    persistAiProgress({ aiAnalysisSettings: nextSettings });
+  };
+
+  const handlePickAiImage = async () => {
+    try {
+      if (Platform.OS !== 'web') {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission requise', "Autorisez l'acces a la galerie pour importer une photo.");
+          return;
+        }
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets?.[0]) {
+        setAiPendingImage(result.assets[0]);
+        setAiAnalysisError('');
+        await persistAiProgress({ aiPendingImage: result.assets[0] });
+      }
+    } catch (error) {
+      console.error('AI gallery pick error:', error);
+      Alert.alert('Erreur', "Impossible d'importer la photo du rayon.");
+    }
+  };
+
+  const handleCaptureAiImage = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission requise', "Autorisez l'acces a la camera pour capturer le rayon.");
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets?.[0]) {
+        setAiPendingImage(result.assets[0]);
+        setAiAnalysisError('');
+        await persistAiProgress({ aiPendingImage: result.assets[0] });
+      }
+    } catch (error) {
+      console.error('AI camera capture error:', error);
+      Alert.alert('Erreur', 'Impossible de capturer la photo du rayon.');
+    }
+  };
+
+  const handleAnalyzeAiShelf = async () => {
+    const imageToAnalyze = aiPendingImage || aiAnalyzedImage;
+
+    if (!imageToAnalyze) {
+      Alert.alert('Image requise', 'Ajoutez une photo du rayon avant de lancer l analyse.');
+      return;
+    }
+
+    try {
+      setAiAnalysisLoading(true);
+      setAiAnalysisError('');
+
+      const response = await merchandisingAiService.detectShelf(imageToAnalyze, {
+        confidence: aiSettings.confidence,
+        imgsz: aiSettings.imgsz,
+        store: visit?.store || store?.id || '',
+      });
+
+      const normalizedResult = normalizeAiDetectionResponse(response);
+      setAiAnalysisResult(normalizedResult);
+      setAiAnalyzedImage(imageToAnalyze);
+      setAiPendingImage(null);
+      setAiHealthState('healthy');
+
+      await persistAiProgress({
+        aiPendingImage: null,
+        aiAnalyzedImage: imageToAnalyze,
+        aiAnalysisResult: normalizedResult,
+        aiAnalysisSettings: aiSettings,
+      });
+    } catch (error) {
+      console.error('AI shelf analysis failed:', error);
+      setAiHealthState('error');
+      const detail = error.response?.data?.detail || error.response?.data?.message;
+      setAiAnalysisError(detail || 'Le service IA n a pas pu analyser cette image. Reessayez avec une photo plus nette.');
+    } finally {
+      setAiAnalysisLoading(false);
+    }
+  };
+
   const handleCheckIn = async () => {
     try {
       const userId = user?.id;
@@ -456,9 +595,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
       const checkoutTimestamp = new Date().toISOString();
       setCheckOutTime(checkoutTimestamp);
       try {
-        const ruptureData = articles
-          .filter((a) => a.isRupture)
-          .map((a) => ({ productId: a.id, productName: a.name, status: 'rupture' }));
+        const ruptureData = getStockRupturesFromAiResult(aiAnalysisResult);
         if (ruptureData.length > 0) await visitService.patchVisit(visitId, { stock_ruptures: ruptureData });
       } catch (e) { console.error('Failed to save stock_ruptures:', e); }
       await visitService.checkOut(visitId, notes);
@@ -961,14 +1098,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
     }
   };
 
-  const handleToggleArticleRupture = (articleId) => {
-    setArticles((currentArticles) =>
-      currentArticles.map((article) =>
-        article.id === articleId ? { ...article, isRupture: !article.isRupture } : article
-      )
-    );
-  };
-
   // ─── Render helpers ──────────────────────────────────────────────────────────
 
   if (loading) {
@@ -1064,6 +1193,14 @@ export default function VisitExecutionScreen({ route, navigation }) {
       iconColor: '#10b981',
       iconBackground: '#e8fbf2',
     },
+    aiAnalysisResult && {
+      key: 'ai-analysis',
+      title: 'Analyse IA rayon',
+      subtitle: `${aiAnalysisResult.summary.totalProducts} produits • ${aiAnalysisResult.summary.urgentCount} urgents`,
+      icon: 'radar',
+      iconColor: aiAnalysisResult.summary.urgentCount > 0 ? '#ea580c' : '#2563eb',
+      iconBackground: aiAnalysisResult.summary.urgentCount > 0 ? '#ffedd5' : '#dbeafe',
+    },
     notes?.trim() && {
       key: 'notes',
       title: 'Infos magasin',
@@ -1073,11 +1210,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
       iconBackground: '#fff8e8',
     },
   ].filter(Boolean);
-
-  const filteredArticles = articles.filter((article) => {
-    const haystack = `${article.name} ${article.meta}`.toLowerCase();
-    return haystack.includes(articleQuery.trim().toLowerCase());
-  });
 
   // FIX: use areRequiredEventsCompleted in footer disabled logic
   const footerButtonLabel = isVisitCompleted
@@ -1142,53 +1274,28 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
   const renderArticlesTab = () => (
     <View style={styles.tabPanel}>
-      <View style={styles.articleToolbar}>
-        <View style={styles.searchBox}>
-          <MaterialCommunityIcons name="magnify" size={18} color="#c0c6d4" />
-          <TextInput
-            style={styles.searchInput}
-            value={articleQuery}
-            onChangeText={setArticleQuery}
-            placeholder="Rechercher un produit..."
-            placeholderTextColor="#a0a8b8"
-          />
-        </View>
-        <TouchableOpacity style={styles.filterButton} activeOpacity={0.85}>
-          <MaterialCommunityIcons name="tune-variant" size={20} color="#7b8798" />
-        </TouchableOpacity>
-      </View>
-
-      {filteredArticles.map((article) => {
-        const isActive = article.isRupture;
-        return (
-          <TouchableOpacity key={article.id} style={[styles.articleCard, isActive && styles.articleCardActive]} activeOpacity={0.9}>
-            <View style={[styles.articleThumb, { backgroundColor: article.color }]}>
-              <MaterialCommunityIcons name={article.icon} size={28} color="#ffffff" />
-            </View>
-            <View style={styles.articleDetails}>
-              <Text style={styles.articleName} numberOfLines={1}>{article.name}</Text>
-              <Text style={styles.articleMeta}>{article.meta}</Text>
-              <Text style={styles.articlePrice}>{article.price}</Text>
-            </View>
-            <TouchableOpacity
-              style={[styles.ruptureBadge, isActive && styles.ruptureBadgeActive]}
-              activeOpacity={0.85}
-              onPress={() => handleToggleArticleRupture(article.id)}
-            >
-              <Text style={[styles.ruptureBadgeText, isActive && styles.ruptureBadgeTextActive]}>
-                {isActive ? 'RUPTURE' : 'EN STOCK'}
-              </Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        );
-      })}
-
-      {filteredArticles.length === 0 && (
-        <View style={styles.emptyArticleState}>
-          <MaterialCommunityIcons name="package-variant-closed" size={40} color="#c8cfdb" />
-          <Text style={styles.emptyArticleText}>Aucun article ne correspond a votre recherche.</Text>
-        </View>
-      )}
+      <AIShelfAnalysisSection
+        pendingImage={aiPendingImage}
+        analyzedImage={aiAnalyzedImage}
+        result={aiAnalysisResult}
+        loading={aiAnalysisLoading}
+        error={aiAnalysisError}
+        healthState={aiHealthState}
+        disabled={!isCheckedIn || isVisitCompleted}
+        canUseCamera={Platform.OS !== 'web'}
+        showAdvancedSettings={aiShowAdvancedSettings}
+        settings={aiSettings}
+        showOverlay={aiShowOverlay}
+        hasStoreContext={Boolean(visit?.store || store?.id)}
+        isAdminMode={user?.role === 'admin' || user?.role === 'ADMIN'}
+        onPickImage={handlePickAiImage}
+        onCaptureImage={handleCaptureAiImage}
+        onAnalyze={handleAnalyzeAiShelf}
+        onRetry={handleAnalyzeAiShelf}
+        onToggleOverlay={() => setAiShowOverlay((current) => !current)}
+        onToggleAdvanced={() => setAiShowAdvancedSettings((current) => !current)}
+        onSettingsChange={handleAiSettingsChange}
+      />
     </View>
   );
 
@@ -1300,7 +1407,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
           {/* Tab bar */}
           <View style={styles.tabBar}>
             {[
-              { key: 'articles', label: 'Articles' },
+              { key: 'articles', label: 'Analyse IA' },
               { key: 'events', label: 'Evenements' },
               { key: 'store-info', label: 'Infos Magasin' },
             ].map((tab) => (
