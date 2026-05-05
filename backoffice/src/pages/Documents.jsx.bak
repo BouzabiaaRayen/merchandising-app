@@ -1,0 +1,620 @@
+import React, { useState, useEffect } from 'react';
+import Sidebar from '../components/Sidebar';
+import Navbar from '../components/Navbar';
+import { documentService } from '../services/apiService';
+import { Upload, FileText, Send, Video, Eye, Edit2, RotateCcw, Trash2, Search, Filter, ArrowUpDown } from 'lucide-react';
+import './Documents.css';
+
+const Documents = () => {
+  const [documents, setDocuments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('date');
+  const [filterType, setFilterType] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
+
+  // Modal states
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  const [showInstructionsModal, setShowInstructionsModal] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+
+  // Form states
+  const [guideForm, setGuideForm] = useState({ title: '', file: null, recipients: ['merchandisers'] });
+  const [instructionsForm, setInstructionsForm] = useState({ title: '', content: '', recipients: ['merchandisers'] });
+  const [videoForm, setVideoForm] = useState({ title: '', videoUrl: '', platform: 'youtube', recipients: ['merchandisers'] });
+
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
+
+  const fetchDocuments = async () => {
+    try {
+      setLoading(true);
+      const response = await documentService.getDocuments({ page_size: 1000 });
+      const docs = response?.results || response || [];
+      
+      const filteredDocs = docs.filter(doc => {
+        const docType = doc.document_type?.toLowerCase() || '';
+        return ['guide', 'instructions', 'training'].includes(docType);
+      });
+      
+      const sortedDocs = filteredDocs.sort((a, b) => 
+        new Date(b.created_at || b.uploaded_at) - new Date(a.created_at || a.uploaded_at)
+      );
+      
+      setDocuments(sortedDocs);
+      console.log('Documents fetched (backoffice):', sortedDocs);
+      setCurrentPage(1);
+    } catch (err) {
+      console.error('Error fetching documents:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getDocumentIcon = (docType) => {
+    const type = docType?.toLowerCase() || '';
+    if (type === 'guide') return '📄';
+    if (type === 'instructions') return '✓';
+    if (type === 'training') return '▶';
+    return '📄';
+  };
+
+  const getStatusBadge = (doc) => {
+    if (doc.status === 'draft') return 'Draft';
+    return 'Sent';
+  };
+
+  const getRecipientGroup = (doc) => {
+    if (doc.sent_to_merchandisers && doc.sent_to_supervisors) return 'All Teams';
+    if (doc.sent_to_merchandisers) return 'Merchandisers';
+    if (doc.sent_to_supervisors) return 'Supervisors';
+    return 'Not sent';
+  };
+
+  // Filter documents
+  let filteredDocuments = documents.filter(doc => {
+    const matchesSearch = doc.title?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = filterType === 'all' || doc.document_type === filterType;
+    return matchesSearch && matchesType;
+  });
+
+  // Sort documents
+  if (sortBy === 'date') {
+    filteredDocuments.sort((a, b) => 
+      new Date(b.created_at || b.uploaded_at) - new Date(a.created_at || a.uploaded_at)
+    );
+  } else if (sortBy === 'title') {
+    filteredDocuments.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  }
+
+  // Pagination
+  const totalPages = Math.ceil(filteredDocuments.length / itemsPerPage);
+  const startIdx = (currentPage - 1) * itemsPerPage;
+  const paginatedDocs = filteredDocuments.slice(startIdx, startIdx + itemsPerPage);
+
+  const handleDelete = async (doc) => {
+    if (!window.confirm('Are you sure you want to delete this document?')) return;
+    try {
+      await documentService.deleteDocument(doc.id);
+      setDocuments(documents.filter(d => d.id !== doc.id));
+    } catch (err) {
+      console.error('Error deleting document:', err);
+    }
+  };
+
+  const handleDownload = (doc) => {
+    if (doc.file_url) {
+      window.open(doc.file_url, '_blank');
+    }
+  };
+
+  const handleGuideSubmit = async (e) => {
+    e.preventDefault();
+    if (!guideForm.file || !guideForm.title) {
+      alert('Please fill in all required fields');
+      return;
+    }
+    try {
+      setModalLoading(true);
+      const formData = new FormData();
+      formData.append('title', guideForm.title);
+      formData.append('file', guideForm.file);
+      formData.append('document_type', 'guide');
+      formData.append('sent_to_merchandisers', guideForm.recipients.includes('merchandisers') ? 'true' : 'false');
+      formData.append('sent_to_supervisors', guideForm.recipients.includes('supervisors') ? 'true' : 'false');
+      
+      const res = await documentService.uploadDocument(formData);
+      console.log('Guide upload response:', res);
+      await fetchDocuments();
+      setShowGuideModal(false);
+      setGuideForm({ title: '', file: null, recipients: ['merchandisers'] });
+      alert('Guide uploaded successfully!');
+    } catch (err) {
+      console.error('Error uploading guide:', err);
+      alert('Failed to upload guide');
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleInstructionsSubmit = async (e) => {
+    e.preventDefault();
+    if (!instructionsForm.title || !instructionsForm.content) {
+      alert('Please fill in all required fields');
+      return;
+    }
+    try {
+      setModalLoading(true);
+      const formData = new FormData();
+      formData.append('title', instructionsForm.title);
+      formData.append('content', instructionsForm.content);
+      formData.append('document_type', 'instructions');
+      formData.append('sent_to_merchandisers', instructionsForm.recipients.includes('merchandisers') ? 'true' : 'false');
+      formData.append('sent_to_supervisors', instructionsForm.recipients.includes('supervisors') ? 'true' : 'false');
+      
+      const res = await documentService.uploadDocument(formData);
+      console.log('Instructions upload response:', res);
+      await fetchDocuments();
+      setShowInstructionsModal(false);
+      setInstructionsForm({ title: '', content: '', recipients: ['merchandisers'] });
+      alert('Instructions sent successfully!');
+    } catch (err) {
+      console.error('Error sending instructions:', err);
+      alert('Failed to send instructions');
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleVideoSubmit = async (e) => {
+    e.preventDefault();
+    if (!videoForm.title || !videoForm.videoUrl) {
+      alert('Please fill in all required fields');
+      return;
+    }
+    try {
+      setModalLoading(true);
+      const formData = new FormData();
+      formData.append('title', videoForm.title);
+      formData.append('video_url', videoForm.videoUrl);
+      formData.append('video_platform', videoForm.platform);
+      formData.append('document_type', 'training');
+      formData.append('sent_to_merchandisers', videoForm.recipients.includes('merchandisers') ? 'true' : 'false');
+      formData.append('sent_to_supervisors', videoForm.recipients.includes('supervisors') ? 'true' : 'false');
+      
+      const res = await documentService.uploadDocument(formData);
+      console.log('Video upload response:', res);
+      await fetchDocuments();
+      setShowVideoModal(false);
+      setVideoForm({ title: '', videoUrl: '', platform: 'youtube', recipients: ['merchandisers'] });
+      alert('Training video added successfully!');
+    } catch (err) {
+      console.error('Error adding video:', err);
+      alert('Failed to add training video');
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  return (
+    <div className="app">
+      <Sidebar />
+      <div className="main-content">
+        <Navbar />
+        <div className="page-container documents-page">
+          {/* Header */}
+          <div className="documents-header">
+            <div className="header-left">
+              <h1>Documents & Training</h1>
+              <p>Manage, distribute and track training materials for your global team.</p>
+            </div>
+            <div className="header-right">
+              <div className="search-box">
+                <Search size={18} />
+                <input
+                  type="text"
+                  placeholder="Search documents..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="quick-actions">
+            <div className="actions-label">SEND NEW DOCUMENT</div>
+            <div className="actions-grid">
+              <div className="action-card" onClick={() => setShowGuideModal(true)} style={{ cursor: 'pointer' }}>
+                <div className="action-icon" style={{ color: '#4f46e5' }}>📄</div>
+                <div className="action-title">Upload Guide</div>
+                <div className="action-desc">PDF, PPT or DOCX guides</div>
+              </div>
+              <div className="action-card" onClick={() => setShowInstructionsModal(true)} style={{ cursor: 'pointer' }}>
+                <div className="action-icon" style={{ color: '#059669' }}>✓</div>
+                <div className="action-title">Send Instructions</div>
+                <div className="action-desc">Quick task-based directives</div>
+              </div>
+              <div className="action-card" onClick={() => setShowVideoModal(true)} style={{ cursor: 'pointer' }}>
+                <div className="action-icon" style={{ color: '#ea580c' }}>▶</div>
+                <div className="action-title">Add Training Video</div>
+                <div className="action-desc">MP4, YouTube or Vimeo</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Documents */}
+          <div className="recent-documents">
+            <div className="section-header">
+              <h2>Recent Documents</h2>
+              <div className="header-controls">
+                <button className="btn-control">
+                  <Filter size={16} /> Filter
+                </button>
+                <button className="btn-control">
+                  <ArrowUpDown size={16} /> Sort
+                </button>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="loading-state">
+                <div className="loading-spinner"></div>
+                <p>Loading documents...</p>
+              </div>
+            ) : paginatedDocs.length === 0 ? (
+              <div className="empty-state">
+                <FileText size={48} />
+                <p>No documents yet</p>
+              </div>
+            ) : (
+              <>
+                <div className="documents-table">
+                  <div className="table-header">
+                    <div className="col-title">TITLE</div>
+                    <div className="col-type">TYPE</div>
+                    <div className="col-recipient">RECIPIENT GROUP</div>
+                    <div className="col-status">STATUS</div>
+                    <div className="col-date">DATE SENT</div>
+                    <div className="col-actions">ACTIONS</div>
+                  </div>
+
+                  <div className="table-body">
+                    {paginatedDocs.map((doc) => (
+                      <div key={doc.id} className="table-row">
+                        <div className="col-title">
+                          <span className="doc-icon">{getDocumentIcon(doc.document_type)}</span>
+                          <span>{doc.title || 'Untitled'}</span>
+                        </div>
+                        <div className="col-type">
+                          <span className={`badge badge-${doc.document_type}`}>
+                            {doc.document_type?.toUpperCase() || 'GUIDE'}
+                          </span>
+                        </div>
+                        <div className="col-recipient">{getRecipientGroup(doc)}</div>
+                        <div className="col-status">
+                          <span className={`status-badge status-${getStatusBadge(doc).toLowerCase()}`}>
+                            {getStatusBadge(doc)}
+                          </span>
+                        </div>
+                        <div className="col-date">
+                          {new Date(doc.created_at || doc.uploaded_at).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </div>
+                        <div className="col-actions">
+                          <button 
+                            className="btn-icon"
+                            title="View"
+                            onClick={() => handleDownload(doc)}
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button 
+                            className="btn-icon"
+                            title="Edit"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button 
+                            className="btn-icon"
+                            title="Refresh"
+                          >
+                            <RotateCcw size={16} />
+                          </button>
+                          <button 
+                            className="btn-icon btn-delete"
+                            title="Delete"
+                            onClick={() => handleDelete(doc)}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="pagination">
+                    <button 
+                      className="btn-page"
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                      <button
+                        key={page}
+                        className={`btn-page ${currentPage === page ? 'active' : ''}`}
+                        onClick={() => setCurrentPage(page)}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    <button 
+                      className="btn-page"
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Guide Upload Modal */}
+      {showGuideModal && (
+        <div className="modal-overlay" onClick={() => setShowGuideModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Upload Guide</h2>
+            <form onSubmit={handleGuideSubmit}>
+              <div className="form-group">
+                <label>Document Title *</label>
+                <input
+                  type="text"
+                  placeholder="Enter guide title"
+                  value={guideForm.title}
+                  onChange={(e) => setGuideForm({ ...guideForm, title: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Select File (PDF, PPT, DOCX) *</label>
+                <input
+                  type="file"
+                  accept=".pdf,.ppt,.pptx,.doc,.docx"
+                  onChange={(e) => setGuideForm({ ...guideForm, file: e.target.files[0] })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Send to:</label>
+                <div className="checkbox-group">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={guideForm.recipients.includes('merchandisers')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setGuideForm({ ...guideForm, recipients: [...guideForm.recipients, 'merchandisers'] });
+                        } else {
+                          setGuideForm({ ...guideForm, recipients: guideForm.recipients.filter(r => r !== 'merchandisers') });
+                        }
+                      }}
+                    />
+                    Merchandisers
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={guideForm.recipients.includes('supervisors')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setGuideForm({ ...guideForm, recipients: [...guideForm.recipients, 'supervisors'] });
+                        } else {
+                          setGuideForm({ ...guideForm, recipients: guideForm.recipients.filter(r => r !== 'supervisors') });
+                        }
+                      }}
+                    />
+                    Supervisors
+                  </label>
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" onClick={() => setShowGuideModal(false)} className="btn-cancel">Cancel</button>
+                <button type="submit" disabled={modalLoading} className="btn-submit">
+                  {modalLoading ? 'Uploading...' : 'Upload Guide'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Instructions Modal */}
+      {showInstructionsModal && (
+        <div className="modal-overlay" onClick={() => setShowInstructionsModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Send Instructions</h2>
+            <form onSubmit={handleInstructionsSubmit}>
+              <div className="form-group">
+                <label>Instructions Title *</label>
+                <input
+                  type="text"
+                  placeholder="Enter instructions title"
+                  value={instructionsForm.title}
+                  onChange={(e) => setInstructionsForm({ ...instructionsForm, title: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Instructions Content *</label>
+                <textarea
+                  placeholder="Enter task-based directives"
+                  rows="6"
+                  value={instructionsForm.content}
+                  onChange={(e) => setInstructionsForm({ ...instructionsForm, content: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Send to:</label>
+                <div className="checkbox-group">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={instructionsForm.recipients.includes('merchandisers')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setInstructionsForm({ ...instructionsForm, recipients: [...instructionsForm.recipients, 'merchandisers'] });
+                        } else {
+                          setInstructionsForm({ ...instructionsForm, recipients: instructionsForm.recipients.filter(r => r !== 'merchandisers') });
+                        }
+                      }}
+                    />
+                    Merchandisers
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={instructionsForm.recipients.includes('supervisors')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setInstructionsForm({ ...instructionsForm, recipients: [...instructionsForm.recipients, 'supervisors'] });
+                        } else {
+                          setInstructionsForm({ ...instructionsForm, recipients: instructionsForm.recipients.filter(r => r !== 'supervisors') });
+                        }
+                      }}
+                    />
+                    Supervisors
+                  </label>
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" onClick={() => setShowInstructionsModal(false)} className="btn-cancel">Cancel</button>
+                <button type="submit" disabled={modalLoading} className="btn-submit">
+                  {modalLoading ? 'Sending...' : 'Send Instructions'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Training Video Modal */}
+      {showVideoModal && (
+        <div className="modal-overlay" onClick={() => setShowVideoModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Add Training Video</h2>
+            <form onSubmit={handleVideoSubmit}>
+              <div className="form-group">
+                <label>Video Title *</label>
+                <input
+                  type="text"
+                  placeholder="Enter video title"
+                  value={videoForm.title}
+                  onChange={(e) => setVideoForm({ ...videoForm, title: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Video Platform *</label>
+                <select
+                  value={videoForm.platform}
+                  onChange={(e) => setVideoForm({ ...videoForm, platform: e.target.value })}
+                >
+                  <option value="youtube">YouTube</option>
+                  <option value="vimeo">Vimeo</option>
+                  <option value="mp4">MP4 Upload</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>{videoForm.platform === 'mp4' ? 'Video File' : 'Video URL'} *</label>
+                {videoForm.platform === 'mp4' ? (
+                  <input
+                    type="file"
+                    accept=".mp4"
+                    onChange={(e) => setVideoForm({ ...videoForm, videoUrl: e.target.files[0]?.name || '' })}
+                    required
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    placeholder={`Paste ${videoForm.platform} URL`}
+                    value={videoForm.videoUrl}
+                    onChange={(e) => setVideoForm({ ...videoForm, videoUrl: e.target.value })}
+                    required
+                  />
+                )}
+              </div>
+
+              <div className="form-group">
+                <label>Send to:</label>
+                <div className="checkbox-group">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={videoForm.recipients.includes('merchandisers')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setVideoForm({ ...videoForm, recipients: [...videoForm.recipients, 'merchandisers'] });
+                        } else {
+                          setVideoForm({ ...videoForm, recipients: videoForm.recipients.filter(r => r !== 'merchandisers') });
+                        }
+                      }}
+                    />
+                    Merchandisers
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={videoForm.recipients.includes('supervisors')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setVideoForm({ ...videoForm, recipients: [...videoForm.recipients, 'supervisors'] });
+                        } else {
+                          setVideoForm({ ...videoForm, recipients: videoForm.recipients.filter(r => r !== 'supervisors') });
+                        }
+                      }}
+                    />
+                    Supervisors
+                  </label>
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" onClick={() => setShowVideoModal(false)} className="btn-cancel">Cancel</button>
+                <button type="submit" disabled={modalLoading} className="btn-submit">
+                  {modalLoading ? 'Adding...' : 'Add Training Video'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Documents;

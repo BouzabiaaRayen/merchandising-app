@@ -69,6 +69,35 @@ const Performance = () => {
   const [customCompetitorName, setCustomCompetitorName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [expandStockDetails, setExpandStockDetails] = useState(false);
+  const [expandVisitDetails, setExpandVisitDetails] = useState(false);
+
+  const rankedStockRuptures = [...stockRuptureData]
+    .map((store) => ({
+      ...store,
+      totalIssues: (store.ruptures || 0) + (store.lowStock || 0),
+    }))
+    .sort((a, b) => b.totalIssues - a.totalIssues || b.ruptures - a.ruptures || b.lowStock - a.lowStock);
+
+  const ruptureTotals = rankedStockRuptures.reduce((acc, store) => {
+    acc.ruptures += store.ruptures || 0;
+    acc.fieldRuptures += store.fieldRuptures || 0;
+    acc.lowStock += store.lowStock || 0;
+    if ((store.ruptures || 0) + (store.lowStock || 0) + (store.fieldRuptures || 0) > 0) {
+      acc.affectedStores += 1;
+    }
+    return acc;
+  }, { ruptures: 0, fieldRuptures: 0, lowStock: 0, affectedStores: 0 });
+
+  const maxRuptures = Math.max(...stockRuptureData.map((store) => store.ruptures || 0), 1);
+  const maxLowStock = Math.max(...stockRuptureData.map((store) => store.lowStock || 0), 1);
+
+  const getSeverityLevel = (totalIssues) => {
+    if (totalIssues >= 8) return { label: 'Critical', className: 'critical' };
+    if (totalIssues >= 4) return { label: 'Watch', className: 'watch' };
+    if (totalIssues > 0) return { label: 'Monitor', className: 'monitor' };
+    return { label: 'Clear', className: 'clear' };
+  };
 
   const normalizeCompetitorKey = (name = '') =>
     name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
@@ -378,27 +407,78 @@ const Performance = () => {
       const storeStockMap = new Map();
       stores.forEach(store => {
         storeStockMap.set(store.id, {
+          id: store.id,
           name: store.name || `Store ${store.id}`,
           ruptures: 0,
           lowStock: 0,
+          fieldRuptures: 0,
           totalItems: 0,
+          sourceLabel: 'Inventory + field reports',
         });
       });
 
       inventory.forEach(item => {
-        if (item.store && storeStockMap.has(item.store)) {
-          const storeData = storeStockMap.get(item.store);
-          storeData.totalItems++;
-          if (item.quantity === 0) {
-            storeData.ruptures++;
-          } else if (item.quantity < (item.min_quantity || 5)) {
-            storeData.lowStock++;
-          }
+        if (!item.store) {
+          return;
+        }
+
+        if (!storeStockMap.has(item.store)) {
+          storeStockMap.set(item.store, {
+            id: item.store,
+            name: item.store_name || item.storeName || `Store ${item.store}`,
+            ruptures: 0,
+            lowStock: 0,
+            fieldRuptures: 0,
+            totalItems: 0,
+            sourceLabel: 'Inventory + field reports',
+          });
+        }
+
+        const storeData = storeStockMap.get(item.store);
+        storeData.totalItems++;
+        if (item.quantity === 0) {
+          storeData.ruptures++;
+        } else if (item.quantity < (item.min_quantity || 5)) {
+          storeData.lowStock++;
+        }
+      });
+
+      visits.forEach((visit) => {
+        const ruptureItems = Array.isArray(visit.stock_ruptures)
+          ? visit.stock_ruptures
+          : Array.isArray(visit.stockRuptures)
+            ? visit.stockRuptures
+            : [];
+
+        if (!visit.store || ruptureItems.length === 0) {
+          return;
+        }
+
+        if (!storeStockMap.has(visit.store)) {
+          storeStockMap.set(visit.store, {
+            id: visit.store,
+            name: visit.store_name || visit.storeName || `Store ${visit.store}`,
+            ruptures: 0,
+            lowStock: 0,
+            fieldRuptures: 0,
+            totalItems: 0,
+            sourceLabel: 'Inventory + field reports',
+          });
+        }
+
+        const storeData = storeStockMap.get(visit.store);
+        storeData.fieldRuptures += ruptureItems.length;
+        if (visit.updated_at || visit.check_out_time || visit.created_at) {
+          storeData.lastFieldReportAt = visit.updated_at || visit.check_out_time || visit.created_at;
         }
       });
 
       const stockData = Array.from(storeStockMap.values())
-        .sort((a, b) => b.ruptures - a.ruptures)
+        .map((store) => ({
+          ...store,
+          totalIssues: (store.ruptures || 0) + (store.lowStock || 0) + (store.fieldRuptures || 0),
+        }))
+        .sort((a, b) => b.totalIssues - a.totalIssues || b.fieldRuptures - a.fieldRuptures || b.ruptures - a.ruptures)
         .slice(0, 10);
       setStockRuptureData(stockData);
 
@@ -699,42 +779,104 @@ const Performance = () => {
             </div>
 
             {/* Stock Rupture by Store */}
-            <div className="chart-card">
+            <div className="chart-card chart-card-spotlight">
               <div className="chart-header">
-                <h2>Stock Ruptures by Location</h2>
-                <p>Top stores with critical stock issues</p>
-              </div>
-              {stockRuptureData.length > 0 ? (
-                <div className="data-values-container">
-                  {stockRuptureData.map((store, index) => (
-                    <div key={index} className="data-value-item">
-                      <div className="value-header">
-                        <h4>{store.name}</h4>
-                        <div className="value-badges">
-                          <span className="badge rupture">{store.ruptures} Ruptures</span>
-                          <span className="badge low-stock">{store.lowStock} Low Stock</span>
-                        </div>
-                      </div>
-                      <div className="value-bars">
-                        <div className="bar-item">
-                          <label>Stock Ruptures</label>
-                          <div className="bar-container">
-                            <div className="bar-fill rupture" style={{ width: `${Math.min((store.ruptures / Math.max(...stockRuptureData.map(s => s.ruptures), 1)) * 100, 100)}%` }} />
-                          </div>
-                          <span className="bar-value">{store.ruptures}</span>
-                        </div>
-                        <div className="bar-item">
-                          <label>Low Stock Items</label>
-                          <div className="bar-container">
-                            <div className="bar-fill low-stock" style={{ width: `${Math.min((store.lowStock / Math.max(...stockRuptureData.map(s => s.lowStock), 1)) * 100, 100)}%` }} />
-                          </div>
-                          <span className="bar-value">{store.lowStock}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="chart-header-copy">
+                  <span className="section-kicker">Stock intelligence</span>
+                  <h2>Stock Ruptures by Location</h2>
+                  <p>Merged from inventory levels and field reports collected during visits.</p>
                 </div>
-              ) : (
+                <div className="chart-header-actions">
+                  <div className="chart-header-chip">
+                    {ruptureTotals.affectedStores} stores affected
+                  </div>
+                  <button
+                    onClick={() => setExpandStockDetails(!expandStockDetails)}
+                    className="stock-toggle-btn"
+                    aria-expanded={expandStockDetails}
+                  >
+                    {expandStockDetails ? '▼' : '▶'}
+                  </button>
+                </div>
+              </div>
+              {stockRuptureData.length > 0 && expandStockDetails && (
+                <div className="rupture-layout">
+                  <div className="rupture-summary-row">
+                    <div className="rupture-summary-card danger">
+                      <span className="rupture-summary-label">Inventory ruptures</span>
+                      <strong>{ruptureTotals.ruptures}</strong>
+                    </div>
+                    <div className="rupture-summary-card warning">
+                      <span className="rupture-summary-label">Field ruptures</span>
+                      <strong>{ruptureTotals.fieldRuptures}</strong>
+                    </div>
+                    <div className="rupture-summary-card neutral">
+                      <span className="rupture-summary-label">Low stock items</span>
+                      <strong>{ruptureTotals.lowStock}</strong>
+                    </div>
+                    <div className="rupture-summary-card neutral">
+                      <span className="rupture-summary-label">Affected stores</span>
+                      <strong>{ruptureTotals.affectedStores}</strong>
+                    </div>
+                  </div>
+
+                  <div className="rupture-ranking">
+                    {rankedStockRuptures.map((store, index) => {
+                      const severity = getSeverityLevel(store.totalIssues);
+                      const rupturePercent = Math.min((store.ruptures / maxRuptures) * 100, 100);
+                      const lowStockPercent = Math.min((store.lowStock / maxLowStock) * 100, 100);
+
+                      return (
+                        <article key={`${store.name}-${index}`} className={`rupture-card severity-${severity.className}`}>
+                          <div className="rupture-card-header">
+                            <div>
+                              <div className="rupture-rank">#{index + 1}</div>
+                              <h4>{store.name}</h4>
+                              <p>{store.totalIssues} total stock issues</p>
+                            </div>
+                            <span className={`rupture-status ${severity.className}`}>{severity.label}</span>
+                          </div>
+
+                          <div className="rupture-pill-row">
+                            <span className="badge rupture">{store.ruptures} Inventory</span>
+                            <span className="badge warning">{store.fieldRuptures || 0} Field reports</span>
+                            <span className="badge low-stock">{store.lowStock} Low stock</span>
+                          </div>
+
+                          <div className="rupture-meta-row">
+                            <span className="rupture-source">{store.sourceLabel || 'Inventory + field reports'}</span>
+                            {store.lastFieldReportAt && (
+                              <span className="rupture-time">Last report {new Date(store.lastFieldReportAt).toLocaleDateString()}</span>
+                            )}
+                          </div>
+
+                          <div className="rupture-bars">
+                            <div className="bar-item">
+                              <div className="bar-label-row">
+                                <label>Inventory ruptures</label>
+                                <span>{store.ruptures}</span>
+                              </div>
+                              <div className="bar-container">
+                                <div className="bar-fill rupture" style={{ width: `${rupturePercent}%` }} />
+                              </div>
+                            </div>
+                            <div className="bar-item">
+                              <div className="bar-label-row">
+                                <label>Low stock items</label>
+                                <span>{store.lowStock}</span>
+                              </div>
+                              <div className="bar-container">
+                                <div className="bar-fill low-stock" style={{ width: `${lowStockPercent}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {stockRuptureData.length === 0 && (
                 <div className="empty-state">
                   <Package size={48} />
                   <p>No stock data available</p>
@@ -745,10 +887,24 @@ const Performance = () => {
             {/* Visit Status Summary */}
             <div className="chart-card">
               <div className="chart-header">
-                <h2>Visit Execution Summary</h2>
-                <p>Distribution of visit statuses</p>
+                <div className="chart-header-copy">
+                  {expandVisitDetails && (
+                    <>
+                      <h2>Visit Execution Summary</h2>
+                      <p>Distribution of visit statuses</p>
+                    </>
+                  )}
+                  {!expandVisitDetails && <h2 className="compact-title">Visit Execution Summary</h2>}
+                </div>
+                <button
+                  onClick={() => setExpandVisitDetails(!expandVisitDetails)}
+                  className="status-toggle-btn"
+                  aria-expanded={expandVisitDetails}
+                >
+                  {expandVisitDetails ? '▼' : '▶'}
+                </button>
               </div>
-              {visitStatusData.length > 0 ? (
+              {expandVisitDetails && visitStatusData.length > 0 && (
                 <div className="visit-status-container">
                   <div className="status-items">
                     {visitStatusData.map((item, index) => (
@@ -780,7 +936,8 @@ const Performance = () => {
                     ))}
                   </div>
                 </div>
-              ) : (
+              )}
+              {expandVisitDetails && visitStatusData.length === 0 && (
                 <div className="empty-state">
                   <Zap size={48} />
                   <p>No visit data available</p>

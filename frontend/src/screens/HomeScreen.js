@@ -897,6 +897,27 @@ export default function HomeScreen() {
     try {
       const today = new Date().toISOString().split('T')[0];
 
+      const escapeHtml = (value = '') => String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+      const formatPdfTime = (value) => {
+        if (!value) return '';
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime())
+          ? ''
+          : parsed.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      };
+
+      const normalizeImageSource = (entry) => {
+        if (!entry) return '';
+        if (typeof entry === 'string') return entry;
+        return entry.uri || entry.url || entry.image || entry.photo || '';
+      };
+
       // ── Fetch all data in parallel ──
       const [alertsRes, productsRes] = await Promise.all([
         api.get('/merchandising/competitor-alerts/').catch(() => ({ data: [] })),
@@ -967,15 +988,37 @@ export default function HomeScreen() {
       const buildEventsTable = (s) => {
         const rows = [];
 
+        const addRow = (type, description, time = '', image = '') => {
+          rows.push({
+            type,
+            description,
+            time,
+            image,
+          });
+        };
+
+        if (s.checkIn) {
+          addRow('Arrivée en magasin', 'Début de visite', formatPdfTime(s.checkIn));
+        }
+
+        if (s.breakStatus === 'taken' && s.breakStart && s.breakEnd) {
+          const bs = formatPdfTime(s.breakStart);
+          const be = formatPdfTime(s.breakEnd);
+          addRow(
+            'Pause',
+            `Pause prise de ${bs || '--:--'} à ${be || '--:--'} (${s.breakTook || '?'} min / ${s.breakDuration || '?'} min)`
+          );
+        } else if (s.breakStatus === 'missed') {
+          addRow('Pause', 'Pause prévue mais non prise', '');
+        }
+
         // Photos
         s.photos.forEach((p, i) => {
-          const src = typeof p === 'string' ? p : p.uri || p.url || '';
-          rows.push({
-            type: 'Photo anomalie',
-            description: `Photo ${i + 1}`,
-            time: '',
-            image: src,
-          });
+          const src = normalizeImageSource(p);
+          const label = typeof p === 'object' && (p.fileName || p.name)
+            ? `${p.fileName || p.name}`
+            : `Photo ${i + 1}`;
+          addRow('Photo de visite', `${label} ajoutée pendant la visite`, '', src);
         });
 
         // Facing
@@ -983,61 +1026,58 @@ export default function HomeScreen() {
           const summary = s.facingData.productSummary.map(ps =>
             `${ps.productName}: attendu ${ps.expected}, observé ${ps.observed} (${ps.gap >= 0 ? '+' : ''}${ps.gap})`
           ).join(' | ');
-          rows.push({
-            type: 'Facing / Linéaire',
-            description: `Grille ${s.facingData.rows}×${s.facingData.columns} — ${s.facingData.totalObservedUnits || 0} unités — ${summary}`,
-            time: '',
-            image: s.facingData.proofPhotoUri || '',
-          });
+          addRow(
+            'Facing / Linéaire',
+            `Grille ${s.facingData.rows}×${s.facingData.columns} — ${s.facingData.totalObservedUnits || 0} unités${summary ? ` — ${summary}` : ''}`,
+            '',
+            normalizeImageSource(s.facingData.proofPhotoUri)
+          );
         }
 
         // Price comparisons
         s.priceComps.forEach(pc => {
           const diff = pc.ourPrice && pc.competitorPrice ? (pc.competitorPrice - pc.ourPrice).toFixed(2) : '—';
-          rows.push({
-            type: 'Prix concurrent',
-            description: `${pc.productName} — Notre prix: ${pc.ourPrice} TND, ${pc.competitor || 'Concurrent'}: ${pc.competitorPrice} TND (diff: ${diff})`,
-            time: '',
-            image: '',
-          });
+          addRow(
+            'Prix concurrent',
+            `${pc.productName} — Notre prix: ${pc.ourPrice} TND, ${pc.competitor || 'Concurrent'}: ${pc.competitorPrice} TND (diff: ${diff})`
+          );
         });
 
         // Ruptures
         s.ruptures.forEach(r => {
-          rows.push({
-            type: 'Rupture de stock',
-            description: r.productName || r.productId,
-            time: '',
-            image: '',
-          });
+          addRow('Rupture de stock', r.productName || r.productId || 'Produit non renseigné');
         });
 
         // Alerts
         s.alerts.forEach(a => {
-          const time = a.created_at ? new Date(a.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
-          rows.push({
-            type: `Alerte — ${alertTypeLabels[a.alert_type] || a.alert_type}`,
-            description: `${a.competitor_brand || ''}${a.description ? ' : ' + a.description : ''}`,
+          const time = formatPdfTime(a.created_at);
+          addRow(
+            `Alerte — ${alertTypeLabels[a.alert_type] || a.alert_type}`,
+            `${a.competitor_brand || ''}${a.description ? ' : ' + a.description : ''}`,
             time,
-            image: a.photo || '',
-          });
+            normalizeImageSource(a.photo)
+          );
         });
 
         // Products
         s.products.forEach(p => {
-          const time = p.created_at ? new Date(p.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
+          const time = formatPdfTime(p.created_at);
           const details = [p.name, p.brand, p.category, p.price ? `${p.price} TND` : ''].filter(Boolean).join(' — ');
-          rows.push({
-            type: 'Produit ajouté',
-            description: details + (p.description ? ` (${p.description})` : ''),
+          addRow(
+            'Produit ajouté',
+            details + (p.description ? ` (${p.description})` : ''),
             time,
-            image: p.image || '',
-          });
+            normalizeImageSource(p.image)
+          );
         });
 
         // Notes
         if (s.notes) {
-          rows.push({ type: 'Notes', description: s.notes, time: '', image: '' });
+          addRow('Notes', s.notes);
+        }
+
+        if (s.checkOut) {
+          addRow('Sortie du magasin', 'Fin de visite', formatPdfTime(s.checkOut));
         }
 
         return rows;
@@ -1047,40 +1087,44 @@ export default function HomeScreen() {
       const storesHTML = storeBlocks.map((s, idx) => {
         let breakLine = '';
         if (s.breakStatus === 'taken') {
-          const bs = new Date(s.breakStart).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-          const be = new Date(s.breakEnd).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-          breakLine = `<tr><td class="lbl">Pause</td><td colspan="3">&#9989; ${bs} &rarr; ${be} (${s.breakTook || '?'}min / ${s.breakDuration || '?'}min)</td></tr>`;
+          const bs = formatPdfTime(s.breakStart);
+          const be = formatPdfTime(s.breakEnd);
+          breakLine = `<tr><td class="lbl">Pause</td><td colspan="3">&#9989; ${escapeHtml(bs || '--:--')} &rarr; ${escapeHtml(be || '--:--')} (${escapeHtml(s.breakTook || '?')}min / ${escapeHtml(s.breakDuration || '?')}min)</td></tr>`;
         } else if (s.breakStatus === 'missed') {
           breakLine = `<tr><td class="lbl">Pause</td><td colspan="3" style="color:#dc2626;">&#9888;&#65039; Manquée</td></tr>`;
         }
 
         const events = buildEventsTable(s);
+        const photoCount = events.filter((e) => e.image).length;
 
         const eventsRows = events.length > 0
           ? events.map((e, i) => `
               <tr style="background:${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-                <td style="padding:6px 8px;border:1px solid #e2e8f0;font-weight:600;color:#334155;white-space:nowrap;vertical-align:top;">${e.type}</td>
-                <td style="padding:6px 8px;border:1px solid #e2e8f0;vertical-align:top;">${e.description}</td>
+                <td style="padding:6px 8px;border:1px solid #e2e8f0;font-weight:600;color:#334155;white-space:nowrap;vertical-align:top;">${escapeHtml(e.time || '—')}</td>
+                <td style="padding:6px 8px;border:1px solid #e2e8f0;font-weight:600;color:#334155;white-space:nowrap;vertical-align:top;">${escapeHtml(e.type)}</td>
+                <td style="padding:6px 8px;border:1px solid #e2e8f0;vertical-align:top;">${escapeHtml(e.description)}</td>
                 <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;vertical-align:top;">${e.image ? `<img src=\"${e.image}\" style=\"max-width:65px;max-height:45px;border-radius:3px;\"/>` : '—'}</td>
               </tr>`).join('')
-          : `<tr><td colspan="3" style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;border:1px solid #e2e8f0;">Aucun événement enregistré pour cette visite.</td></tr>`;
+          : `<tr><td colspan="4" style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;border:1px solid #e2e8f0;">Aucun événement enregistré pour cette visite.</td></tr>`;
 
         return `
           <table style="width:100%;border-collapse:collapse;margin-bottom:20px;page-break-inside:avoid;">
             <!-- Store header -->
             <tr>
-              <td colspan="3" style="background:#2563eb;color:#fff;padding:10px 14px;font-size:14px;font-weight:700;">
+              <td colspan="4" style="background:#2563eb;color:#fff;padding:10px 14px;font-size:14px;font-weight:700;">
                 <table style="border-collapse:collapse;"><tr>
                   <td style="width:28px;height:28px;border:2px solid #fff;border-radius:50%;text-align:center;vertical-align:middle;font-weight:800;font-size:12px;color:#fff;">${idx + 1}</td>
-                  <td style="padding-left:10px;color:#fff;font-size:14px;font-weight:700;">${s.storeName}</td>
+                  <td style="padding-left:10px;color:#fff;font-size:14px;font-weight:700;">${escapeHtml(s.storeName)}</td>
                 </tr></table>
               </td>
             </tr>
+            <tr><td colspan="4" style="background:#eff6ff;color:#1d4ed8;padding:6px 14px;font-size:10px;font-weight:700;border-left:1px solid #bfdbfe;border-right:1px solid #bfdbfe;">${events.length} événements consignés • ${photoCount} photos associées</td></tr>
             <!-- Store info -->
-            <tr><td class="lbl">Adresse</td><td colspan="2">${s.storeAddress}${s.storeCity ? ', ' + s.storeCity : ''}</td></tr>
+            <tr><td class="lbl">Adresse</td><td colspan="2">${escapeHtml(s.storeAddress)}${s.storeCity ? ', ' + escapeHtml(s.storeCity) : ''}</td></tr>
             ${breakLine}
             <!-- Events header -->
             <tr>
+              <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;width:11%;">Heure</td>
               <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;width:22%;">Type</td>
               <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;">Description</td>
               <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;width:14%;">Photo</td>
@@ -1104,11 +1148,11 @@ export default function HomeScreen() {
   <!-- ═══ HEADER ═══ -->
   <table style="width:100%;border-bottom:3px solid #2563eb;margin-bottom:16px;">
     <tr><td colspan="2" style="text-align:center;font-size:20px;font-weight:800;color:#2563eb;letter-spacing:2px;padding:8px 0 12px;">RAPPORT JOURNALIER</td></tr>
-    <tr><td style="font-weight:700;color:#475569;width:150px;padding:3px 8px;">Merchandiser</td><td style="padding:3px 8px;">${user?.first_name || ''} ${user?.last_name || user?.username || ''}</td></tr>
-    <tr><td style="font-weight:700;color:#475569;padding:3px 8px;">Date</td><td style="padding:3px 8px;">${dateStr}</td></tr>
-    <tr><td style="font-weight:700;color:#475569;padding:3px 8px;">Début de journée</td><td style="padding:3px 8px;">${dayStartStr}</td></tr>
-    <tr><td style="font-weight:700;color:#475569;padding:3px 8px;">Fin de journée</td><td style="padding:3px 8px;">${dayEndStr}</td></tr>
-    <tr><td style="font-weight:700;color:#475569;padding:3px 8px 10px;">Durée totale</td><td style="padding:3px 8px 10px;"><strong>${hoursWorked}</strong></td></tr>
+    <tr><td style="font-weight:700;color:#475569;width:150px;padding:3px 8px;">Merchandiser</td><td style="padding:3px 8px;">${escapeHtml(`${user?.first_name || ''} ${user?.last_name || user?.username || ''}`.trim())}</td></tr>
+    <tr><td style="font-weight:700;color:#475569;padding:3px 8px;">Date</td><td style="padding:3px 8px;">${escapeHtml(dateStr)}</td></tr>
+    <tr><td style="font-weight:700;color:#475569;padding:3px 8px;">Début de journée</td><td style="padding:3px 8px;">${escapeHtml(dayStartStr)}</td></tr>
+    <tr><td style="font-weight:700;color:#475569;padding:3px 8px;">Fin de journée</td><td style="padding:3px 8px;">${escapeHtml(dayEndStr)}</td></tr>
+    <tr><td style="font-weight:700;color:#475569;padding:3px 8px 10px;">Durée totale</td><td style="padding:3px 8px 10px;"><strong>${escapeHtml(hoursWorked)}</strong></td></tr>
   </table>
 
   <!-- ═══ SUMMARY ═══ -->

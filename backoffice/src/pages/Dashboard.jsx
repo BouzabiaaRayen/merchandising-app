@@ -5,7 +5,7 @@ import GPSMap from '../components/GPSMap';
 import { userService, visitService, notificationService, gpsService, storeService } from '../services/apiService';
 import {
   UserCheck, Users, RefreshCw, CheckCircle2, AlertTriangle,
-  MapPin, FileText, Clock,
+  MapPin, FileText, Clock, Zap,
 } from 'lucide-react';
 import './Dashboard.css';
 
@@ -274,7 +274,10 @@ const Dashboard = () => {
         <Navbar />
         <div className="page-container">
           {loading ? (
-            <div className="loading">Loading statistics...</div>
+            <div className="loading-state">
+              <Zap className="loading-icon" size={48} />
+              <p>Loading dashboard data...</p>
+            </div>
           ) : (
             <>
               <div className="stats-grid">
