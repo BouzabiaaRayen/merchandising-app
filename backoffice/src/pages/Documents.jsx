@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
-import { documentService } from '../services/apiService';
-import { Upload, FileText, FileSpreadsheet, RefreshCw, Download, Trash2, Calendar, User, Briefcase, Loader } from 'lucide-react';
+import { documentService, userService } from '../services/apiService';
+import { Upload, FileText, FileSpreadsheet, RefreshCw, Download, Trash2, Calendar, User, Briefcase, Loader, Search, X } from 'lucide-react';
 import './Documents.css';
 
 const Documents = () => {
@@ -11,6 +11,9 @@ const Documents = () => {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [users, setUsers] = useState([]);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -21,13 +24,25 @@ const Documents = () => {
     target_audience: {
       merchandisers: false,
       supervisors: false,
+      selected_users: [],
     },
     send_notification: true,
   });
 
   useEffect(() => {
     fetchDocuments();
+    fetchUsers();
   }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const response = await userService.getUsers({ page_size: 1000 });
+      const usersList = response?.results || response || [];
+      setUsers(usersList);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+    }
+  };
 
   const fetchDocuments = async () => {
     try {
@@ -104,6 +119,40 @@ const Documents = () => {
     }));
   };
 
+  const handleUserSelect = (userId) => {
+    setFormData(prev => {
+      const isSelected = prev.target_audience.selected_users.includes(userId);
+      return {
+        ...prev,
+        target_audience: {
+          ...prev.target_audience,
+          selected_users: isSelected 
+            ? prev.target_audience.selected_users.filter(id => id !== userId)
+            : [...prev.target_audience.selected_users, userId]
+        }
+      };
+    });
+  };
+
+  const handleRemoveUser = (userId) => {
+    setFormData(prev => ({
+      ...prev,
+      target_audience: {
+        ...prev.target_audience,
+        selected_users: prev.target_audience.selected_users.filter(id => id !== userId)
+      }
+    }));
+  };
+
+  const filteredUsers = users.filter(user => {
+    const fullName = `${user.first_name || ''} ${user.last_name || ''}`.toLowerCase();
+    const email = (user.email || '').toLowerCase();
+    const query = userSearchQuery.toLowerCase();
+    return fullName.includes(query) || email.includes(query);
+  });
+
+  const selectedUsersData = users.filter(user => formData.target_audience.selected_users.includes(user.id));
+
   const handleNotificationToggle = (e) => {
     setFormData(prev => ({
       ...prev,
@@ -147,6 +196,13 @@ const Documents = () => {
       payload.append('send_to_merchandisers', formData.target_audience.merchandisers);
       payload.append('send_to_supervisors', formData.target_audience.supervisors);
       payload.append('send_notification', formData.send_notification);
+      
+      // Add selected users if any
+      if (formData.target_audience.selected_users.length > 0) {
+        formData.target_audience.selected_users.forEach((userId, index) => {
+          payload.append(`selected_user_ids[${index}]`, userId);
+        });
+      }
 
       const response = await documentService.uploadDocument(payload);
       
@@ -161,9 +217,13 @@ const Documents = () => {
         target_audience: {
           merchandisers: false,
           supervisors: false,
+          selected_users: [],
         },
         send_notification: true,
       });
+      
+      setUserSearchQuery('');
+      setShowUserDropdown(false);
       
       // Clear file input
       const fileInput = document.getElementById('file-input');
@@ -347,6 +407,83 @@ const Documents = () => {
                       <span>Supervisors</span>
                     </label>
                   </div>
+
+                  <div className="user-target-audience-search">
+                    <label className="settings-title">Specific Users</label>
+                    <div className="user-search-input-wrapper">
+                      <Search size={16} className="user-search-icon" />
+                      <input
+                        type="text"
+                        value={userSearchQuery}
+                        onChange={(e) => {
+                          setUserSearchQuery(e.target.value);
+                          setShowUserDropdown(true);
+                        }}
+                        onFocus={() => setShowUserDropdown(true)}
+                        placeholder="Search by name or email..."
+                        className="form-input user-search-input"
+                      />
+                      {userSearchQuery && (
+                        <button
+                          type="button"
+                          className="user-search-clear"
+                          onClick={() => {
+                            setUserSearchQuery('');
+                            setShowUserDropdown(false);
+                          }}
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    {showUserDropdown && userSearchQuery.trim() && (
+                      <div className="user-search-dropdown">
+                        {filteredUsers.length > 0 ? (
+                          filteredUsers.slice(0, 8).map((user) => {
+                            const displayName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username || `User ${user.id}`;
+                            const isSelected = formData.target_audience.selected_users.includes(user.id);
+
+                            return (
+                              <button
+                                key={user.id}
+                                type="button"
+                                className={`user-search-option ${isSelected ? 'selected' : ''}`}
+                                onClick={() => handleUserSelect(user.id)}
+                              >
+                                <div>
+                                  <div className="user-search-name">{displayName}</div>
+                                  <div className="user-search-email">{user.email || 'No email'}</div>
+                                </div>
+                                <span className="user-search-status">
+                                  {isSelected ? 'Selected' : 'Add'}
+                                </span>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="user-search-empty">No users found</div>
+                        )}
+                      </div>
+                    )}
+
+                    {selectedUsersData.length > 0 && (
+                      <div className="selected-users-list">
+                        {selectedUsersData.map((user) => {
+                          const displayName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username || `User ${user.id}`;
+
+                          return (
+                            <div key={user.id} className="selected-user-chip">
+                              <span>{displayName}</span>
+                              <button type="button" onClick={() => handleRemoveUser(user.id)}>
+                                <X size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="settings-right">
@@ -386,6 +523,8 @@ const Documents = () => {
                       },
                       send_notification: true,
                     });
+                    setUserSearchQuery('');
+                    setShowUserDropdown(false);
                     const fileInput = document.getElementById('file-input');
                     if (fileInput) fileInput.value = '';
                   }}

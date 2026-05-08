@@ -110,8 +110,9 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
   const [activeTab, setActiveTab] = useState('events');
   // Photos state
-  const [photos, setPhotos] = useState([]);
+  const [photos, setPhotos] = useState({ before: [], after: [] });
   const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [photoCaptureType, setPhotoCaptureType] = useState('before');
 
   // Break state
   const [breakStartTime, setBreakStartTime] = useState(null);
@@ -314,12 +315,13 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
   // FIX: restored areRequiredEventsCompleted
   const areRequiredEventsCompleted = () =>
-    photos.length > 0 && priceComparisonCompleted;
+    photos.before.length > 0 && photos.after.length > 0 && priceComparisonCompleted;
 
   const calculateCompletionPercentage = () => {
     let completed = 0;
-    const total = 3;
-    if (photos.length > 0) completed++;
+    const total = 4; // before, after, stock, price
+    if (photos.before.length > 0) completed++;
+    if (photos.after.length > 0) completed++;
     if (stockUpdateCompleted) completed++;
     if (priceComparisonCompleted) completed++;
     return Math.round((completed / total) * 100);
@@ -365,7 +367,12 @@ export default function VisitExecutionScreen({ route, navigation }) {
         if (savedProgress.productCompleted) setProductCompleted(true);
         if (savedProgress.stockUpdateCompleted) setStockUpdateCompleted(true);
         if (savedProgress.priceComparisonCompleted) setPriceComparisonCompleted(true);
-        if (savedProgress.photos?.length > 0) setPhotos(savedProgress.photos);
+        if (savedProgress.photos) {
+          setPhotos({
+            before: savedProgress.photos.before || [],
+            after: savedProgress.photos.after || [],
+          });
+        }
         if (savedProgress.aiPendingImage) setAiPendingImage(savedProgress.aiPendingImage);
         if (savedProgress.aiAnalyzedImage) setAiAnalyzedImage(savedProgress.aiAnalyzedImage);
         if (savedProgress.aiAnalysisResult) setAiAnalysisResult(savedProgress.aiAnalysisResult);
@@ -629,9 +636,12 @@ export default function VisitExecutionScreen({ route, navigation }) {
         quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) {
-        const newPhotos = [...photos, result.assets[0]];
-        setPhotos(newPhotos);
-        saveVisitProgress(visitId, { photos: newPhotos });
+        setPhotos((prevPhotos) => {
+          const newPhotos = { ...prevPhotos };
+          newPhotos[photoCaptureType] = [...newPhotos[photoCaptureType], result.assets[0]];
+          saveVisitProgress(visitId, { photos: newPhotos });
+          return newPhotos;
+        });
       }
     } catch (error) {
       console.error('Photo error:', error);
@@ -639,22 +649,29 @@ export default function VisitExecutionScreen({ route, navigation }) {
     }
   };
 
-  const handleDeletePhoto = (index) => {
+  const handleDeletePhoto = (type, index) => {
     Alert.alert('Delete Photo', 'Are you sure you want to delete this photo?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: () => {
-          const newPhotos = photos.filter((_, i) => i !== index);
-          setPhotos(newPhotos);
-          saveVisitProgress(visitId, { photos: newPhotos });
+          setPhotos((prevPhotos) => {
+            const newPhotos = { ...prevPhotos };
+            newPhotos[type] = newPhotos[type].filter((_, i) => i !== index);
+            saveVisitProgress(visitId, { photos: newPhotos });
+            return newPhotos;
+          });
         },
       },
     ]);
   };
 
-  const handleOpenPhotoModal = () => { if (!checkInTime) return; setShowPhotoModal(true); };
+  const handleOpenPhotoModal = (type) => {
+    if (!checkInTime) return;
+    setPhotoCaptureType(type);
+    setShowPhotoModal(true);
+  };
   const handleOpenStockModal = () => {
     if (!checkInTime) return;
     setSimpleFacingCounts(buildInitialSimpleFacingCounts());
@@ -1145,24 +1162,14 @@ export default function VisitExecutionScreen({ route, navigation }) {
       completed: stockUpdateCompleted,
     },
     {
-      key: 'pricing',
-      title: 'Prix Concurrents',
-      icon: 'tag-outline',
+      key: 'before-after',
+      title: 'Before/After',
+      icon: 'camera-burst',
       accent: '#2563eb',
       background: '#dbeafe',
-      onPress: handleCompetitorPrices,
+      onPress: () => handleOpenPhotoModal('before'),
       disabled: !isCheckedIn || isVisitCompleted,
-      completed: priceComparisonCompleted,
-    },
-    {
-      key: 'product',
-      title: 'Ajout Produit',
-      icon: 'plus-circle-outline',
-      accent: '#2563eb',
-      background: '#dbeafe',
-      onPress: handleAddProduct,
-      disabled: !isCheckedIn || isVisitCompleted,
-      completed: productCompleted,
+      completed: photos.before.length > 0 && photos.after.length > 0,
     },
     {
       key: 'alert',
@@ -1435,7 +1442,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
         <View style={styles.footerCtaWrap}>
           {isCheckedIn && !isVisitCompleted && !areRequiredEventsCompleted() && (
             <Text style={styles.footerHelperText}>
-              Complete Photos, Facing & Price Comparison to check out
+              Complete Before/After Photos, Facing & Price Comparison to check out
             </Text>
           )}
           <TouchableOpacity
@@ -1453,42 +1460,68 @@ export default function VisitExecutionScreen({ route, navigation }) {
       {/* ── Photo Modal ─────────────────────────────────────────────────────── */}
       <Modal visible={showPhotoModal} animationType="slide" transparent={false} onRequestClose={() => setShowPhotoModal(false)}>
         <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowPhotoModal(false)}>
-              <MaterialCommunityIcons name="close" size={28} color="#111" />
-            </TouchableOpacity>
+          <View style={[styles.modalHeader, { justifyContent: 'center' }]}
+            >
             <Text style={styles.modalTitle}>Before / After Photos</Text>
-            <TouchableOpacity onPress={handleTakePhoto}>
-              <MaterialCommunityIcons name="camera-plus" size={28} color="#2563eb" />
-            </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.modalContent}>
-            {photos.length === 0 ? (
-              <View style={styles.emptyState}>
-                <MaterialCommunityIcons name="camera-off" size={64} color="#9ca3af" />
-                <Text style={styles.emptyStateText}>No photos yet</Text>
-                <Text style={styles.emptyStateSubtext}>Tap the + button to add photos</Text>
+            <View style={styles.photoSection}>
+              <View style={styles.photoSectionHeader}>
+                <Text style={styles.photoSectionTitle}>Before</Text>
+                <TouchableOpacity onPress={() => { setPhotoCaptureType('before'); handleTakePhoto(); }}>
+                  <MaterialCommunityIcons name="camera-plus" size={28} color="#2563eb" />
+                </TouchableOpacity>
               </View>
-            ) : (
-              <View style={styles.photoGrid}>
-                {photos.map((photo, index) => (
-                  <View key={index} style={styles.photoCard}>
-                    <Image source={{ uri: photo.uri }} style={styles.photoImage} />
-                    <TouchableOpacity style={styles.deletePhotoButton} onPress={() => handleDeletePhoto(index)}>
-                      <MaterialCommunityIcons name="delete" size={20} color="#fff" />
-                    </TouchableOpacity>
-                    <Text style={styles.photoLabel}>Photo {index + 1}</Text>
-                  </View>
-                ))}
+              {photos.before.length === 0 ? (
+                <TouchableOpacity style={styles.addPhotoPrompt} onPress={() => { setPhotoCaptureType('before'); handleTakePhoto(); }}>
+                  <MaterialCommunityIcons name="camera-plus-outline" size={32} color="#9ca3af" />
+                  <Text style={styles.addPhotoText}>Add Before Photos</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.photoGrid}>
+                  {photos.before.map((photo, index) => (
+                    <View key={`before-${index}`} style={styles.photoCard}>
+                      <Image source={{ uri: photo.uri }} style={styles.photoImage} />
+                      <TouchableOpacity style={styles.deletePhotoButton} onPress={() => handleDeletePhoto('before', index)}>
+                        <MaterialCommunityIcons name="delete" size={20} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            <View style={styles.photoSection}>
+              <View style={styles.photoSectionHeader}>
+                <Text style={styles.photoSectionTitle}>After</Text>
+                <TouchableOpacity onPress={() => { setPhotoCaptureType('after'); handleTakePhoto(); }}>
+                  <MaterialCommunityIcons name="camera-plus" size={28} color="#2563eb" />
+                </TouchableOpacity>
               </View>
-            )}
+              {photos.after.length === 0 ? (
+                <TouchableOpacity style={styles.addPhotoPrompt} onPress={() => { setPhotoCaptureType('after'); handleTakePhoto(); }}>
+                  <MaterialCommunityIcons name="camera-plus-outline" size={32} color="#9ca3af" />
+                  <Text style={styles.addPhotoText}>Add After Photos</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.photoGrid}>
+                  {photos.after.map((photo, index) => (
+                    <View key={`after-${index}`} style={styles.photoCard}>
+                      <Image source={{ uri: photo.uri }} style={styles.photoImage} />
+                      <TouchableOpacity style={styles.deletePhotoButton} onPress={() => handleDeletePhoto('after', index)}>
+                        <MaterialCommunityIcons name="delete" size={20} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
           </ScrollView>
 
           <View style={styles.modalFooter}>
-            <Text style={styles.photoCount}>{photos.length} / 4 photos uploaded</Text>
             <TouchableOpacity
-              style={[styles.modalButton, photos.length >= 4 && styles.modalButtonSuccess]}
+              style={[styles.modalButton, photos.before.length > 0 && photos.after.length > 0 && styles.modalButtonSuccess]}
               onPress={() => setShowPhotoModal(false)}
             >
               <Text style={styles.modalButtonText}>Done</Text>
@@ -1592,7 +1625,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
             <TouchableOpacity onPress={() => setShowPriceModal(false)}>
               <MaterialCommunityIcons name="close" size={28} color="#111" />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Prix Concurrents</Text>
+            <Text style={styles.modalTitle}>Pricing</Text>
             <View style={{ width: 28 }} />
           </View>
 
@@ -1960,16 +1993,36 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#111' },
   modalContent: { flex: 1, padding: 16 },
   modalFooter: { padding: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e5e7eb', flexDirection: 'row' },
-  modalButton: { backgroundColor: '#2563eb', borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
+  modalButton: { flex: 1, backgroundColor: '#2563eb', borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
   modalButtonSuccess: { backgroundColor: '#10b981' },
   modalButtonText: { fontSize: 16, fontWeight: '700', color: '#fff' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 80 },
+  emptyStateTitle: { fontSize: 22, fontWeight: '700', color: '#1f2937', marginBottom: 8 },
   emptyStateText: { fontSize: 18, fontWeight: '600', color: '#6b7280', marginTop: 16 },
   emptyStateSubtext: { fontSize: 14, color: '#9ca3af', marginTop: 8 },
+  photoSection: { marginBottom: 24 },
+  photoSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingHorizontal: 8 },
+  photoSectionTitle: { fontSize: 18, fontWeight: '700', color: '#374151' },
+  addPhotoPrompt: {
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f9fafb',
+  },
+  addPhotoText: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  photoCard: { width: '48%', backgroundColor: '#fff', borderRadius: 12, padding: 8, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
+  photoCard: { width: '48%', backgroundColor: '#fff', borderRadius: 12, padding: 8, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2, position: 'relative' },
   photoImage: { width: '100%', height: 150, borderRadius: 8, backgroundColor: '#e5e7eb' },
-  deletePhotoButton: { position: 'absolute', top: 12, right: 12, backgroundColor: '#2563eb', borderRadius: 20, padding: 6 },
+  deletePhotoButton: { position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: 4 },
   photoLabel: { fontSize: 12, fontWeight: '600', color: '#6b7280', marginTop: 8, textAlign: 'center' },
   photoCount: { fontSize: 14, fontWeight: '600', color: '#6b7280', marginBottom: 12, textAlign: 'center' },
   facingSummaryBox: { marginHorizontal: 16, marginTop: 12, marginBottom: 2, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#eff6ff', borderRadius: 12, borderWidth: 1, borderColor: '#bfdbfe', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

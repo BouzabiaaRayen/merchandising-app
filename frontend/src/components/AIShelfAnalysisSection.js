@@ -131,37 +131,24 @@ export default function AIShelfAnalysisSection({
   const health = formatHealthState(healthState);
   const hasDetections = Boolean(result?.detections?.length);
   const hasProducts = Boolean(result?.products?.length);
-  const summaryCards = useMemo(() => {
-    if (!result) {
-      return [];
+  const { inStockProducts, outOfStockProducts } = useMemo(() => {
+    if (!result || !result.products) {
+      return { inStockProducts: [], outOfStockProducts: [] };
     }
 
-    return [
-      {
-        key: 'products',
-        label: 'Produits identifies',
-        value: result.summary.totalProducts,
-        icon: 'package-variant-closed',
-        accent: '#2563eb',
-        background: '#dbeafe',
-      },
-      {
-        key: 'urgent',
-        label: 'Statuts urgents',
-        value: result.summary.urgentCount,
-        icon: 'alert-outline',
-        accent: '#ea580c',
-        background: '#ffedd5',
-      },
-      {
-        key: 'detections',
-        label: 'Detections IA',
-        value: result.summary.totalDetections,
-        icon: 'radar',
-        accent: '#0f766e',
-        background: '#ccfbf1',
-      },
-    ];
+    const inStock = [];
+    const outOfStock = [];
+
+    result.products.forEach((product) => {
+      const status = product.status.toUpperCase();
+      if (status === 'IN STOCK' || status === 'LAST ITEMS') {
+        inStock.push(product);
+      } else {
+        outOfStock.push(product);
+      }
+    });
+
+    return { inStockProducts: inStock, outOfStockProducts: outOfStock };
   }, [result]);
 
   return (
@@ -362,18 +349,6 @@ export default function AIShelfAnalysisSection({
             </View>
           )}
 
-          <View style={styles.summaryGrid}>
-            {summaryCards.map((card) => (
-              <View key={card.key} style={styles.summaryCard}>
-                <View style={[styles.summaryIconWrap, { backgroundColor: card.background }]}>
-                  <MaterialCommunityIcons name={card.icon} size={18} color={card.accent} />
-                </View>
-                <Text style={styles.summaryValue}>{card.value}</Text>
-                <Text style={styles.summaryLabel}>{card.label}</Text>
-              </View>
-            ))}
-          </View>
-
           <View style={styles.productsBlock}>
             <Text style={styles.blockTitle}>Lecture produits</Text>
             {!hasProducts ? (
@@ -383,39 +358,34 @@ export default function AIShelfAnalysisSection({
                 <Text style={styles.emptyStateText}>Essayez une photo plus nette ou relancez l'analyse avec un cadrage plus large.</Text>
               </View>
             ) : (
-              result.products.map((product) => {
-                const tone = getStatusTone(product.status);
-                const toneStyle = TONE_STYLES[tone];
-
-                return (
-                  <View key={product.id} style={styles.productCard}>
-                    <View style={styles.productHeader}>
-                      <Text style={styles.productName}>{product.productName}</Text>
-                      <View
-                        style={[
-                          styles.statusBadge,
-                          {
-                            backgroundColor: toneStyle.badgeBackground,
-                            borderColor: toneStyle.badgeBorder,
-                          },
-                        ]}
-                      >
-                        <Text style={[styles.statusBadgeText, { color: toneStyle.badgeText }]}>{product.status}</Text>
+              <>
+                {inStockProducts.length > 0 && (
+                  <View style={styles.productList}>
+                    {inStockProducts.map((product) => (
+                      <View key={product.id} style={styles.productListItem}>
+                        <Text style={styles.productListItemName}>In Stock {product.productName}</Text>
+                        <View style={styles.productListItemCount}>
+                          <Text style={styles.productListItemCountText}>{product.detectedCount}</Text>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={22} color="#9ca3af" />
                       </View>
-                    </View>
-                    <View style={styles.productMetricsRow}>
-                      <View style={styles.metricTile}>
-                        <Text style={styles.metricValue}>{product.detectedCount}</Text>
-                        <Text style={styles.metricLabel}>Detecte</Text>
-                      </View>
-                      <View style={styles.metricTile}>
-                        <Text style={styles.metricValue}>{product.storageCount}</Text>
-                        <Text style={styles.metricLabel}>Stock magasin</Text>
-                      </View>
-                    </View>
+                    ))}
                   </View>
-                );
-              })
+                )}
+                {outOfStockProducts.length > 0 && (
+                  <View style={styles.productList}>
+                    {outOfStockProducts.map((product) => (
+                      <View key={product.id} style={styles.productListItem}>
+                        <Text style={styles.productListItemName}>Out Of Stock {product.productName}</Text>
+                        <View style={[styles.productListItemCount, styles.outOfStockCount]}>
+                          <Text style={styles.productListItemCountText}>{product.detectedCount}</Text>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={22} color="#9ca3af" />
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </>
             )}
           </View>
 
@@ -500,178 +470,180 @@ const styles = StyleSheet.create({
     color: '#475569',
   },
   healthBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 99,
   },
   healthBadgeText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   dropzone: {
-    minHeight: 220,
-    borderRadius: 20,
-    borderWidth: 1.5,
+    position: 'relative',
+    backgroundColor: '#eef2ff',
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 2,
+    borderColor: '#c7d2fe',
     borderStyle: 'dashed',
-    borderColor: '#93c5fd',
-    backgroundColor: '#ffffff',
-    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 18,
+    minHeight: 160,
+    marginBottom: 12,
+    overflow: 'hidden',
   },
   dropzoneDisabled: {
-    opacity: 0.65,
+    backgroundColor: '#f1f5f9',
+    borderColor: '#e2e8f0',
   },
   dropzoneIconWrap: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 56,
+    height: 56,
+    borderRadius: 99,
     backgroundColor: '#dbeafe',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   dropzoneTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0f172a',
-    marginBottom: 6,
-    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e3a8a',
+    marginBottom: 4,
   },
   dropzoneSubtitle: {
     fontSize: 13,
-    lineHeight: 19,
-    color: '#64748b',
+    color: '#475569',
     textAlign: 'center',
-    maxWidth: 280,
+    maxWidth: '90%',
   },
   dropzonePreview: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     width: '100%',
-    height: 220,
-    borderRadius: 18,
+    height: '100%',
   },
   dropzoneOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.38)',
-    padding: 18,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 14,
     flexDirection: 'row',
-    alignItems: 'flex-end',
     justifyContent: 'space-between',
+    alignItems: 'flex-end',
   },
   dropzonePreviewTitle: {
+    fontSize: 15,
+    fontWeight: '700',
     color: '#ffffff',
-    fontSize: 17,
-    fontWeight: '800',
     marginBottom: 4,
   },
   dropzonePreviewSubtitle: {
-    color: '#e2e8f0',
     fontSize: 12,
-    maxWidth: 240,
-    lineHeight: 17,
+    color: '#e2e8f0',
+    maxWidth: '95%',
   },
   actionRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 14,
+    justifyContent: 'space-around',
+    marginBottom: 12,
   },
   secondaryAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#dbeafe',
-    backgroundColor: '#ffffff',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    gap: 6,
+    padding: 8,
   },
   secondaryActionDisabled: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#e2e8f0',
+    opacity: 0.5,
   },
   secondaryActionText: {
-    color: '#1d4ed8',
-    fontWeight: '700',
     fontSize: 13,
+    fontWeight: '600',
+    color: '#2563eb',
   },
   secondaryActionTextDisabled: {
     color: '#94a3b8',
   },
   advancedPanel: {
+    backgroundColor: '#eef2ff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
     flexDirection: 'row',
     gap: 12,
-    marginTop: 14,
   },
   advancedField: {
     flex: 1,
   },
   advancedLabel: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#64748b',
-    marginBottom: 6,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
   },
   advancedInput: {
-    height: 46,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#dbeafe',
     backgroundColor: '#ffffff',
-    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     fontSize: 14,
-    color: '#0f172a',
+    color: '#111827',
   },
   primaryButton: {
-    marginTop: 16,
-    borderRadius: 18,
     backgroundColor: '#2563eb',
-    minHeight: 54,
+    borderRadius: 99,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
   },
   primaryButtonDisabled: {
-    backgroundColor: '#93c5fd',
+    backgroundColor: '#94a3b8',
   },
   primaryButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
     color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '800',
   },
   feedbackCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
+    backgroundColor: '#f8fbff',
+    borderRadius: 24,
+    padding: 24,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 18,
+    borderColor: '#dbeafe',
     alignItems: 'center',
     marginBottom: 14,
   },
   feedbackTitle: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0f172a',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e3a8a',
+    marginTop: 14,
+    marginBottom: 6,
   },
   feedbackText: {
-    marginTop: 8,
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#64748b',
+    fontSize: 14,
+    color: '#475569',
     textAlign: 'center',
+    lineHeight: 20,
   },
   errorCard: {
-    alignItems: 'stretch',
+    backgroundColor: '#fff1f2',
     borderColor: '#fecaca',
-    backgroundColor: '#fff7f7',
   },
   feedbackIconRow: {
     flexDirection: 'row',
@@ -679,294 +651,239 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   errorTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#991b1b',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#b91c1c',
   },
   errorText: {
-    marginTop: 10,
-    marginBottom: 14,
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#7f1d1d',
+    fontSize: 14,
+    color: '#991b1b',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginVertical: 12,
   },
   retryButton: {
-    alignSelf: 'flex-start',
-    borderRadius: 12,
-    backgroundColor: '#dc2626',
+    backgroundColor: '#ef4444',
+    borderRadius: 99,
     paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   retryButtonText: {
-    color: '#ffffff',
+    fontSize: 14,
     fontWeight: '700',
-    fontSize: 13,
+    color: '#ffffff',
   },
   resultsCard: {
     backgroundColor: '#ffffff',
     borderRadius: 24,
+    padding: 18,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    padding: 18,
   },
   resultsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    alignItems: 'flex-start',
     marginBottom: 12,
   },
   resultsTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: '#0f172a',
     marginBottom: 4,
   },
   resultsSubtitle: {
-    fontSize: 13,
-    color: '#64748b',
+    fontSize: 14,
+    color: '#475569',
   },
   overlayToggle: {
-    borderRadius: 12,
-    backgroundColor: '#eff6ff',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    backgroundColor: '#eef2ff',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 99,
   },
   overlayToggleText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#1d4ed8',
+    fontWeight: '600',
+    color: '#2563eb',
   },
   storeComparisonBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    backgroundColor: '#dbeafe',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    backgroundColor: '#e0e7ff',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 99,
+    alignSelf: 'flex-start',
     marginBottom: 14,
   },
   storeComparisonText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#1d4ed8',
   },
   analysisImageWrap: {
-    width: '100%',
-    borderRadius: 18,
+    borderRadius: 16,
     overflow: 'hidden',
-    position: 'relative',
-    backgroundColor: '#e2e8f0',
-    marginBottom: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   analysisImage: {
     width: '100%',
+    height: undefined,
   },
   detectionBox: {
     position: 'absolute',
     borderWidth: 2,
-    borderColor: '#22c55e',
-    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+    borderColor: 'rgba(37, 99, 235, 0.8)',
+    borderRadius: 4,
   },
   detectionLabel: {
     position: 'absolute',
-    top: -1,
-    left: -1,
-    backgroundColor: '#22c55e',
+    top: -20,
+    left: -2,
+    backgroundColor: 'rgba(37, 99, 235, 0.8)',
+    borderRadius: 4,
     paddingHorizontal: 6,
-    paddingVertical: 3,
-    maxWidth: 120,
+    paddingVertical: 2,
   },
   detectionLabelText: {
-    fontSize: 10,
+    fontSize: 11,
+    fontWeight: '700',
     color: '#ffffff',
-    fontWeight: '800',
   },
   summaryGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 16,
+    gap: 12,
+    marginBottom: 18,
   },
   summaryCard: {
-    width: '31%',
+    flex: 1,
     backgroundColor: '#f8fafc',
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
   },
   summaryIconWrap: {
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: 99,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
-  },
-  summaryValue: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#0f172a',
-    marginBottom: 4,
-  },
-  summaryLabel: {
-    fontSize: 11,
-    lineHeight: 15,
-    color: '#64748b',
-    fontWeight: '700',
-  },
-  productsBlock: {
-    marginTop: 4,
     marginBottom: 8,
   },
-  blockTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0f172a',
-    marginBottom: 12,
-  },
-  emptyStateCard: {
-    borderRadius: 18,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    alignItems: 'center',
-    padding: 18,
-  },
-  emptyStateTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#334155',
-    marginTop: 8,
-    marginBottom: 6,
-  },
-  emptyStateText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#64748b',
-    textAlign: 'center',
-  },
-  productCard: {
-    borderRadius: 18,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 14,
-    marginBottom: 10,
-  },
-  productHeader: {
-    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 12,
-  },
-  productName: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0f172a',
-  },
-  statusBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  statusBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  productMetricsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  metricTile: {
-    flex: 1,
-    borderRadius: 14,
-    backgroundColor: '#ffffff',
-    padding: 12,
-  },
-  metricValue: {
+  summaryValue: {
     fontSize: 20,
     fontWeight: '800',
     color: '#0f172a',
-    marginBottom: 3,
   },
-  metricLabel: {
+  summaryLabel: {
     fontSize: 12,
+    color: '#475569',
+    textAlign: 'center',
+  },
+  productsBlock: {
+    marginBottom: 18,
+  },
+  blockTitle: {
+    fontSize: 16,
     fontWeight: '700',
-    color: '#64748b',
+    color: '#1e293b',
+    marginBottom: 12,
   },
-  detectionCard: {
-    borderRadius: 16,
+  emptyStateCard: {
     backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 12,
-    marginBottom: 8,
-  },
-  detectionCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    borderRadius: 16,
+    padding: 24,
     alignItems: 'center',
-    gap: 10,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
   },
-  detectionName: {
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#334155',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  emptyStateText: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  productList: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    marginBottom: 12,
+  },
+  productListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  productListItemName: {
     flex: 1,
     fontSize: 14,
-    fontWeight: '700',
-    color: '#0f172a',
+    fontWeight: '600',
+    color: '#334155',
   },
-  confidenceBadge: {
-    flexDirection: 'row',
+  productListItemCount: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 99,
+    width: 28,
+    height: 28,
     alignItems: 'center',
-    gap: 5,
-    borderRadius: 999,
-    backgroundColor: '#eff6ff',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    justifyContent: 'center',
+    marginHorizontal: 12,
   },
-  confidenceText: {
-    fontSize: 11,
+  outOfStockCount: {
+    backgroundColor: '#cbd5e1',
+  },
+  productListItemCountText: {
+    fontSize: 13,
     fontWeight: '700',
-    color: '#1d4ed8',
-  },
-  detectionMeta: {
-    marginTop: 8,
-    fontSize: 12,
-    color: '#64748b',
+    color: '#475569',
   },
   debugBlock: {
-    marginTop: 10,
+    marginTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    paddingTop: 14,
   },
   debugToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 10,
+    gap: 4,
+    alignSelf: 'flex-start',
+    marginBottom: 10,
   },
   debugToggleText: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#334155',
+    fontWeight: '600',
+    color: '#475569',
   },
   debugPanel: {
-    borderRadius: 14,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
     padding: 12,
   },
   debugText: {
-    color: '#cbd5e1',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     fontSize: 11,
-    lineHeight: 16,
+    color: '#475569',
   },
 });
