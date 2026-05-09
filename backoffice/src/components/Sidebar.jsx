@@ -41,6 +41,14 @@ const Sidebar = () => {
           {!isCollapsed && <span>Team Management</span>}
         </NavLink>
         <NavLink
+          to="/catalog"
+          className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
+          title="Catalog"
+        >
+          <span className="nav-icon"><Store size={18} /></span>
+          {!isCollapsed && <span>Catalog</span>}
+        </NavLink>
+        <NavLink
           to="/stores"
           className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
           title="Stores"

@@ -4,11 +4,13 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { productService } from '../services/apiService';
+
+const formatPrice = (value) => `${Number(value || 0).toFixed(3)} TND`;
 
 export default function ProductsScreen() {
   const [products, setProducts] = useState([]);
@@ -33,10 +35,34 @@ export default function ProductsScreen() {
 
   const renderProduct = ({ item }) => (
     <View style={styles.productCard}>
-      <Text style={styles.productName}>{item.name}</Text>
-      <Text style={styles.productSku}>SKU: {item.sku}</Text>
-      <Text style={styles.productPrice}>${item.price}</Text>
-      <Text style={styles.productStock}>Stock: {item.stock_quantity}</Text>
+      <View style={styles.cardTopRow}>
+        {item.image_url ? (
+          <Image source={{ uri: item.image_url }} style={styles.productImage} />
+        ) : (
+          <View style={styles.productImagePlaceholder}>
+            <Text style={styles.productImagePlaceholderText}>IMG</Text>
+          </View>
+        )}
+
+        <View style={styles.productInfo}>
+          <Text style={styles.productName}>{item.name}</Text>
+          <Text style={styles.productMeta}>{item.brand_name || 'No brand'} • {item.category_name || 'No category'}</Text>
+          <Text style={styles.productCode}>{item.barcode || item.sku || 'No barcode / SKU'}</Text>
+        </View>
+      </View>
+
+      <View style={styles.detailsRow}>
+        <View style={styles.detailPill}>
+          <Text style={styles.detailLabel}>Price</Text>
+          <Text style={styles.productPrice}>{formatPrice(item.price)}</Text>
+        </View>
+        <View style={styles.detailPill}>
+          <Text style={styles.detailLabel}>Facing</Text>
+          <Text style={styles.detailValue}>{item.recommended_facing || 0}</Text>
+        </View>
+      </View>
+
+      {!!item.description && <Text style={styles.productDescription}>{item.description}</Text>}
     </View>
   );
 
@@ -80,8 +106,8 @@ const styles = StyleSheet.create({
   },
   productCard: {
     backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 10,
+    padding: 16,
+    borderRadius: 16,
     marginBottom: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -89,26 +115,80 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  productImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 14,
+    backgroundColor: '#e5e7eb',
+    marginRight: 14,
+  },
+  productImagePlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: 14,
+    backgroundColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  productImagePlaceholderText: {
+    color: '#64748b',
+    fontWeight: '700',
+  },
+  productInfo: {
+    flex: 1,
+  },
   productName: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 5,
   },
-  productSku: {
+  productMeta: {
     fontSize: 14,
     color: '#666',
     marginBottom: 5,
+  },
+  productCode: {
+    fontSize: 13,
+    color: '#94a3b8',
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  detailPill: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: '#64748b',
+    marginBottom: 4,
   },
   productPrice: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#007AFF',
-    marginBottom: 5,
   },
-  productStock: {
+  detailValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  productDescription: {
     fontSize: 14,
     color: '#666',
+    lineHeight: 20,
   },
   emptyContainer: {
     padding: 20,

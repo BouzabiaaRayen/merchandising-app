@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
-import { visitService, userService, storeService, scheduleService } from '../services/apiService';
+import { visitService, userService, storeService } from '../services/apiService';
 import { getAvatarUrl } from '../services/supabaseClient';
 import './VisitsTracking.css';
 import './Users.css';
@@ -15,7 +15,145 @@ const STATUS_CONFIG = {
   MISSED: { label: 'MISSED', class: 'missed' },
 };
 
+const WEEK_DAYS = [
+  { value: 1, label: 'Monday' },
+  { value: 2, label: 'Tuesday' },
+  { value: 3, label: 'Wednesday' },
+  { value: 4, label: 'Thursday' },
+  { value: 5, label: 'Friday' },
+  { value: 6, label: 'Saturday' },
+  { value: 0, label: 'Sunday' },
+];
+
+const DEFAULT_VISIT_BREAK_SETTINGS = {
+  break_duration: 30,
+  break_window_start: '12:00',
+  break_window_end: '14:00',
+};
+
+const TERRITORY_STORAGE_KEY = 'mds_territories_v1';
+const WORKING_DAYS_STORAGE_KEY = 'mds_working_days_v1';
+
+const toDateInputValue = (date) => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const parseDateInput = (value) => {
+  if (!value) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const getStartOfWeek = (date) => {
+  const baseDate = new Date(date);
+  const day = baseDate.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  baseDate.setDate(baseDate.getDate() + diff);
+  baseDate.setHours(0, 0, 0, 0);
+  return baseDate;
+};
+
+const addDays = (date, days) => {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+};
+
+const toApiDateTime = (date) => `${toDateInputValue(date)}T09:00:00`;
+
+// ─── Auto-planning algorithms ─────────────────────────────────────────────────
+
+const autoDistributeStores = (allStores, allMerchandisers) => {
+  if (!allMerchandisers.length) return {};
+  const sorted = [...allStores].sort((a, b) => a.id - b.id);
+  const result = {};
+  allMerchandisers.forEach((m) => { result[m.id] = []; });
+  sorted.forEach((store, index) => {
+    const merch = allMerchandisers[index % allMerchandisers.length];
+    result[merch.id].push(store.id);
+  });
+  return result;
+};
+
+// Round-robin within one merchandiser's territory across working days
+const buildMerchandiserWeek = (storeIds, workingDayValues) => {
+  const schedule = {};
+  workingDayValues.forEach((d) => { schedule[d] = []; });
+  storeIds.forEach((storeId, index) => {
+    const dayValue = workingDayValues[index % workingDayValues.length];
+    schedule[dayValue].push(storeId);
+  });
+  return schedule;
+};
+
+const countWeeksInRange = (startDateStr, endDateStr) => {
+  const start = parseDateInput(startDateStr);
+  const end = parseDateInput(endDateStr);
+  if (!start || !end) return 0;
+  const mondayStart = getStartOfWeek(start);
+  const mondayEnd = getStartOfWeek(end);
+  return Math.floor((mondayEnd - mondayStart) / (7 * 24 * 60 * 60 * 1000)) + 1;
+};
+
+const buildFullVisitPlan = (territories, allStores, allMerchandisers, workingDayValues, startDateStr, endDateStr) => {
+  const visits = [];
+  const startDate = parseDateInput(startDateStr);
+  const endDate = parseDateInput(endDateStr);
+  if (!startDate || !endDate || !workingDayValues.length) return visits;
+  const mondayStart = getStartOfWeek(startDate);
+  const endTime = endDate.getTime();
+  allMerchandisers.forEach((merch) => {
+    const storeIds = territories[merch.id] || [];
+    if (!storeIds.length) return;
+    const weekSchedule = buildMerchandiserWeek(storeIds, workingDayValues);
+    let currentMonday = new Date(mondayStart);
+    while (currentMonday.getTime() <= endTime) {
+      workingDayValues.forEach((dayValue) => {
+        const dayStores = weekSchedule[dayValue] || [];
+        const offset = dayValue === 0 ? 6 : dayValue - 1;
+        const visitDate = addDays(currentMonday, offset);
+        if (visitDate.getTime() < startDate.getTime()) return;
+        if (visitDate.getTime() > endTime) return;
+        dayStores.forEach((storeId) => {
+          const store = allStores.find((s) => s.id === storeId);
+          visits.push({
+            store: storeId,
+            storeName: store?.name || `Store #${storeId}`,
+            merchandiser: merch.id,
+            scheduled_date: toApiDateTime(visitDate),
+            status: 'SCHEDULED',
+            break_duration: DEFAULT_VISIT_BREAK_SETTINGS.break_duration,
+            break_window_start: DEFAULT_VISIT_BREAK_SETTINGS.break_window_start,
+            break_window_end: DEFAULT_VISIT_BREAK_SETTINGS.break_window_end,
+          });
+        });
+      });
+      currentMonday = addDays(currentMonday, 7);
+    }
+  });
+  return visits;
+};
+
+const persistTerritories = (t) => {
+  try { localStorage.setItem(TERRITORY_STORAGE_KEY, JSON.stringify(t)); } catch (_) {}
+};
+const loadPersistedTerritories = () => {
+  try { const raw = localStorage.getItem(TERRITORY_STORAGE_KEY); return raw ? JSON.parse(raw) : null; } catch (_) { return null; }
+};
+const persistWorkingDays = (d) => {
+  try { localStorage.setItem(WORKING_DAYS_STORAGE_KEY, JSON.stringify(d)); } catch (_) {}
+};
+const loadPersistedWorkingDays = () => {
+  try { const raw = localStorage.getItem(WORKING_DAYS_STORAGE_KEY); return raw ? JSON.parse(raw) : null; } catch (_) { return null; }
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 const VisitsTracking = () => {
+  // ── Visit list ─────────────────────────────────────────────────────────────
   const [visits, setVisits] = useState([]);
   const [merchandisers, setMerchandisers] = useState([]);
   const [stores, setStores] = useState([]);
@@ -24,46 +162,26 @@ const VisitsTracking = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const itemsPerPage = 10;
-  
-  // Schedule visit modal state
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [formData, setFormData] = useState({
-    stores: [], // array of selected store IDs
-    merchandiser: '',
-    scheduled_date: '',
-    notes: '',
-  });
-  // Visit durations per store (default 30 min)
-  const [visitDurations, setVisitDurations] = useState({});
-  // Haversine formula for travel time estimation (in minutes, assuming 40km/h avg speed)
-  function haversine(lat1, lon1, lat2, lon2) {
-    const toRad = (x) => (x * Math.PI) / 180;
-    const R = 6371; // km
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const d = R * c;
-    return d;
-  }
-
-  function estimateTravelTime(from, to) {
-    if (!from || !to || !from.latitude || !from.longitude || !to.latitude || !to.longitude) return 0;
-    const dist = haversine(from.latitude, from.longitude, to.latitude, to.longitude);
-    // Assume 40km/h average speed
-    return Math.round((dist / 40) * 60);
-  }
-
-  const [formError, setFormError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
-  useEffect(() => {
-    fetchData();
-  }, [currentPage]);
+  // ── Auto-planning modal ────────────────────────────────────────────────────
+  const [showAutoModal, setShowAutoModal] = useState(false);
+  const [autoStep, setAutoStep] = useState(1);
+  const [territories, setTerritories] = useState({});
+  const [workingDays, setWorkingDays] = useState([1, 2, 3, 4, 5]);
+  const [planStartDate, setPlanStartDate] = useState('');
+  const [planEndDate, setPlanEndDate] = useState('');
+  const [territorySearch, setTerritorySearch] = useState('');
+  const [autoGenerating, setAutoGenerating] = useState(false);
+  const [autoError, setAutoError] = useState('');
+
+  // ── Override modal (emergency single-visit) ────────────────────────────────
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [overrideForm, setOverrideForm] = useState({ store: '', merchandiser: '', scheduled_date: '' });
+  const [overrideSubmitting, setOverrideSubmitting] = useState(false);
+  const [overrideError, setOverrideError] = useState('');
+
+  useEffect(() => { fetchData(); }, [currentPage]);
 
   const fetchData = async () => {
     try {
@@ -73,7 +191,6 @@ const VisitsTracking = () => {
         userService.getUsers({ role: 'merchandiser', page_size: 1000 }),
         storeService.getStores({ page_size: 1000 }),
       ]);
-
       setVisits(visitsData.results ?? []);
       setTotalCount(visitsData.count ?? 0);
       setMerchandisers(merchandisersData.results ?? []);
@@ -87,143 +204,176 @@ const VisitsTracking = () => {
     }
   };
 
-  const getMerchandiserInfo = (merchandiserId) => {
-    if (!merchandiserId) return null;
-    return merchandisers.find(m => m.id === merchandiserId);
-  };
-
-  const getStoreInfo = (storeId) => {
-    if (!storeId) return null;
-    return stores.find(s => s.id === storeId);
-  };
+  const getMerchandiserInfo = (id) => id ? merchandisers.find((m) => m.id === id) : null;
+  const getStoreInfo = (id) => id ? stores.find((s) => s.id === id) : null;
 
   const calculateDuration = (checkIn, checkOut) => {
     if (!checkIn) return '0m';
-    
-    const start = new Date(checkIn);
-    const end = checkOut ? new Date(checkOut) : new Date();
-    const diffMs = end - start;
-    const diffMins = Math.floor(diffMs / 60000);
-    
-    if (diffMins < 60) {
-      return `${diffMins}m`;
-    }
-    
-    const hours = Math.floor(diffMins / 60);
-    const mins = diffMins % 60;
-    return `${hours}h ${mins}m`;
+    const diffMins = Math.floor((new Date(checkOut || Date.now()) - new Date(checkIn)) / 60000);
+    return diffMins < 60 ? `${diffMins}m` : `${Math.floor(diffMins / 60)}h ${diffMins % 60}m`;
   };
 
-  const formatTime = (dateString) => {
-    if (!dateString) return 'Not Recorded';
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: true 
-    });
+  const formatTime = (ds) => {
+    if (!ds) return 'Not Recorded';
+    return new Date(ds).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: '2-digit', 
-      year: 'numeric' 
-    });
+  const formatDate = (ds) => {
+    if (!ds) return 'N/A';
+    return new Date(ds).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
   };
 
   const totalPages = Math.ceil(totalCount / itemsPerPage);
   const startEntry = (currentPage - 1) * itemsPerPage + 1;
   const endEntry = Math.min(currentPage * itemsPerPage, totalCount);
 
-  const handleClearFilters = () => {
-    setCurrentPage(1);
-    fetchData();
+  // ── Auto-planning handlers ─────────────────────────────────────────────────
+
+  const openAutoModal = () => {
+    const saved = loadPersistedTerritories();
+    const savedDays = loadPersistedWorkingDays();
+    const valid = saved && merchandisers.length > 0
+      && merchandisers.every((m) => Object.prototype.hasOwnProperty.call(saved, String(m.id)));
+    setTerritories(valid ? saved : autoDistributeStores(stores, merchandisers));
+    setWorkingDays(savedDays || [1, 2, 3, 4, 5]);
+    setPlanStartDate('');
+    setPlanEndDate('');
+    setTerritorySearch('');
+    setAutoError('');
+    setAutoStep(1);
+    setShowAutoModal(true);
   };
 
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    if (name === 'stores') {
-      const storeId = parseInt(value, 10);
-      setFormData((prev) => {
-        const newStores = checked
-          ? [...prev.stores, storeId]
-          : prev.stores.filter((id) => id !== storeId);
-        return { ...prev, stores: newStores };
-      });
-      // Set default duration if adding
-      if (checked) {
-        setVisitDurations((durs) =>
-          !durs[storeId] ? { ...durs, [storeId]: 30 } : durs
+  const closeAutoModal = () => { setShowAutoModal(false); setAutoGenerating(false); setAutoError(''); };
+
+  const handleAutoDistribute = () => setTerritories(autoDistributeStores(stores, merchandisers));
+
+  const handleStoreTerritoryChange = (storeId, newMerchId) => {
+    setTerritories((prev) => {
+      const next = {};
+      Object.keys(prev).forEach((k) => { next[k] = prev[k].filter((id) => id !== storeId); });
+      if (newMerchId !== '') next[String(newMerchId)] = [...(next[String(newMerchId)] || []), storeId];
+      return next;
+    });
+  };
+
+  const handleWorkingDayToggle = (dayValue) => {
+    setWorkingDays((prev) =>
+      prev.includes(dayValue) ? prev.filter((d) => d !== dayValue) : [...prev, dayValue].sort()
+    );
+  };
+
+  const getCurrentTerritoryForStore = (storeId) => {
+    const entry = Object.entries(territories).find(([, ids]) => ids.includes(storeId));
+    return entry ? entry[0] : '';
+  };
+
+  const handleAutoGenerate = async () => {
+    if (!planStartDate || !planEndDate) { setAutoError('Select a start and end date.'); return; }
+    if (planEndDate < planStartDate) { setAutoError('End date must be after start date.'); return; }
+    if (!workingDays.length) { setAutoError('Select at least one working day.'); return; }
+    const allVisits = buildFullVisitPlan(territories, stores, merchandisers, workingDays, planStartDate, planEndDate);
+    if (!allVisits.length) { setAutoError('Nothing to generate. Check territories, working days and dates.'); return; }
+    setAutoGenerating(true);
+    setAutoError('');
+    try {
+      const BATCH = 20;
+      for (let i = 0; i < allVisits.length; i += BATCH) {
+        await Promise.all(
+          allVisits.slice(i, i + BATCH).map((v) =>
+            visitService.createVisit({
+              store: v.store,
+              merchandiser: v.merchandiser,
+              scheduled_date: v.scheduled_date,
+              status: v.status,
+              break_duration: v.break_duration,
+              break_window_start: v.break_window_start,
+              break_window_end: v.break_window_end,
+            })
+          )
         );
       }
-    } else {
-      setFormData({
-        ...formData,
-        [name]: value,
-      });
+      persistTerritories(territories);
+      persistWorkingDays(workingDays);
+      setSuccessMessage(`${allVisits.length} visits generated for all merchandisers.`);
+      setTimeout(() => setSuccessMessage(''), 5000);
+      closeAutoModal();
+      fetchData();
+    } catch (err) {
+      console.error('Error generating visits:', err);
+      setAutoError(err.response?.data?.detail || 'Generation failed. Please try again.');
+    } finally {
+      setAutoGenerating(false);
     }
   };
 
-  const handleDurationChange = (storeId, value) => {
-    setVisitDurations((prev) => ({ ...prev, [storeId]: Number(value) }));
+  // ── Override handlers ──────────────────────────────────────────────────────
+
+  const openOverrideModal = () => {
+    setOverrideForm({ store: '', merchandiser: '', scheduled_date: '' });
+    setOverrideError('');
+    setShowOverrideModal(true);
   };
+  const closeOverrideModal = () => { setShowOverrideModal(false); setOverrideError(''); };
 
-  const handleScheduleVisit = async (e) => {
+  const handleOverrideSubmit = async (e) => {
     e.preventDefault();
-    setFormError('');
-    setSubmitting(true);
-
-    if (!formData.stores.length || !formData.merchandiser || !formData.scheduled_date) {
-      setFormError('At least one store, merchandiser, and scheduled date are required');
-      setSubmitting(false);
+    if (!overrideForm.store || !overrideForm.merchandiser || !overrideForm.scheduled_date) {
+      setOverrideError('All fields are required.');
       return;
     }
-
+    setOverrideSubmitting(true);
+    setOverrideError('');
     try {
-      // Schedule a visit for each selected store
-      await Promise.all(
-        formData.stores.map((storeId) =>
-          visitService.createVisit({
-            store: storeId,
-            merchandiser: parseInt(formData.merchandiser, 10),
-            scheduled_date: formData.scheduled_date,
-            notes: formData.notes,
-            status: 'SCHEDULED',
-          })
-        )
-      );
-      setSuccessMessage('Visits scheduled successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
-      setShowScheduleModal(false);
-      setFormData({
-        stores: [],
-        merchandiser: '',
-        scheduled_date: '',
-        notes: '',
+      await visitService.createVisit({
+        store: parseInt(overrideForm.store, 10),
+        merchandiser: parseInt(overrideForm.merchandiser, 10),
+        scheduled_date: `${overrideForm.scheduled_date}T09:00:00`,
+        status: 'SCHEDULED',
+        ...DEFAULT_VISIT_BREAK_SETTINGS,
       });
-      await fetchData();
+      setSuccessMessage('Override visit added.');
+      setTimeout(() => setSuccessMessage(''), 3000);
+      closeOverrideModal();
+      fetchData();
     } catch (err) {
-      console.error('Error scheduling visit:', err);
-      setFormError(err.response?.data?.detail || 'Failed to schedule visit');
+      setOverrideError(err.response?.data?.detail || 'Failed to add override visit.');
     } finally {
-      setSubmitting(false);
+      setOverrideSubmitting(false);
     }
   };
 
-  const handleCancelSchedule = () => {
-    setShowScheduleModal(false);
-    setFormData({
-      store: '',
-      merchandiser: '',
-      scheduled_date: '',
-      notes: '',
-    });
-    setFormError('');
-  };
+  // ── Derived values ─────────────────────────────────────────────────────────
 
+  const filteredStoresForTerritory = stores.filter((s) => {
+    const text = `${s.name || ''} ${s.address || s.location || ''}`.toLowerCase();
+    return text.includes(territorySearch.trim().toLowerCase());
+  });
+
+  const unassignedStores = stores.filter((s) => getCurrentTerritoryForStore(s.id) === '');
+
+  const previewPlan = autoStep === 3
+    ? buildFullVisitPlan(territories, stores, merchandisers, workingDays, planStartDate, planEndDate)
+    : [];
+
+  const weeklyPreviewByMerchandiser = merchandisers.map((merch) => {
+    const storeIds = territories[merch.id] || [];
+    const weekSchedule = buildMerchandiserWeek(storeIds, workingDays);
+    return {
+      merch,
+      storeCount: storeIds.length,
+      schedule: WEEK_DAYS
+        .filter((d) => workingDays.includes(d.value))
+        .map((d) => ({
+          day: d,
+          stores: (weekSchedule[d.value] || []).map((id) => stores.find((s) => s.id === id)).filter(Boolean),
+        })),
+    };
+  });
+
+  const weekCount = countWeeksInRange(planStartDate, planEndDate);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="app">
@@ -232,21 +382,16 @@ const VisitsTracking = () => {
         <Navbar />
         <div className="page-container">
           <div className="tracking-header">
-            <div>
-              <button className="add-btn" onClick={() => setShowScheduleModal(true)}>
-                + Schedule Visit
-              </button>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <button className="add-btn" onClick={openAutoModal}>⚡ Auto Planning</button>
+              <button className="btn-override" onClick={openOverrideModal}>+ Override</button>
             </div>
-            <button className="clear-filters-btn" onClick={handleClearFilters}>
-              Clear Filters
+            <button className="clear-filters-btn" onClick={() => { setCurrentPage(1); fetchData(); }}>
+              Refresh
             </button>
           </div>
 
-          {successMessage && (
-            <div className="success-message">
-              {successMessage}
-            </div>
-          )}
+          {successMessage && <div className="success-message">{successMessage}</div>}
 
           {loading ? (
             <div className="loading">Loading visits...</div>
@@ -268,83 +413,47 @@ const VisitsTracking = () => {
                   </thead>
                   <tbody>
                     {visits.length === 0 ? (
-                      <tr>
-                        <td colSpan="6" className="no-data">
-                          No visits found
-                        </td>
-                      </tr>
+                      <tr><td colSpan="6" className="no-data">No visits found</td></tr>
                     ) : (
                       visits.map((visit) => {
-                        const merchandiser = getMerchandiserInfo(visit.merchandiser);
+                        const merch = getMerchandiserInfo(visit.merchandiser);
                         const store = getStoreInfo(visit.store);
-                        const statusConfig = STATUS_CONFIG[visit.status] || { label: visit.status, class: 'default' };
-                        
+                        const sc = STATUS_CONFIG[visit.status] || { label: visit.status, class: 'default' };
                         return (
                           <tr key={visit.id}>
                             <td>
                               <div className="merchandiser-cell">
                                 <div className="merchandiser-avatar">
-                                  {merchandiser?.avatar_url || merchandiser?.avatar ? (
-                                    (() => {
-                                      const url = getAvatarUrl(merchandiser.avatar_url || merchandiser.avatar);
-                                      return url ? (
-                                        <img
-                                          src={url}
-                                          alt="avatar"
-                                          style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
-                                        />
-                                      ) : (
-                                        <>
-                                          {merchandiser?.first_name?.charAt(0) || 'M'}
-                                          {merchandiser?.last_name?.charAt(0) || ''}
-                                        </>
-                                      );
-                                    })()
-                                  ) : (
-                                    <>
-                                      {merchandiser?.first_name?.charAt(0) || 'M'}
-                                      {merchandiser?.last_name?.charAt(0) || ''}
-                                    </>
-                                  )}
+                                  {(() => {
+                                    const url = (merch?.avatar_url || merch?.avatar)
+                                      ? getAvatarUrl(merch.avatar_url || merch.avatar) : null;
+                                    return url
+                                      ? <img src={url} alt="av" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+                                      : <>{merch?.first_name?.charAt(0) || 'M'}{merch?.last_name?.charAt(0) || ''}</>;
+                                  })()}
                                 </div>
                                 <div className="merchandiser-info">
                                   <div className="merchandiser-name">
-                                    {merchandiser 
-                                      ? `${merchandiser.first_name} ${merchandiser.last_name}`
-                                      : 'Unknown'}
+                                    {merch ? `${merch.first_name} ${merch.last_name}` : 'Unknown'}
                                   </div>
-                                  <div className="merchandiser-id">
-                                    ID #{visit.merchandiser || 'N/A'}
-                                  </div>
+                                  <div className="merchandiser-id">ID #{visit.merchandiser || 'N/A'}</div>
                                 </div>
                               </div>
                             </td>
                             <td>
                               <div className="store-cell">
-                                <div className="store-name">
-                                  {store?.name || visit.store_name || 'Unknown Store'}
-                                </div>
-                                <div className="store-address">
-                                  {store?.address || store?.location || 'No address'}
-                                </div>
+                                <div className="store-name">{store?.name || visit.store_name || 'Unknown Store'}</div>
+                                <div className="store-address">{store?.address || store?.location || 'No address'}</div>
                               </div>
                             </td>
-                            <td>
-                              <div className="date-cell">
-                                {formatDate(visit.scheduled_date)}
-                              </div>
-                            </td>
+                            <td><div className="date-cell">{formatDate(visit.scheduled_date)}</div></td>
                             <td>
                               <div className="checkin-cell">
                                 <div className="time-row">
-                                  <span className="time-value">
-                                    {formatTime(visit.check_in_time || visit.checked_in_at)}
-                                  </span>
+                                  <span className="time-value">{formatTime(visit.check_in_time || visit.checked_in_at)}</span>
                                 </div>
                                 <div className="time-row">
-                                  <span className="time-value secondary">
-                                    {formatTime(visit.check_out_time || visit.checked_out_at)}
-                                  </span>
+                                  <span className="time-value secondary">{formatTime(visit.check_out_time || visit.checked_out_at)}</span>
                                 </div>
                               </div>
                             </td>
@@ -357,9 +466,7 @@ const VisitsTracking = () => {
                               </div>
                             </td>
                             <td>
-                              <span className={`tracking-status-badge ${statusConfig.class}`}>
-                                ● {statusConfig.label}
-                              </span>
+                              <span className={`tracking-status-badge ${sc.class}`}>● {sc.label}</span>
                             </td>
                           </tr>
                         );
@@ -375,45 +482,24 @@ const VisitsTracking = () => {
                 </div>
                 <div className="pagination-buttons">
                   {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-                    
+                    let p;
+                    if (totalPages <= 5) p = i + 1;
+                    else if (currentPage <= 3) p = i + 1;
+                    else if (currentPage >= totalPages - 2) p = totalPages - 4 + i;
+                    else p = currentPage - 2 + i;
                     return (
-                      <button
-                        key={pageNum}
-                        className={`page-btn ${currentPage === pageNum ? 'active' : ''}`}
-                        onClick={() => setCurrentPage(pageNum)}
-                      >
-                        {pageNum}
-                      </button>
+                      <button key={p} className={`page-btn ${currentPage === p ? 'active' : ''}`}
+                        onClick={() => setCurrentPage(p)}>{p}</button>
                     );
                   })}
                   {totalPages > 5 && currentPage < totalPages - 2 && (
                     <>
                       <span className="page-ellipsis">...</span>
-                      <button
-                        className="page-btn"
-                        onClick={() => setCurrentPage(totalPages)}
-                      >
-                        {totalPages}
-                      </button>
+                      <button className="page-btn" onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
                     </>
                   )}
                   {currentPage < totalPages && (
-                    <button
-                      className="page-btn nav-btn"
-                      onClick={() => setCurrentPage(currentPage + 1)}
-                    >
-                      ›
-                    </button>
+                    <button className="page-btn nav-btn" onClick={() => setCurrentPage(currentPage + 1)}>›</button>
                   )}
                 </div>
               </div>
@@ -422,221 +508,283 @@ const VisitsTracking = () => {
         </div>
       </div>
 
-      {/* Schedule Visit Modal */}
-      {showScheduleModal && (
-        <div className="modal-overlay" onClick={handleCancelSchedule}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Schedule New Visit</h2>
-              <button className="close-btn" onClick={handleCancelSchedule}>×</button>
+      {/* ─── Auto Planning Modal ─────────────────────────────────────────────── */}
+      {showAutoModal && (
+        <div className="modal-overlay" onClick={closeAutoModal}>
+          <div className="modal-content auto-plan-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header auto-plan-header">
+              <div>
+                <span className="auto-plan-eyebrow">Automated Planning</span>
+                <h2>Generate Visit Schedule</h2>
+                <p className="auto-plan-subtitle">
+                  {stores.length} stores · {merchandisers.length} merchandisers · the same weekly pattern repeats indefinitely.
+                </p>
+              </div>
+              <button className="close-btn" onClick={closeAutoModal}>×</button>
             </div>
-            <form onSubmit={handleScheduleVisit}>
-              <div className="form-body">
-                {formError && (
-                  <div className="form-error">{formError}</div>
-                )}
-                
-                <div className="form-group">
-                  <label>Stores *</label>
-                  <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '6px', padding: '4px 0 4px 0' }}>
-                    {stores.map((store) => (
-                      <div key={store.id} style={{ display: 'flex', alignItems: 'flex-start', padding: '6px 0', marginBottom: 2 }}>
-                        <div style={{ width: 22, display: 'flex', justifyContent: 'center' }}>
+
+            <div className="auto-plan-steps">
+              {[
+                { n: 1, label: 'Territories' },
+                { n: 2, label: 'Schedule' },
+                { n: 3, label: 'Preview & Generate' },
+              ].map(({ n, label }) => (
+                <div key={n} className={`auto-step ${autoStep === n ? 'active' : ''} ${autoStep > n ? 'done' : ''}`}>
+                  <span className="auto-step-num">{autoStep > n ? '✓' : n}</span>
+                  <span className="auto-step-label">{label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="auto-plan-body">
+              {autoError && <div className="form-error">{autoError}</div>}
+
+              {/* Step 1 – Territory assignment */}
+              {autoStep === 1 && (
+                <div>
+                  <div className="territory-toolbar">
+                    <div className="territory-merch-pills">
+                      {merchandisers.map((m) => (
+                        <div key={m.id} className="territory-merch-pill">
+                          <span className="territory-merch-initial">
+                            {m.first_name?.charAt(0)}{m.last_name?.charAt(0)}
+                          </span>
+                          <div>
+                            <div className="territory-merch-name">{m.first_name} {m.last_name}</div>
+                            <div className="territory-merch-count">{(territories[m.id] || []).length} stores</div>
+                          </div>
+                        </div>
+                      ))}
+                      {unassignedStores.length > 0 && (
+                        <div className="territory-merch-pill unassigned-pill">
+                          <span className="territory-merch-initial warn">!</span>
+                          <div>
+                            <div className="territory-merch-name">Unassigned</div>
+                            <div className="territory-merch-count">{unassignedStores.length} stores</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <button type="button" className="btn-auto-dist" onClick={handleAutoDistribute}>
+                      ⚡ Auto-distribute equally
+                    </button>
+                  </div>
+
+                  <input
+                    type="search"
+                    className="store-search-input"
+                    placeholder="Search stores…"
+                    value={territorySearch}
+                    onChange={(e) => setTerritorySearch(e.target.value)}
+                    style={{ marginBottom: '0.75rem', width: '100%', boxSizing: 'border-box' }}
+                  />
+
+                  <div className="territory-store-list">
+                    {filteredStoresForTerritory.map((store) => {
+                      const currentId = getCurrentTerritoryForStore(store.id);
+                      return (
+                        <div key={store.id} className={`territory-store-row ${currentId ? 'assigned' : 'unassigned'}`}>
+                          <div className="territory-store-info">
+                            <span className="territory-store-name">{store.name}</span>
+                            <span className="territory-store-addr">{store.address || store.location || ''}</span>
+                          </div>
+                          <select
+                            className="territory-merch-select"
+                            value={currentId}
+                            onChange={(e) => handleStoreTerritoryChange(store.id, e.target.value)}
+                          >
+                            <option value="">— Unassigned —</option>
+                            {merchandisers.map((m) => (
+                              <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2 – Working days + date range */}
+              {autoStep === 2 && (
+                <div className="auto-schedule-body">
+                  <div className="auto-plan-section">
+                    <h3 className="auto-section-title">Working Days</h3>
+                    <p className="auto-section-desc">Merchandisers visit stores on these days every week.</p>
+                    <div className="working-days-grid">
+                      {WEEK_DAYS.map((day) => (
+                        <label key={day.value} className={`working-day-pill ${workingDays.includes(day.value) ? 'active' : ''}`}>
                           <input
                             type="checkbox"
-                            id={`store_${store.id}`}
-                            name="stores"
-                            value={store.id}
-                            checked={formData.stores.includes(store.id)}
-                            onChange={handleInputChange}
-                            style={{ marginTop: 2, marginLeft: 0 }}
+                            checked={workingDays.includes(day.value)}
+                            onChange={() => handleWorkingDayToggle(day.value)}
                           />
-                        </div>
-                        <label htmlFor={`store_${store.id}`} style={{ marginLeft: 8, width: '100%', cursor: 'pointer', textAlign: 'left' }}>
-                          <div style={{ fontWeight: 500, color: 'var(--text-primary)', textAlign: 'left' }}>{store.name}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: 1, textAlign: 'left' }}>{store.address}</div>
+                          {day.label}
                         </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="auto-plan-section">
+                    <h3 className="auto-section-title">Planning Period</h3>
+                    <p className="auto-section-desc">Visits will be generated for every week between these two dates.</p>
+                    <div className="auto-date-row">
+                      <div className="form-group">
+                        <label>Start date *</label>
+                        <input type="date" value={planStartDate} onChange={(e) => setPlanStartDate(e.target.value)} />
+                      </div>
+                      <div className="form-group">
+                        <label>End date *</label>
+                        <input type="date" value={planEndDate} min={planStartDate || undefined}
+                          onChange={(e) => setPlanEndDate(e.target.value)} />
+                      </div>
+                    </div>
+                    {weekCount > 0 && (
+                      <div className="auto-plan-stats">
+                        <div className="auto-stat"><span>{stores.length}</span><label>Total stores</label></div>
+                        <div className="auto-stat"><span>{merchandisers.length}</span><label>Merchandisers</label></div>
+                        <div className="auto-stat"><span>{workingDays.length}</span><label>Days / week</label></div>
+                        <div className="auto-stat"><span>{weekCount}</span><label>Weeks</label></div>
+                        <div className="auto-stat accent">
+                          <span>{buildFullVisitPlan(territories, stores, merchandisers, workingDays, planStartDate, planEndDate).length}</span>
+                          <label>Total visits</label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3 – Preview */}
+              {autoStep === 3 && (
+                <div className="auto-preview-body">
+                  <div className="preview-summary-bar">
+                    <span className="preview-total-badge">{previewPlan.length} visits to generate</span>
+                    <span className="preview-period">{planStartDate} → {planEndDate} · {weekCount} week(s)</span>
+                  </div>
+
+                  <div className="preview-merch-grid">
+                    {weeklyPreviewByMerchandiser.map(({ merch, storeCount, schedule }) => (
+                      <div key={merch.id} className="preview-merch-card">
+                        <div className="preview-merch-header">
+                          <div className="preview-merch-avatar">
+                            {merch.first_name?.charAt(0)}{merch.last_name?.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="preview-merch-name">{merch.first_name} {merch.last_name}</div>
+                            <div className="preview-merch-meta">{storeCount} stores · {storeCount} visits/week</div>
+                          </div>
+                        </div>
+                        <div className="preview-week-schedule">
+                          {schedule.map(({ day, stores: dayStores }) => (
+                            <div key={day.value} className="preview-day-row">
+                              <span className="preview-day-label">{day.label.slice(0, 3)}</span>
+                              <div className="preview-day-stores">
+                                {dayStores.length
+                                  ? dayStores.map((s) => <span key={s.id} className="preview-store-chip">{s.name}</span>)
+                                  : <span className="preview-no-stores">—</span>
+                                }
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
-                {/* Route Feasibility Summary - Redesigned to match screenshot */}
-                {formData.stores.length > 0 && (() => {
-                  // Calculations
-                  const visitTime = formData.stores.reduce((sum, id) => sum + (visitDurations[id] || 30), 0);
-                  const travelSegments = formData.stores.length > 1
-                    ? formData.stores.slice(0, -1).map((id, idx, arr) => {
-                        const from = stores.find(s => s.id === arr[idx]);
-                        const to = stores.find(s => s.id === formData.stores[idx + 1]);
-                        return { from, to, mins: estimateTravelTime(from, to) };
-                      })
-                    : [];
-                  const travelTime = travelSegments.reduce((sum, seg) => sum + seg.mins, 0);
-                  const breakTime = 60;
-                  const total = visitTime + travelTime + breakTime;
-                  const start = 8 * 60; // 8:00 AM in minutes
-                  const end = start + total;
-                  const endHour = Math.floor(end / 60);
-                  const endMin = end % 60;
-                  const endTimeStr = `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
-                  const feasible = end <= (17 * 60 + 30);
+              )}
+            </div>
 
-                  // Colors (must be defined before use)
-                  // Minimal, modern, light UI
-                  const accent = feasible ? '#4fbb6f' : '#f97373';
-                  return (
-                    <div style={{
-                      border: `1.5px solid #ececec`,
-                      borderRadius: 16,
-                      margin: '24px 0',
-                      background: '#fff',
-                      boxShadow: '0 2px 12px 0 rgba(60,60,60,0.04)',
-                      padding: 0,
-                      overflow: 'hidden',
-                      fontFamily: 'Inter, Arial, sans-serif',
-                      color: 'var(--text-primary)',
-                      transition: 'box-shadow 0.2s',
-                    }}>
-                      {/* Header */}
-                      <div style={{ background: '#f8fafc', color: accent, padding: '14px 24px', fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', borderBottom: '1px solid #ececec', letterSpacing: 0.1 }}>
-                        <span role="img" aria-label="calendar" style={{ marginRight: 10, fontSize: 18 }}>🗓️</span>
-                        Route Feasibility <span style={{ color: 'var(--text-secondary)', marginLeft: 8, fontWeight: 400 }}>(8 AM - 5:30 PM)</span>
-                      </div>
-                      <div style={{ padding: '22px 24px 12px 24px' }}>
-                        {/* Store Visits */}
-                        <div style={{ fontWeight: 500, marginBottom: 10, color: 'var(--text-secondary)', fontSize: 13 }}>Store Visits</div>
-                        <div style={{ marginBottom: 18 }}>
-                          {formData.stores.map((id, idx) => {
-                            const store = stores.find(s => s.id === id);
-                            return store ? (
-                              <div key={id} style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
-                                <span style={{ fontWeight: 500, minWidth: 18, fontSize: 13, color: 'var(--text-secondary)' }}>{idx + 1}.</span>
-                                <span style={{ marginLeft: 10, flex: 1, fontSize: 14, color: 'var(--text-primary)' }}>{store.name}</span>
-                                <input
-                                  type="number"
-                                  min={10}
-                                  max={180}
-                                  value={visitDurations[id] || 30}
-                                  onChange={e => handleDurationChange(id, e.target.value)}
-                                style={{ width: 38, marginLeft: 10, height: 22, borderRadius: 8, border: '1px solid var(--border-soft)', paddingLeft: 4, fontSize: 13, background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
-                                  title="Visit duration (minutes)"
-                                />
-                                <span style={{ marginLeft: 5, fontSize: 12, color: 'var(--text-secondary)' }}>min</span>
-                              </div>
-                            ) : null;
-                          })}
-                        </div>
-                        {/* Travel Times */}
-                        <div style={{ fontWeight: 500, marginBottom: 10, color: 'var(--text-secondary)', fontSize: 13 }}>Travel Times (GPS-based)</div>
-                        <div style={{ marginBottom: 18 }}>
-                          {travelSegments.length === 0 && <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>N/A</div>}
-                          {travelSegments.map((seg, idx) => (
-                            <div key={idx} style={{ color: accent, fontSize: 12.5, display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-                              <span style={{ minWidth: 70, color: 'var(--text-secondary)' }}>{seg.from?.name} <span style={{ color: 'var(--border-soft)' }}>→</span> {seg.to?.name}:</span>
-                              <span style={{ color: accent, fontWeight: 500, marginLeft: 8 }}>{seg.mins} min</span>
-                            </div>
-                          ))}
-                        </div>
-                        {/* Totals */}
-                        <div style={{ marginBottom: 2, fontSize: 13.5, color: 'var(--text-primary)', display: 'block' }}>
-                          <div><b>Total Visits:</b> {formData.stores.length}</div>
-                          <div><b>Total Travel:</b> {travelTime} min</div>
-                          <div><b>Total Visit Time:</b> {visitTime} min</div>
-                          <div><b>Break (fixed):</b> 60 min (12:00 - 13:00)</div>
-                        </div>
-                        <div style={{ margin: '18px 0 0 0', fontWeight: 600, fontSize: 14, color: accent, display: 'flex', alignItems: 'center', gap: 18 }}>
-                          <span role="img" aria-label="clock" style={{ fontSize: 15 }}>⏰</span>
-                          <span>Total Duration: {Math.floor(total / 60)}h {total % 60}m</span>
-                          <span>|</span>
-                          <span>Estimated End: {endTimeStr}</span>
-                        </div>
-                        {/* Feasibility Message */}
-                        <div style={{
-                          marginTop: 16,
-                          padding: '12px 16px',
-                          borderRadius: 10,
-                          background: feasible ? '#f6fef9' : '#fff6f6',
-                          color: accent,
-                          fontWeight: 500,
-                          fontSize: 13.5,
-                          border: `1px solid ${accent}`,
-                          display: 'flex',
-                          alignItems: 'center',
-                          boxShadow: '0 1px 4px 0 rgba(60,60,60,0.03)',
-                        }}>
-                          {feasible ? (
-                            <>
-                              <span role="img" aria-label="check" style={{ marginRight: 10, fontSize: 15 }}>✅</span>
-                              Route feasible - Should finish by {endTimeStr}
-                            </>
-                          ) : (
-                            <>
-                              <span role="img" aria-label="warning" style={{ marginRight: 10, fontSize: 15 }}>⚠️</span>
-                              This route may exceed 5:30 PM - Estimated end: {endTimeStr}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                <div className="form-group">
-                  <label htmlFor="merchandiser">Merchandiser *</label>
-                  <select
-                    id="merchandiser"
-                    name="merchandiser"
-                    value={formData.merchandiser}
-                    onChange={handleInputChange}
-                    required
+            <div className="modal-footer auto-plan-footer">
+              <button type="button" className="btn-cancel" onClick={closeAutoModal}>Cancel</button>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                {autoStep > 1 && (
+                  <button type="button" className="btn-back"
+                    onClick={() => { setAutoStep((s) => s - 1); setAutoError(''); }}>
+                    ← Back
+                  </button>
+                )}
+                {autoStep < 3 && (
+                  <button type="button" className="btn-submit"
+                    onClick={() => {
+                      setAutoError('');
+                      if (autoStep === 1 && unassignedStores.length > 0) {
+                        setAutoError(`${unassignedStores.length} store(s) are unassigned. Use auto-distribute or assign them manually.`);
+                        return;
+                      }
+                      if (autoStep === 2) {
+                        if (!workingDays.length) { setAutoError('Select at least one working day.'); return; }
+                        if (!planStartDate || !planEndDate) { setAutoError('Set a start and end date.'); return; }
+                        if (planEndDate < planStartDate) { setAutoError('End date must be after start date.'); return; }
+                      }
+                      setAutoStep((s) => s + 1);
+                    }}
                   >
-                    <option value="">-- Select a merchandiser --</option>
-                    {merchandisers.map((merch) => (
-                      <option key={merch.id} value={merch.id}>
-                        {merch.first_name} {merch.last_name} ({merch.email})
-                      </option>
+                    Next →
+                  </button>
+                )}
+                {autoStep === 3 && (
+                  <button type="button" className="btn-submit btn-generate"
+                    onClick={handleAutoGenerate} disabled={autoGenerating}>
+                    {autoGenerating ? 'Generating…' : `Generate ${previewPlan.length} Visits`}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Override Modal ──────────────────────────────────────────────────── */}
+      {showOverrideModal && (
+        <div className="modal-overlay" onClick={closeOverrideModal}>
+          <div className="modal-content override-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h2>Override Visit</h2>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
+                  Emergency use only — absence, unavailable store, or urgent change.
+                </p>
+              </div>
+              <button className="close-btn" onClick={closeOverrideModal}>×</button>
+            </div>
+            <form onSubmit={handleOverrideSubmit}>
+              <div className="form-body">
+                {overrideError && <div className="form-error">{overrideError}</div>}
+                <div className="form-group">
+                  <label>Merchandiser *</label>
+                  <select value={overrideForm.merchandiser}
+                    onChange={(e) => setOverrideForm((p) => ({ ...p, merchandiser: e.target.value }))} required>
+                    <option value="">— Select —</option>
+                    {merchandisers.map((m) => (
+                      <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>
                     ))}
                   </select>
                 </div>
-
                 <div className="form-group">
-                  <label htmlFor="scheduled_date">Scheduled Date *</label>
-                  <input
-                    type="date"
-                    id="scheduled_date"
-                    name="scheduled_date"
-                    value={formData.scheduled_date}
-                    onChange={handleInputChange}
-                    required
-                  />
+                  <label>Store *</label>
+                  <select value={overrideForm.store}
+                    onChange={(e) => setOverrideForm((p) => ({ ...p, store: e.target.value }))} required>
+                    <option value="">— Select —</option>
+                    {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
                 </div>
-
                 <div className="form-group">
-                  <label htmlFor="notes">Notes (Optional)</label>
-                  <textarea
-                    id="notes"
-                    name="notes"
-                    value={formData.notes}
-                    onChange={handleInputChange}
-                    placeholder="Add any additional notes or instructions..."
-                    rows="4"
-                  />
+                  <label>Date *</label>
+                  <input type="date" value={overrideForm.scheduled_date}
+                    onChange={(e) => setOverrideForm((p) => ({ ...p, scheduled_date: e.target.value }))} required />
                 </div>
               </div>
-
               <div className="modal-footer">
-                <button type="button" className="btn-cancel" onClick={handleCancelSchedule}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-submit" disabled={submitting}>
-                  {submitting ? 'Scheduling...' : 'Schedule Visit'}
+                <button type="button" className="btn-cancel" onClick={closeOverrideModal}>Cancel</button>
+                <button type="submit" className="btn-submit" disabled={overrideSubmitting}>
+                  {overrideSubmitting ? 'Adding…' : 'Add Override'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
     </div>
   );
 };

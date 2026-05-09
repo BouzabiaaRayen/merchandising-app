@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Users from './pages/Users';
-import Products from './pages/Products';
+import CatalogManagement from './pages/CatalogManagement';
 import Stores from './pages/Stores';
 import VisitsTracking from './pages/VisitsTracking';
 import Inventory from './pages/Inventory';
@@ -26,6 +26,13 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
+        <Route path="/catalog" element={<ProtectedRoute><CatalogManagement /></ProtectedRoute>} />
+        <Route path="/catalog/brands" element={<Navigate to="/catalog" replace />} />
+        <Route path="/catalog/categories" element={<Navigate to="/catalog" replace />} />
+        <Route path="/catalog/products" element={<Navigate to="/catalog" replace />} />
+        <Route path="/brands" element={<Navigate to="/catalog" replace />} />
+        <Route path="/categories" element={<Navigate to="/catalog" replace />} />
+        <Route path="/products" element={<Navigate to="/catalog" replace />} />
         <Route path="/stores" element={<ProtectedRoute><Stores /></ProtectedRoute>} />
         <Route path="/visits-tracking" element={<ProtectedRoute><VisitsTracking /></ProtectedRoute>} />
         <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />

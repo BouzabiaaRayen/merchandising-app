@@ -8,12 +8,36 @@ import {
   SafeAreaView,
   ActivityIndicator,
   RefreshControl,
-  Alert
+  Alert,
+  Modal
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Calendar } from 'react-native-calendars';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { visitService, storeService } from '../services/apiService';
+
+const toDateKey = (date) => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getStartOfWeek = (date) => {
+  const baseDate = new Date(date);
+  const day = baseDate.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  baseDate.setDate(baseDate.getDate() + diff);
+  baseDate.setHours(0, 0, 0, 0);
+  return baseDate;
+};
+
+const addDays = (date, days) => {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+};
 
 export default function PlanningScreen() {
   const { user } = useAuth();
@@ -24,6 +48,8 @@ export default function PlanningScreen() {
   const [weekDays, setWeekDays] = useState([]);
   const [visits, setVisits] = useState([]);
   const [stores, setStores] = useState({});
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [plannedDateMarkers, setPlannedDateMarkers] = useState({});
 
   useEffect(() => {
     generateWeekDays();
@@ -39,14 +65,10 @@ export default function PlanningScreen() {
 
   const generateWeekDays = () => {
     const days = [];
-    const today = new Date();
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Monday
+    const startOfWeek = getStartOfWeek(selectedDate);
 
-    for (let i = 0; i < 5; i++) {
-      const day = new Date(startOfWeek);
-      day.setDate(startOfWeek.getDate() + i);
-      days.push(day);
+    for (let i = 0; i < 7; i++) {
+      days.push(addDays(startOfWeek, i));
     }
     setWeekDays(days);
   };
@@ -55,7 +77,7 @@ export default function PlanningScreen() {
     try {
       setLoading(true);
       
-      const selectedDateStr = selectedDate.toISOString().split('T')[0];
+      const selectedDateStr = toDateKey(selectedDate);
       
       // Fetch all visits
       const visitsResponse = await visitService.getVisits({ page_size: 1000 });
@@ -71,6 +93,17 @@ export default function PlanningScreen() {
             return match;
           })
         : allVisits;
+
+      const nextMarkers = {};
+      userVisits.forEach((visit) => {
+        if (!visit.scheduled_date) return;
+        const visitDate = visit.scheduled_date.split('T')[0];
+        nextMarkers[visitDate] = {
+          marked: true,
+          dotColor: visit.status === 'completed' ? '#10b981' : visit.status === 'in_progress' ? '#2563eb' : '#f59e0b',
+        };
+      });
+      setPlannedDateMarkers(nextMarkers);
       
       const dateVisits = userVisits.filter(v => {
         if (!v.scheduled_date) return false;
@@ -112,6 +145,12 @@ export default function PlanningScreen() {
 
   const handleDateSelect = (date) => {
     setSelectedDate(date);
+  };
+
+  const handleCalendarDaySelect = (day) => {
+    const [year, month, date] = day.dateString.split('-').map(Number);
+    setSelectedDate(new Date(year, month - 1, date));
+    setShowCalendarModal(false);
   };
 
   const formatTime = (dateTimeString) => {
@@ -185,8 +224,38 @@ export default function PlanningScreen() {
     return days[date.getDay()];
   };
 
+  const formatSelectedDate = (date) =>
+    date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+
+  const formatWeekRange = (days) => {
+    if (!days.length) return '';
+    const firstDay = days[0];
+    const lastDay = days[days.length - 1];
+    const sameMonth = firstDay.getMonth() === lastDay.getMonth();
+
+    if (sameMonth) {
+      return `${firstDay.toLocaleDateString('en-US', { month: 'long' })} ${firstDay.getDate()} - ${lastDay.getDate()}`;
+    }
+
+    return `${firstDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${lastDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  };
+
   const isSelectedDate = (date) => {
     return date.toDateString() === selectedDate.toDateString();
+  };
+
+  const calendarMarkedDates = {
+    ...plannedDateMarkers,
+    [toDateKey(selectedDate)]: {
+      ...(plannedDateMarkers[toDateKey(selectedDate)] || {}),
+      selected: true,
+      selectedColor: '#2563eb',
+      selectedTextColor: '#ffffff',
+    },
   };
 
   return (
@@ -194,12 +263,25 @@ export default function PlanningScreen() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.headerIcon}>
+          <TouchableOpacity style={styles.headerIcon} onPress={() => setShowCalendarModal(true)}>
             <MaterialCommunityIcons name="calendar-blank" size={24} color="#2563eb" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Daily Planning</Text>
+          <View style={styles.headerTitleWrap}>
+            <Text style={styles.headerTitle}>Weekly Planning</Text>
+            <Text style={styles.headerSubtitle}>{formatWeekRange(weekDays)}</Text>
+          </View>
           <TouchableOpacity style={styles.headerIcon}>
             <MaterialCommunityIcons name="magnify" size={24} color="#666" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.selectedDateBanner}>
+          <View>
+            <Text style={styles.selectedDateLabel}>Selected day</Text>
+            <Text style={styles.selectedDateValue}>{formatSelectedDate(selectedDate)}</Text>
+          </View>
+          <TouchableOpacity style={styles.changeDateButton} onPress={() => setShowCalendarModal(true)}>
+            <Text style={styles.changeDateButtonText}>Open calendar</Text>
           </TouchableOpacity>
         </View>
 
@@ -240,7 +322,7 @@ export default function PlanningScreen() {
           <View style={styles.progressCard}>
             <View style={styles.progressHeader}>
               <View>
-                <Text style={styles.progressTitle}>Daily Progress</Text>
+                <Text style={styles.progressTitle}>Selected Day Progress</Text>
                 <Text style={styles.routeId}>Route ID: #MR-4029</Text>
               </View>
               <Text style={styles.progressPercent}>{progressPercent}%</Text>
@@ -348,6 +430,46 @@ export default function PlanningScreen() {
           </View>
         </ScrollView>
       </View>
+
+      <Modal
+        visible={showCalendarModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCalendarModal(false)}
+      >
+        <View style={styles.calendarModalOverlay}>
+          <View style={styles.calendarModalCard}>
+            <View style={styles.calendarModalHeader}>
+              <View>
+                <Text style={styles.calendarModalEyebrow}>Planning Calendar</Text>
+                <Text style={styles.calendarModalTitle}>Choose a day</Text>
+              </View>
+              <TouchableOpacity style={styles.calendarCloseButton} onPress={() => setShowCalendarModal(false)}>
+                <MaterialCommunityIcons name="close" size={22} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <Calendar
+              current={toDateKey(selectedDate)}
+              markedDates={calendarMarkedDates}
+              onDayPress={handleCalendarDaySelect}
+              theme={{
+                todayTextColor: '#2563eb',
+                selectedDayBackgroundColor: '#2563eb',
+                arrowColor: '#2563eb',
+                monthTextColor: '#111827',
+                textDayFontWeight: '600',
+                textMonthFontWeight: '700',
+                textDayHeaderFontWeight: '700',
+              }}
+            />
+
+            <Text style={styles.calendarHintText}>
+              Tap any day to see what is planned for that date.
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -372,17 +494,61 @@ const styles = StyleSheet.create({
   },
   headerIcon: {
     padding: 4,
+    minWidth: 32,
+  },
+  headerTitleWrap: {
+    alignItems: 'center',
+    gap: 2,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#111',
   },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  selectedDateBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#eef4ff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dbeafe',
+  },
+  selectedDateLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2563eb',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 4,
+  },
+  selectedDateValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  changeDateButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#2563eb',
+  },
+  changeDateButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+  },
   weekSelector: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
@@ -390,8 +556,9 @@ const styles = StyleSheet.create({
   dayButton: {
     alignItems: 'center',
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    minWidth: 42,
   },
   dayButtonActive: {
     backgroundColor: '#eff6ff',
@@ -584,5 +751,54 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#fff',
+  },
+  calendarModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  calendarModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  calendarModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  calendarModalEyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2563eb',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    marginBottom: 4,
+  },
+  calendarModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  calendarCloseButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: '#f8fafc',
+  },
+  calendarHintText: {
+    marginTop: 12,
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'center',
   },
 });

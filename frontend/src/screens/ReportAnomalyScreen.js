@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { productService } from '../services/apiService';
 
 const ANOMALY_CATEGORIES = [
   { key: 'Wrong Placement', label: 'Wrong Placement', icon: 'arrow-decision' },
@@ -29,11 +30,32 @@ export default function ReportAnomalyScreen({ route, navigation }) {
   const [category, setCategory] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [dropdownAnim] = useState(new Animated.Value(0));
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [photoBefore, setPhotoBefore] = useState(null);
   const [photoAfter, setPhotoAfter] = useState(null);
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setProductsLoading(true);
+        const response = await productService.getProducts({ page_size: 1000, is_active: true });
+        setProducts(response.results || response);
+      } catch (fetchError) {
+        console.error('Failed to fetch anomaly products:', fetchError);
+        setError('Failed to load products.');
+      } finally {
+        setProductsLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
 
   const pickImage = async (setter) => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -70,6 +92,8 @@ export default function ReportAnomalyScreen({ route, navigation }) {
         visit_id: visitId,
         event_type: 'anomaly',
         category: category?.label || '',
+        product_id: selectedProduct?.id || null,
+        product_name: selectedProduct?.name || '',
         photo_before: photoBefore.base64 || photoBefore.uri,
         photo_after: photoAfter.base64 || photoAfter.uri,
         description,
@@ -264,6 +288,87 @@ export default function ReportAnomalyScreen({ route, navigation }) {
         </View>
       </View>
 
+      <Text style={styles.label}>Affected Product</Text>
+      <View style={{ zIndex: 9 }}>
+        <TouchableOpacity
+          style={styles.selectorRow}
+          activeOpacity={0.85}
+          onPress={() => setProductDropdownOpen((current) => !current)}
+        >
+          <MaterialCommunityIcons
+            name="package-variant-closed"
+            size={22}
+            color={selectedProduct ? '#2563eb' : '#9ca3af'}
+            style={{ marginRight: 10 }}
+          />
+          <Text
+            style={[
+              styles.selectorText,
+              !selectedProduct && { color: '#9ca3af', fontWeight: '400' },
+            ]}
+          >
+            {selectedProduct
+              ? `${selectedProduct.name}${selectedProduct.brand_name ? ` • ${selectedProduct.brand_name}` : ''}`
+              : productsLoading
+                ? 'Loading products...'
+                : 'Select a product...'}
+          </Text>
+          <View style={{ flex: 1 }} />
+          <MaterialCommunityIcons
+            name={productDropdownOpen ? 'chevron-up' : 'chevron-down'}
+            size={22}
+            color="#6b7280"
+          />
+        </TouchableOpacity>
+
+        {productDropdownOpen && !productsLoading && (
+          <View style={styles.dropdownList}>
+            {products.length === 0 ? (
+              <View style={styles.emptyDropdownItem}>
+                <Text style={styles.emptyDropdownText}>No active products found.</Text>
+              </View>
+            ) : (
+              products.map((product, idx) => (
+                <React.Fragment key={product.id}>
+                  <TouchableOpacity
+                    style={[
+                      styles.dropdownItem,
+                      selectedProduct?.id === product.id && styles.dropdownItemSelected,
+                    ]}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setSelectedProduct(product);
+                      setProductDropdownOpen(false);
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="package-variant-closed"
+                      size={20}
+                      color={selectedProduct?.id === product.id ? '#2563eb' : '#6b7280'}
+                      style={{ marginRight: 12 }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          selectedProduct?.id === product.id && styles.dropdownItemTextSelected,
+                        ]}
+                      >
+                        {product.name}
+                      </Text>
+                      <Text style={styles.dropdownItemMeta}>
+                        {[product.brand_name, product.category_name].filter(Boolean).join(' • ') || 'Central catalog product'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                  {idx < products.length - 1 && <View style={styles.dropdownDivider} />}
+                </React.Fragment>
+              ))
+            )}
+          </View>
+        )}
+      </View>
+
       <Text style={styles.label}>Description</Text>
       <TextInput
         style={styles.textArea}
@@ -379,10 +484,28 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontWeight: '500',
   },
+  dropdownItemTextSelected: {
+    color: '#2563eb',
+    fontWeight: '700',
+  },
+  dropdownItemMeta: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
   dropdownDivider: {
     height: 1,
     backgroundColor: '#f1f5f9',
     marginLeft: 48,
+  },
+  emptyDropdownItem: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  emptyDropdownText: {
+    fontSize: 14,
+    color: '#64748b',
   },
   photosRow: {
     flexDirection: 'row',

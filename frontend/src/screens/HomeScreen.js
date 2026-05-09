@@ -52,11 +52,14 @@ export default function HomeScreen() {
   const [todayStores, setTodayStores] = useState([]);
   const [todayVisits, setTodayVisits] = useState([]);
   const [gpsActive, setGpsActive] = useState(false);
+  const [gpsPermissionGranted, setGpsPermissionGranted] = useState(null);
+  const [gpsServicesEnabled, setGpsServicesEnabled] = useState(null);
   const [location, setLocation] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const locationSubscriptionRef = useRef(null);
   const locationCheckIntervalRef = useRef(null);
   const lastGpsSendRef = useRef(0); // timestamp of last server send
+  const reportedGpsActiveRef = useRef(false);
 
   // Break state
   const [breakWindowStart, setBreakWindowStart] = useState(null); // e.g. "12:00"
@@ -238,7 +241,7 @@ export default function HomeScreen() {
       }
       loadDayStatus();
       fetchHomeData();
-      checkLocationPermission();
+      syncGpsTrackingState({ requestPermission: true });
     };
     checkAndResetDay();
 
@@ -263,6 +266,8 @@ export default function HomeScreen() {
           loadDayStatus();
           fetchHomeData();
         }
+
+        syncGpsTrackingState();
       }
     };
     const subscription = AppState.addEventListener('change', handleAppStateChange);
@@ -301,150 +306,53 @@ export default function HomeScreen() {
     return () => clearTimeout(timer);
   }, []);
   
-  // Start GPS tracking
-  useEffect(() => {
-    const stopTrackingResources = () => {
-      if (locationSubscriptionRef.current) {
-        locationSubscriptionRef.current.remove();
-        locationSubscriptionRef.current = null;
-      }
-      if (locationCheckIntervalRef.current) {
-        clearInterval(locationCheckIntervalRef.current);
-        locationCheckIntervalRef.current = null;
-      }
-    };
+  const stopTrackingResources = ({ keepMonitor = false } = {}) => {
+    if (locationSubscriptionRef.current) {
+      locationSubscriptionRef.current.remove();
+      locationSubscriptionRef.current = null;
+    }
+    if (!keepMonitor && locationCheckIntervalRef.current) {
+      clearInterval(locationCheckIntervalRef.current);
+      locationCheckIntervalRef.current = null;
+    }
+  };
 
-    if (gpsActive) {
-      startLocationTracking();
-      
-      // Check location availability every 3 seconds
-      locationCheckIntervalRef.current = setInterval(async () => {
-        try {
-          const isEnabled = await Location.hasServicesEnabledAsync();
-          if (!isEnabled) {
-            console.log('Location services disabled by user');
-            stopTrackingResources();
-            setGpsActive(false);
-            setLocation(null);
+  const updateReportedGpsState = async (nextActive, { notifyOff = false } = {}) => {
+    const wasActive = reportedGpsActiveRef.current;
+    if (wasActive === nextActive) {
+      return;
+    }
 
-            // Mark user as GPS inactive on the server
-            if (user?.id) {
-              userService.patchUser(user?.id, { gps_active: false }).catch(() => {});
-            }
+    reportedGpsActiveRef.current = nextActive;
 
-            // Send GPS-off alert to all supervisors/admins
-            await notifyGPSOffToSupervisors();
-            
-            Alert.alert(
-              'GPS Disabled',
-              'Location services have been turned off. GPS tracking stopped.',
-              [{ text: 'OK' }]
-            );
-          }
-        } catch (error) {
-          console.error('Error checking location services:', error);
+    try {
+      if (nextActive) {
+        if (user?.id) {
+          userService.patchUser(user.id, { gps_active: true }).catch(() => {});
         }
-      }, 3000);
-    } else {
-      stopTrackingResources();
-    }
-    
-    return () => {
-      stopTrackingResources();
-    };
-  }, [gpsActive, user]);
-  
-  const checkLocationPermission = async () => {
-    try {
-      const { status } = await Location.getForegroundPermissionsAsync();
-      if (status === 'granted') {
-        console.log('Location permission already granted');
-        await activateGPS();
-      } else {
-        console.log('Location permission not granted yet');
-      }
-    } catch (error) {
-      console.error('Error checking location permission:', error);
-    }
-  };
-  
-  const requestLocationPermission = async () => {
-    try {
-      console.log('Requesting location permission...');
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      console.log('Permission status:', status);
-      
-      if (status === 'granted') {
-        await activateGPS();
-        Alert.alert('Success', 'GPS tracking enabled!');
-      } else {
-        Alert.alert(
-          'Permission Required',
-          'Location permission is required for GPS tracking. Please enable it in your device settings.',
-          [{ text: 'OK' }]
-        );
-      }
-    } catch (error) {
-      console.error('Error requesting location permission:', error);
-      Alert.alert('Error', 'Failed to request location permission');
-    }
-  };
-  
-  const activateGPS = async () => {
-    try {
-      setGpsActive(true);
-      const currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High
-      });
-      setLocation(currentLocation);
-      console.log('GPS activated:', currentLocation.coords);
-
-      // Mark user as GPS active on the server immediately
-      if (user?.id) {
-        userService.patchUser(user.id, { gps_active: true }).catch(() => {});
+        await sendSessionStatusUpdate('active');
+        return;
       }
 
-      // Send session status update to supervisors via WebSocket
-      await sendSessionStatusUpdate('active');
-
-      // Send initial ping immediately so the supervisor sees active status right away
-      lastGpsSendRef.current = Date.now();
-      await sendGpsToServer(currentLocation.coords);
-    } catch (error) {
-      console.error('Error getting current location:', error);
-      setGpsActive(false);
-    }
-  };
-
-  const deactivateGPS = async () => {
-    try {
-      if (locationSubscriptionRef.current) {
-        locationSubscriptionRef.current.remove();
-        locationSubscriptionRef.current = null;
-      }
-      if (locationCheckIntervalRef.current) {
-        clearInterval(locationCheckIntervalRef.current);
-        locationCheckIntervalRef.current = null;
-      }
-
-      setGpsActive(false);
-      setLocation(null);
-
-      // Send session status update to supervisors via WebSocket BEFORE server patch
       await sendSessionStatusUpdate('stopped');
-
-      // Mark user as GPS inactive on the server immediately
       if (user?.id) {
         userService.patchUser(user.id, { gps_active: false }).catch(() => {});
       }
-
-      // Send GPS-off alert to all supervisors/admins
-      await notifyGPSOffToSupervisors();
-
-      Alert.alert('GPS Disabled', 'GPS tracking has been turned off.');
+      if (notifyOff && wasActive) {
+        await notifyGPSOffToSupervisors();
+      }
     } catch (error) {
-      console.error('Error disabling GPS:', error);
+      console.error('Error updating reported GPS state:', error);
     }
+  };
+
+  const setGpsInactive = async ({ notifyOff = false, clearLocation = true } = {}) => {
+    stopTrackingResources({ keepMonitor: true });
+    setGpsActive(false);
+    if (clearLocation) {
+      setLocation(null);
+    }
+    await updateReportedGpsState(false, { notifyOff });
   };
 
   // Send a GPS position to the server.
@@ -487,40 +395,41 @@ export default function HomeScreen() {
       }
     }
   };
-
-  const handleGpsStatusPress = async () => {
-    if (gpsActive) {
-      Alert.alert(
-        'Turn Off GPS',
-        'Do you want to turn off GPS tracking?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Turn Off', style: 'destructive', onPress: deactivateGPS },
-        ]
-      );
+  
+  const startLocationTracking = async () => {
+    if (locationSubscriptionRef.current) {
+      setGpsActive(true);
       return;
     }
 
-    await requestLocationPermission();
-  };
-  
-  const startLocationTracking = async () => {
     try {
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      setLocation(currentLocation);
+      setGpsActive(true);
+      console.log('GPS activated:', currentLocation.coords);
+
+      await updateReportedGpsState(true);
+
+      lastGpsSendRef.current = Date.now();
+      await sendGpsToServer(currentLocation.coords);
+
       const subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
-          timeInterval: 10000, // Update every 10 seconds
-          distanceInterval: 10, // Update every 10 meters
+          timeInterval: 10000,
+          distanceInterval: 10,
         },
         async (newLocation) => {
           setLocation(newLocation);
+          setGpsActive(true);
           console.log('GPS Update:', {
             latitude: newLocation.coords.latitude,
             longitude: newLocation.coords.longitude,
-            accuracy: newLocation.coords.accuracy
+            accuracy: newLocation.coords.accuracy,
           });
 
-          // Send to server at most once every 30 seconds
           const now = Date.now();
           if (now - lastGpsSendRef.current >= 30000) {
             lastGpsSendRef.current = now;
@@ -531,9 +440,50 @@ export default function HomeScreen() {
       locationSubscriptionRef.current = subscription;
     } catch (error) {
       console.error('Error tracking location:', error);
-      setGpsActive(false);
+      await setGpsInactive();
     }
   };
+
+  const syncGpsTrackingState = async ({ requestPermission = false } = {}) => {
+    try {
+      const servicesEnabled = await Location.hasServicesEnabledAsync();
+      setGpsServicesEnabled(servicesEnabled);
+
+      let permission = await Location.getForegroundPermissionsAsync();
+      if (
+        requestPermission &&
+        permission.status !== 'granted' &&
+        permission.canAskAgain !== false
+      ) {
+        permission = await Location.requestForegroundPermissionsAsync();
+      }
+
+      const permissionGranted = permission.status === 'granted';
+      setGpsPermissionGranted(permissionGranted);
+
+      if (!servicesEnabled || !permissionGranted) {
+        await setGpsInactive({ notifyOff: true });
+        return;
+      }
+
+      await startLocationTracking();
+    } catch (error) {
+      console.error('Error syncing GPS tracking state:', error);
+      await setGpsInactive();
+    }
+  };
+
+  useEffect(() => {
+    syncGpsTrackingState();
+
+    locationCheckIntervalRef.current = setInterval(() => {
+      syncGpsTrackingState();
+    }, 5000);
+
+    return () => {
+      stopTrackingResources();
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     let interval;
@@ -1265,6 +1215,14 @@ export default function HomeScreen() {
       );
     } else {
       // Start day
+      if (!gpsActive) {
+        Alert.alert(
+          'GPS Required',
+          'You cannot start the workday until phone location is turned on and detected.'
+        );
+        return;
+      }
+
       try {
         const startTime = Date.now();
         await AsyncStorage.setItem(userKey('dayStartTime'), startTime.toString());
@@ -1312,6 +1270,40 @@ export default function HomeScreen() {
     return `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}`;
   };
 
+  const getGpsStatusText = () => {
+    if (gpsActive) {
+      return 'Signal Active';
+    }
+
+    if (gpsServicesEnabled === false) {
+      return 'Location Off';
+    }
+
+    if (gpsPermissionGranted === false) {
+      return 'Permission Off';
+    }
+
+    return 'Checking Location';
+  };
+
+  const getGpsStatusHint = () => {
+    if (gpsActive) {
+      return 'Live phone location detected';
+    }
+
+    if (gpsServicesEnabled === false) {
+      return 'Turn on device location to resume GPS tracking';
+    }
+
+    if (gpsPermissionGranted === false) {
+      return 'Enable location permission in phone settings';
+    }
+
+    return 'Waiting for device GPS status';
+  };
+
+  const canStartWorkday = dayStarted || gpsActive;
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView 
@@ -1351,10 +1343,7 @@ export default function HomeScreen() {
         </View>
 
         {/* GPS Status Card */}
-        <TouchableOpacity 
-          style={styles.gpsCard}
-          onPress={handleGpsStatusPress}
-        >
+        <View style={styles.gpsCard}>
           <View style={styles.gpsIcon}>
             <MaterialCommunityIcons name="crosshairs-gps" size={28} color="#fff" />
           </View>
@@ -1363,16 +1352,17 @@ export default function HomeScreen() {
             <View style={styles.gpsStatusRow}>
               <View style={[styles.gpsStatusDot, gpsActive && styles.gpsStatusDotActive]} />
               <Text style={[styles.gpsStatusText, gpsActive && styles.gpsStatusTextActive]}>
-                {gpsActive ? 'Signal Active • Tap to Disable' : 'Tap to Enable'}
+                {getGpsStatusText()}
               </Text>
             </View>
+            <Text style={styles.gpsStatusHint}>{getGpsStatusHint()}</Text>
             {gpsActive && location && (
               <Text style={styles.gpsCoords}>
                 📍 {location.coords.latitude.toFixed(4)}, {location.coords.longitude.toFixed(4)}
               </Text>
             )}
           </View>
-        </TouchableOpacity>
+        </View>
 
         {/* 2. Today's Route label + 3. Map */}
         <Text style={styles.routeLabel}>Today's Route</Text>
@@ -1387,7 +1377,16 @@ export default function HomeScreen() {
             <Text style={styles.readyText}>
               Start your shift to track mileage and store visits for your assigned route.
             </Text>
-            <TouchableOpacity style={styles.startWorkdayBtn} onPress={handleStartDay}>
+            {!gpsActive && (
+              <Text style={styles.startWorkdayHint}>
+                Turn on phone location first to start your workday.
+              </Text>
+            )}
+            <TouchableOpacity
+              style={[styles.startWorkdayBtn, !canStartWorkday && styles.startWorkdayBtnDisabled]}
+              onPress={handleStartDay}
+              disabled={!canStartWorkday}
+            >
               <MaterialCommunityIcons name="play" size={18} color="#fff" style={{ marginRight: 8 }} />
               <Text style={styles.startWorkdayText}>Start Workday</Text>
             </TouchableOpacity>
@@ -1608,6 +1607,7 @@ const styles = StyleSheet.create({
   gpsStatusDotActive: { backgroundColor: '#10b981' },
   gpsStatusText: { fontSize: 14, color: '#fff', fontWeight: 'bold' },
   gpsStatusTextActive: { color: '#fff' },
+  gpsStatusHint: { fontSize: 12, color: 'rgba(255, 255, 255, 0.9)', marginTop: 4 },
   gpsCoords: { fontSize: 11, color: 'rgba(255, 255, 255, 0.8)', marginTop: 4 },
 
   // Map
@@ -1640,6 +1640,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center'
+  },
+  startWorkdayBtnDisabled: {
+    backgroundColor: '#94a3b8',
+  },
+  startWorkdayHint: {
+    fontSize: 13,
+    color: '#b45309',
+    marginBottom: 12,
   },
   startWorkdayText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 

@@ -7,6 +7,44 @@
  */
 import api from './api';
 
+const multipartConfig = (data) =>
+  data instanceof FormData
+    ? {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    : undefined;
+
+const normalizeVisitStatus = (status) =>
+  typeof status === 'string' ? status.toLowerCase() : status;
+
+const normalizeVisit = (visit) => {
+  if (!visit || typeof visit !== 'object') {
+    return visit;
+  }
+
+  return {
+    ...visit,
+    status: normalizeVisitStatus(visit.status),
+  };
+};
+
+const normalizeVisitResponse = (data) => {
+  if (Array.isArray(data)) {
+    return data.map(normalizeVisit);
+  }
+
+  if (data && Array.isArray(data.results)) {
+    return {
+      ...data,
+      results: data.results.map(normalizeVisit),
+    };
+  }
+
+  return normalizeVisit(data);
+};
+
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
@@ -101,6 +139,28 @@ export const storeService = {
 };
 
 // ---------------------------------------------------------------------------
+// Brands
+// ---------------------------------------------------------------------------
+export const brandService = {
+  getBrands: (params = {}) =>
+    api.get('/merchandising/brands/', { params }).then(r => r.data),
+
+  getBrand: (id) =>
+    api.get(`/merchandising/brands/${id}/`).then(r => r.data),
+};
+
+// ---------------------------------------------------------------------------
+// Categories
+// ---------------------------------------------------------------------------
+export const categoryService = {
+  getCategories: (params = {}) =>
+    api.get('/merchandising/categories/', { params }).then(r => r.data),
+
+  getCategory: (id) =>
+    api.get(`/merchandising/categories/${id}/`).then(r => r.data),
+};
+
+// ---------------------------------------------------------------------------
 // Products
 // ---------------------------------------------------------------------------
 export const productService = {
@@ -111,13 +171,13 @@ export const productService = {
     api.get(`/merchandising/products/${id}/`).then(r => r.data),
 
   createProduct: (data) =>
-    api.post('/merchandising/products/', data).then(r => r.data),
+    api.post('/merchandising/products/', data, multipartConfig(data)).then(r => r.data),
 
   updateProduct: (id, data) =>
-    api.put(`/merchandising/products/${id}/`, data).then(r => r.data),
+    api.put(`/merchandising/products/${id}/`, data, multipartConfig(data)).then(r => r.data),
 
   patchProduct: (id, data) =>
-    api.patch(`/merchandising/products/${id}/`, data).then(r => r.data),
+    api.patch(`/merchandising/products/${id}/`, data, multipartConfig(data)).then(r => r.data),
 
   deleteProduct: (id) =>
     api.delete(`/merchandising/products/${id}/`).then(r => r.data),
@@ -128,31 +188,31 @@ export const productService = {
 // ---------------------------------------------------------------------------
 export const visitService = {
   getVisits: (params = {}) =>
-    api.get('/merchandising/visits/', { params }).then(r => r.data),
+    api.get('/merchandising/visits/', { params }).then(r => normalizeVisitResponse(r.data)),
 
   getVisit: (id) =>
-    api.get(`/merchandising/visits/${id}/`).then(r => r.data),
+    api.get(`/merchandising/visits/${id}/`).then(r => normalizeVisitResponse(r.data)),
 
   createVisit: (data) =>
-    api.post('/merchandising/visits/', data).then(r => r.data),
+    api.post('/merchandising/visits/', data).then(r => normalizeVisitResponse(r.data)),
 
   updateVisit: (id, data) =>
-    api.put(`/merchandising/visits/${id}/`, data).then(r => r.data),
+    api.put(`/merchandising/visits/${id}/`, data).then(r => normalizeVisitResponse(r.data)),
 
   patchVisit: (id, data) =>
-    api.patch(`/merchandising/visits/${id}/`, data).then(r => r.data),
+    api.patch(`/merchandising/visits/${id}/`, data).then(r => normalizeVisitResponse(r.data)),
 
   deleteVisit: (id) =>
     api.delete(`/merchandising/visits/${id}/`).then(r => r.data),
 
   checkIn: (id) =>
-    api.post(`/merchandising/visits/${id}/check_in/`).then(r => r.data),
+    api.post(`/merchandising/visits/${id}/check_in/`).then(r => normalizeVisitResponse(r.data)),
 
   checkOut: (id, notes = '') =>
-    api.post(`/merchandising/visits/${id}/check_out/`, { notes }).then(r => r.data),
+    api.post(`/merchandising/visits/${id}/check_out/`, { notes }).then(r => normalizeVisitResponse(r.data)),
 
   cancel: (id, reason = '') =>
-    api.post(`/merchandising/visits/${id}/cancel/`, { reason }).then(r => r.data),
+    api.post(`/merchandising/visits/${id}/cancel/`, { reason }).then(r => normalizeVisitResponse(r.data)),
 };
 
 // ---------------------------------------------------------------------------

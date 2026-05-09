@@ -7,6 +7,15 @@
  */
 import api from './api';
 
+const multipartConfig = (data) =>
+  data instanceof FormData
+    ? {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    : undefined;
+
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
@@ -141,6 +150,52 @@ export const storeService = {
 };
 
 // ---------------------------------------------------------------------------
+// Brands
+// ---------------------------------------------------------------------------
+export const brandService = {
+  getBrands: (params = {}) =>
+    api.get('/merchandising/brands/', { params }).then(r => r.data),
+
+  getBrand: (id) =>
+    api.get(`/merchandising/brands/${id}/`).then(r => r.data),
+
+  createBrand: (data) =>
+    api.post('/merchandising/brands/', data, multipartConfig(data)).then(r => r.data),
+
+  updateBrand: (id, data) =>
+    api.put(`/merchandising/brands/${id}/`, data, multipartConfig(data)).then(r => r.data),
+
+  patchBrand: (id, data) =>
+    api.patch(`/merchandising/brands/${id}/`, data, multipartConfig(data)).then(r => r.data),
+
+  deleteBrand: (id) =>
+    api.delete(`/merchandising/brands/${id}/`).then(r => r.data),
+};
+
+// ---------------------------------------------------------------------------
+// Categories
+// ---------------------------------------------------------------------------
+export const categoryService = {
+  getCategories: (params = {}) =>
+    api.get('/merchandising/categories/', { params }).then(r => r.data),
+
+  getCategory: (id) =>
+    api.get(`/merchandising/categories/${id}/`).then(r => r.data),
+
+  createCategory: (data) =>
+    api.post('/merchandising/categories/', data).then(r => r.data),
+
+  updateCategory: (id, data) =>
+    api.put(`/merchandising/categories/${id}/`, data).then(r => r.data),
+
+  patchCategory: (id, data) =>
+    api.patch(`/merchandising/categories/${id}/`, data).then(r => r.data),
+
+  deleteCategory: (id) =>
+    api.delete(`/merchandising/categories/${id}/`).then(r => r.data),
+};
+
+// ---------------------------------------------------------------------------
 // Products
 // ---------------------------------------------------------------------------
 export const productService = {
@@ -151,13 +206,13 @@ export const productService = {
     api.get(`/merchandising/products/${id}/`).then(r => r.data),
 
   createProduct: (data) =>
-    api.post('/merchandising/products/', data).then(r => r.data),
+    api.post('/merchandising/products/', data, multipartConfig(data)).then(r => r.data),
 
   updateProduct: (id, data) =>
-    api.put(`/merchandising/products/${id}/`, data).then(r => r.data),
+    api.put(`/merchandising/products/${id}/`, data, multipartConfig(data)).then(r => r.data),
 
   patchProduct: (id, data) =>
-    api.patch(`/merchandising/products/${id}/`, data).then(r => r.data),
+    api.patch(`/merchandising/products/${id}/`, data, multipartConfig(data)).then(r => r.data),
 
   deleteProduct: (id) =>
     api.delete(`/merchandising/products/${id}/`).then(r => r.data),

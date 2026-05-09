@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,30 +16,12 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import { visitService, storeService, notificationService, scheduleService, productService, merchandisingAiService } from '../services/apiService';
+import { visitService, storeService, notificationService, scheduleService, productService, brandService, merchandisingAiService } from '../services/apiService';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AIShelfAnalysisSection from '../components/AIShelfAnalysisSection';
 import { getStockRupturesFromAiResult, normalizeAiDetectionResponse } from '../services/merchandisingAIMapper';
-
-const FAKE_ARTICLES = [
-  { id: 'art-1', name: 'Warda Bidha Spaghetti N°3', meta: '500g • Semoule dure', price: '2.450 TND', status: 'rupture', color: '#f4d48e', icon: 'pasta' },
-  { id: 'art-2', name: 'Warda Bidha Spaghetti N°5', meta: '500g • Cuisson rapide', price: '2.600 TND', status: 'rupture-active', color: '#efbc71', icon: 'pasta' },
-  { id: 'art-3', name: 'Warda Bidha Penne Rigate', meta: '400g • Format familial', price: '2.950 TND', status: 'rupture', color: '#e2c68c', icon: 'pasta' },
-  { id: 'art-4', name: 'Warda Bidha Coquillettes', meta: '500g • Pates fines', price: '2.300 TND', status: 'rupture', color: '#f6e3bb', icon: 'pasta' },
-  { id: 'art-5', name: 'Warda Bidha Farfalle', meta: '400g • Qualite premium', price: '3.100 TND', status: 'rupture', color: '#f2d69a', icon: 'pasta' },
-  { id: 'art-6', name: 'Warda Bidha Linguine', meta: '500g • Long format', price: '2.850 TND', status: 'rupture', color: '#f0cc84', icon: 'pasta' },
-  { id: 'art-7', name: 'Warda Bidha Macaroni', meta: '500g • Tube court', price: '2.700 TND', status: 'rupture', color: '#ebc47a', icon: 'pasta' },
-  { id: 'art-8', name: 'Warda Bidha Vermicelle', meta: '250g • Soupe et dessert', price: '1.950 TND', status: 'rupture-active', color: '#f7dfad', icon: 'pasta' },
-  { id: 'art-9', name: 'Warda Bidha Nouilles Fines', meta: '500g • Texture legere', price: '2.550 TND', status: 'rupture', color: '#f3d8a2', icon: 'pasta' },
-  { id: 'art-10', name: 'Warda Bidha Tagliatelle', meta: '400g • Rubans larges', price: '3.450 TND', status: 'rupture', color: '#e7c27f', icon: 'pasta' },
-  { id: 'art-11', name: 'Warda Bidha Fusilli', meta: '500g • Helicoidal', price: '2.990 TND', status: 'rupture', color: '#f0ce8e', icon: 'pasta' },
-  { id: 'art-12', name: 'Warda Bidha Lasagnes', meta: '500g • Feuilles pretes', price: '4.200 TND', status: 'rupture', color: '#dcb476', icon: 'pasta' },
-  { id: 'art-13', name: 'Warda Bidha Cannelloni', meta: '250g • Pates a farcir', price: '3.850 TND', status: 'rupture', color: '#e9c988', icon: 'pasta' },
-  { id: 'art-14', name: "Warda Bidha Cheveux d'Ange", meta: '250g • Coupe extra fine', price: '2.100 TND', status: 'rupture-active', color: '#f5ddac', icon: 'pasta' },
-  { id: 'art-15', name: 'Warda Bidha Mini Penne', meta: '400g • Format enfant', price: '2.650 TND', status: 'rupture', color: '#efd095', icon: 'pasta' },
-];
 
 const parseTndPrice = (priceText) => {
   const parsed = Number(String(priceText).replace(/[^\d.]/g, ''));
@@ -50,9 +32,37 @@ const formatTndPrice = (value) => `${Number(value || 0).toFixed(3)} TND`;
 
 const DEFAULT_FACING_ROWS = 4;
 const DEFAULT_FACING_COLUMNS = 6;
-const OWNER_BRANDS = ['Warda', 'Lepidor', 'Spiga', "Moulin d'Or", 'Saida'];
 const MIN_STACK_DEPTH = 1;
 const MAX_STACK_DEPTH = 20;
+const MAX_CHECK_IN_DISTANCE_METERS = 60;
+const CATALOG_SWATCHES = ['#f4d48e', '#efbc71', '#e2c68c', '#f6e3bb', '#f2d69a', '#f0cc84', '#ebc47a', '#f7dfad'];
+
+const buildCatalogProductMeta = (product) =>
+  [product.brand_name, product.category_name, product.sku].filter(Boolean).join(' • ');
+
+const mapCatalogProductToArticle = (product, index) => ({
+  id: String(product.id),
+  sourceId: product.id,
+  name: product.name,
+  meta: buildCatalogProductMeta(product) || 'Central catalog product',
+  price: formatTndPrice(product.price),
+  numericPrice: Number(product.price || 0),
+  color: CATALOG_SWATCHES[index % CATALOG_SWATCHES.length],
+  icon: 'package-variant-closed',
+  imageUrl: product.image_url || '',
+  recommendedFacing: Number(product.recommended_facing || 0),
+  isRupture: false,
+});
+
+const buildPriceComparisonItems = (products) =>
+  products.slice(0, 8).map((product) => ({
+    id: product.id,
+    name: product.name,
+    ourPrice: Number(product.numericPrice || 0),
+    competitorPrice: '',
+    competitorFacing: '',
+    photo: null,
+  }));
 
 const createGridCells = (rows, columns, fill = true) =>
   Array.from({ length: rows * columns }, () => fill);
@@ -127,28 +137,14 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const [stockUpdateCompleted, setStockUpdateCompleted] = useState(false);
   const [priceComparisonCompleted, setPriceComparisonCompleted] = useState(false);
   const [alertCompleted, setAlertCompleted] = useState(false);
-  const [productCompleted, setProductCompleted] = useState(false);
 
   // Articles state
-  const [articles, setArticles] = useState(() =>
-    FAKE_ARTICLES.map((article) => ({
-      ...article,
-      isRupture: article.status === 'rupture-active',
-    }))
-  );
+  const [articles, setArticles] = useState([]);
+  const [competitorBrands, setCompetitorBrands] = useState([]);
 
-  // Price comparison state — FIX: added competitorFacing and photo back
-  const [competitorName, setCompetitorName] = useState('Warda');
-  const [priceComparisons, setPriceComparisons] = useState(() =>
-    FAKE_ARTICLES.slice(0, 8).map((article) => ({
-      id: article.id,
-      name: article.name,
-      ourPrice: parseTndPrice(article.price),
-      competitorPrice: '',
-      competitorFacing: '',
-      photo: null,
-    }))
-  );
+  // Price comparison state
+  const [competitorName, setCompetitorName] = useState('');
+  const [priceComparisons, setPriceComparisons] = useState([]);
   const [showPriceModal, setShowPriceModal] = useState(false);
 
   // Facing grid state
@@ -192,29 +188,27 @@ export default function VisitExecutionScreen({ route, navigation }) {
   // Alert modal state
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertBrand, setAlertBrand] = useState('');
+  const [showAlertBrandDropdown, setShowAlertBrandDropdown] = useState(false);
   const [alertType, setAlertType] = useState('');
   const [showAlertTypeDropdown, setShowAlertTypeDropdown] = useState(false);
   const [alertDescription, setAlertDescription] = useState('');
   const [alertPhoto, setAlertPhoto] = useState(null);
   const [alertSubmitting, setAlertSubmitting] = useState(false);
-
-  // Product modal state
-  const [showProductModal, setShowProductModal] = useState(false);
-  const [productName, setProductName] = useState('');
-  const [productBrand, setProductBrand] = useState('');
-  const [productCategory, setProductCategory] = useState('');
-  const [showProductCategoryDropdown, setShowProductCategoryDropdown] = useState(false);
-  const [productPrice, setProductPrice] = useState('');
-  const [productSku, setProductSku] = useState('');
-  const [productDescription, setProductDescription] = useState('');
-  const [productPhoto, setProductPhoto] = useState(null);
-  const [productSubmitting, setProductSubmitting] = useState(false);
+  const locationSubscriptionRef = useRef(null);
 
   // ─── Effects ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     fetchVisitData();
-    getCurrentLocation();
+    fetchCatalogData();
+    startLocationTracking();
+
+    return () => {
+      if (locationSubscriptionRef.current) {
+        locationSubscriptionRef.current.remove();
+        locationSubscriptionRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -329,6 +323,30 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
   // ─── Data fetching ───────────────────────────────────────────────────────────
 
+  const fetchCatalogData = async () => {
+    try {
+      const [productsResponse, brandsResponse] = await Promise.all([
+        productService.getProducts({ page_size: 1000, is_active: true }),
+        brandService.getBrands({ page_size: 1000, is_active: true, type: 'COMPETITOR' }),
+      ]);
+
+      const catalogProducts = (productsResponse.results || productsResponse)
+        .map(mapCatalogProductToArticle)
+        .filter((product) => product.name);
+      const competitorCatalogBrands = (brandsResponse.results || brandsResponse)
+        .map((brand) => brand.name)
+        .filter(Boolean);
+
+      setArticles(catalogProducts);
+      setPriceComparisons(buildPriceComparisonItems(catalogProducts));
+      setCompetitorBrands(competitorCatalogBrands);
+      setCompetitorName((current) => current || competitorCatalogBrands[0] || '');
+    } catch (error) {
+      console.error('Error fetching centralized catalog:', error);
+      Alert.alert('Catalog unavailable', 'Product catalog data could not be loaded for this visit.');
+    }
+  };
+
   const fetchVisitData = async () => {
     try {
       const visitData = await visitService.getVisit(visitId);
@@ -364,7 +382,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
       const savedProgress = await loadVisitProgress(visitId);
       if (savedProgress) {
         if (savedProgress.alertCompleted) setAlertCompleted(true);
-        if (savedProgress.productCompleted) setProductCompleted(true);
         if (savedProgress.stockUpdateCompleted) setStockUpdateCompleted(true);
         if (savedProgress.priceComparisonCompleted) setPriceComparisonCompleted(true);
         if (savedProgress.photos) {
@@ -381,10 +398,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
       try {
         const today = new Date().toISOString().split('T')[0];
-        const [alertsRes, productsRes] = await Promise.all([
-          api.get('/merchandising/competitor-alerts/').catch(() => null),
-          api.get('/merchandising/products/').catch(() => null),
-        ]);
+        const alertsRes = await api.get('/merchandising/competitor-alerts/').catch(() => null);
         if (alertsRes) {
           const allAlerts = alertsRes.data?.results || alertsRes.data || [];
           const visitAlerts = allAlerts.filter(
@@ -393,17 +407,8 @@ export default function VisitExecutionScreen({ route, navigation }) {
           );
           if (visitAlerts.length > 0) setAlertCompleted(true);
         }
-        if (productsRes) {
-          const allProducts = productsRes.data?.results || productsRes.data || [];
-          const visitProducts = allProducts.filter(
-            (p) => p.created_at?.startsWith(today) &&
-              String(p.store) === String(visitData.store) &&
-              String(p.created_by) === String(user?.id)
-          );
-          if (visitProducts.length > 0) setProductCompleted(true);
-        }
       } catch (e) {
-        console.log('Could not check existing alerts/products:', e.message);
+        console.log('Could not check existing alerts:', e.message);
       }
     } catch (error) {
       console.error('Error fetching visit data:', error);
@@ -413,32 +418,65 @@ export default function VisitExecutionScreen({ route, navigation }) {
     }
   };
 
-  const getCurrentLocation = async () => {
+  const getCurrentLocation = async ({ showPermissionAlert = true } = {}) => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Location permission is required for GPS verification');
+        if (showPermissionAlert) {
+          Alert.alert('Permission Denied', 'Location permission is required for GPS verification');
+        }
         setLocationChecked(true);
-        return;
+        return null;
       }
       const currentLocation = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       setLocation(currentLocation);
       setLocationChecked(true);
+      return currentLocation;
     } catch (error) {
       console.error('Error getting location:', error);
       setLocationChecked(true);
+      return null;
     }
   };
 
-  const calculateDistance = (storeData) => {
-    if (!location || !storeData.latitude || !storeData.longitude) return;
+  const startLocationTracking = async () => {
+    try {
+      const currentLocation = await getCurrentLocation({ showPermissionAlert: true });
+      if (!currentLocation) {
+        return;
+      }
+
+      if (locationSubscriptionRef.current) {
+        return;
+      }
+
+      const subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 10000,
+          distanceInterval: 5,
+        },
+        (nextLocation) => {
+          setLocation(nextLocation);
+          setLocationChecked(true);
+        }
+      );
+
+      locationSubscriptionRef.current = subscription;
+    } catch (error) {
+      console.error('Error starting live location tracking:', error);
+    }
+  };
+
+  const getDistanceToStore = (locationData, storeData) => {
+    if (!locationData || !storeData?.latitude || !storeData?.longitude) return null;
     const storeLat = parseFloat(storeData.latitude);
     const storeLng = parseFloat(storeData.longitude);
-    const userLat = parseFloat(location.coords.latitude);
-    const userLng = parseFloat(location.coords.longitude);
-    if (isNaN(storeLat) || isNaN(storeLng) || isNaN(userLat) || isNaN(userLng)) { setDistance(null); return; }
+    const userLat = parseFloat(locationData.coords.latitude);
+    const userLng = parseFloat(locationData.coords.longitude);
+    if (isNaN(storeLat) || isNaN(storeLng) || isNaN(userLat) || isNaN(userLng)) return null;
     if (storeLat < -90 || storeLat > 90 || storeLng < -180 || storeLng > 180 ||
-        userLat < -90 || userLat > 90 || userLng < -180 || userLng > 180) { setDistance(null); return; }
+        userLat < -90 || userLat > 90 || userLng < -180 || userLng > 180) return null;
     const R = 6371e3;
     const φ1 = userLat * Math.PI / 180;
     const φ2 = storeLat * Math.PI / 180;
@@ -446,7 +484,13 @@ export default function VisitExecutionScreen({ route, navigation }) {
     const Δλ = (storeLng - userLng) * Math.PI / 180;
     const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    setDistance(Math.round(R * c));
+    return Math.round(R * c);
+  };
+
+  const calculateDistance = (storeData, locationData = location) => {
+    const nextDistance = getDistanceToStore(locationData, storeData);
+    setDistance(nextDistance);
+    return nextDistance;
   };
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -583,8 +627,21 @@ export default function VisitExecutionScreen({ route, navigation }) {
         Alert.alert('Store Location Missing', 'This store does not have GPS coordinates set.', [{ text: 'OK' }]);
         return;
       }
-      if (distance === null || distance === undefined) {
+      const latestLocation = await getCurrentLocation({ showPermissionAlert: true });
+      if (!latestLocation) {
+        Alert.alert('GPS Required', 'Please enable GPS to check in');
+        return;
+      }
+      const latestDistance = calculateDistance(store, latestLocation);
+      if (latestDistance === null || latestDistance === undefined) {
         Alert.alert('Location Check', 'Still calculating your distance from the store. Please wait a moment.');
+        return;
+      }
+      if (latestDistance > MAX_CHECK_IN_DISTANCE_METERS) {
+        Alert.alert(
+          'Too Far From Store',
+          `You must be within ${MAX_CHECK_IN_DISTANCE_METERS} meters of the store to check in. You are currently ${latestDistance} meters away.`
+        );
         return;
       }
       await visitService.checkIn(visitId);
@@ -677,7 +734,14 @@ export default function VisitExecutionScreen({ route, navigation }) {
     setSimpleFacingCounts(buildInitialSimpleFacingCounts());
     setShowStockModal(true);
   };
-  const handleCompetitorPrices = () => { if (!checkInTime) return; setShowPriceModal(true); };
+  const handleCompetitorPrices = () => {
+    if (!checkInTime) return;
+    if (!priceComparisons.length) {
+      Alert.alert('Catalog unavailable', 'No active catalog products are available for price comparison.');
+      return;
+    }
+    setShowPriceModal(true);
+  };
 
   // Break handlers
   const isCurrentTimeInBreakWindow = () => {
@@ -792,7 +856,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const getAssignedDepthForIndex = (index) => Number(slotAssignments[index]?.depth || 0);
 
   const getProductSlotLabel = (productName = '') => {
-    const shortName = productName.replace(/^Warda Bidha\s+/i, '').trim().split(' ')[0] || 'Pasta';
+    const shortName = productName.trim().split(' ')[0] || 'PRD';
     return shortName.slice(0, 3).toUpperCase();
   };
 
@@ -1023,7 +1087,12 @@ export default function VisitExecutionScreen({ route, navigation }) {
   ];
 
   const handleOpenAlertModal = () => {
-    setAlertBrand(''); setAlertType(''); setAlertDescription(''); setAlertPhoto(null); setShowAlertTypeDropdown(false);
+    setAlertBrand('');
+    setShowAlertBrandDropdown(false);
+    setAlertType('');
+    setAlertDescription('');
+    setAlertPhoto(null);
+    setShowAlertTypeDropdown(false);
     setShowAlertModal(true);
   };
 
@@ -1037,7 +1106,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
   };
 
   const handleSubmitAlert = async () => {
-    if (!alertBrand.trim()) { Alert.alert('Requis', 'Entrez la marque concurrente.'); return; }
+    if (!alertBrand.trim()) { Alert.alert('Requis', 'Sélectionnez la marque concurrente.'); return; }
     if (!alertType) { Alert.alert('Requis', "Sélectionnez un type d'alerte."); return; }
     if (!alertDescription.trim()) { Alert.alert('Requis', 'Décrivez la situation.'); return; }
     if (!alertPhoto) { Alert.alert('Requis', 'Ajoutez une photo comme preuve.'); return; }
@@ -1060,61 +1129,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
     }
   };
 
-  // Product handlers
-  const PRODUCT_CATEGORIES = [
-    { value: 'food', label: 'Alimentaire' },
-    { value: 'beauty', label: 'Beauté & Soins' },
-    { value: 'home', label: 'Maison & Jardin' },
-    { value: 'clothing', label: 'Vêtements' },
-    { value: 'electronics', label: 'Électronique' },
-    { value: 'sports', label: 'Sports' },
-    { value: 'other', label: 'Autre' },
-  ];
-
-  const handleAddProduct = () => {
-    setProductName(''); setProductBrand(''); setProductCategory(''); setProductPrice('');
-    setProductSku(''); setProductDescription(''); setProductPhoto(null);
-    setShowProductCategoryDropdown(false); setShowProductModal(true);
-  };
-
-  const handleProductTakePhoto = async () => {
-    try {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) { Alert.alert('Permission requise', "Autorisez l'accès à la caméra."); return; }
-      const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.7 });
-      if (!result.canceled && result.assets?.[0]) setProductPhoto(result.assets[0]);
-    } catch (err) { console.error('Camera error:', err); }
-  };
-
-  const handleSubmitProduct = async () => {
-    if (!productName.trim()) { Alert.alert('Requis', 'Entrez le nom du produit.'); return; }
-    if (!productCategory) { Alert.alert('Requis', 'Sélectionnez une catégorie.'); return; }
-    if (!productPrice.trim()) { Alert.alert('Requis', 'Entrez le prix du produit.'); return; }
-    try {
-      const sku = productSku.trim() || `SKU-${Date.now()}`;
-      const data = {
-        name: productName.trim(),
-        brand: productBrand.trim() || null,
-        category: productCategory,
-        price: parseFloat(productPrice.replace(',', '.')),
-        sku,
-        description: productDescription.trim() || null,
-        store: visit?.store || store?.id || null,
-        is_active: true,
-      };
-      await productService.createProduct(data);
-      setProductCompleted(true);
-      await saveVisitProgress(visitId, { productCompleted: true });
-      setShowProductModal(false);
-      Alert.alert('Succès', 'Produit ajouté avec succès.');
-    } catch (err) {
-      console.error('Product submit error:', err);
-      const detail = err.response?.data;
-      const msg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || "Échec de l'ajout.");
-      Alert.alert('Erreur', msg);
-    }
-  };
-
   // ─── Render helpers ──────────────────────────────────────────────────────────
 
   if (loading) {
@@ -1131,6 +1145,13 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const gpsStatus = getGPSStatus();
   const isCheckedIn = !!checkInTime;
   const isVisitCompleted = visit?.status === 'completed';
+  const canCheckIn =
+    !!location &&
+    !!store?.latitude &&
+    !!store?.longitude &&
+    distance !== null &&
+    distance !== undefined &&
+    distance <= MAX_CHECK_IN_DISTANCE_METERS;
   const canCheckOut = isCheckedIn && !isVisitCompleted;
   const scheduleLabel = visit?.scheduled_date ? formatTime(visit.scheduled_date) : 'Not scheduled';
 
@@ -1225,8 +1246,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
       ? 'CLOTURER LA VISITE'
       : 'DEMARRER LA VISITE';
 
-  // Enable button for check-in unless visit is completed
-  const footerButtonDisabled = isVisitCompleted;
+  const footerButtonDisabled = isCheckedIn ? isVisitCompleted : isVisitCompleted || !canCheckIn;
 
   const footerButtonHandler = isCheckedIn ? handleCheckOut : handleCheckIn;
 
@@ -1440,6 +1460,11 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
         {/* Footer */}
         <View style={styles.footerCtaWrap}>
+          {!isCheckedIn && !isVisitCompleted && !canCheckIn && (
+            <Text style={styles.footerHelperText}>
+              Move within {MAX_CHECK_IN_DISTANCE_METERS} meters of the store to start this visit
+            </Text>
+          )}
           {isCheckedIn && !isVisitCompleted && !areRequiredEventsCompleted() && (
             <Text style={styles.footerHelperText}>
               Complete Before/After Photos, Facing & Price Comparison to check out
@@ -1574,7 +1599,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
                         <View style={[styles.productQtySwatch, { backgroundColor: product.color }]} />
                         <View style={styles.simpleFacingTextWrap}>
                           <Text style={styles.simpleFacingName} numberOfLines={1}>{product.name}</Text>
-                          <Text style={styles.simpleFacingMeta}>Expected: {expected}</Text>
+                          <Text style={styles.simpleFacingMeta}>Expected: {expected} • Target facing: {product.recommendedFacing || expected}</Text>
                         </View>
                         <View style={[styles.productQtyGapBadge, gap < 0 ? styles.productQtyGapNegative : styles.productQtyGapPositive]}>
                           <Text style={styles.productQtyGapText}>{gap >= 0 ? `+${gap}` : `${gap}`}</Text>
@@ -1632,7 +1657,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
           <ScrollView style={styles.modalContent} contentContainerStyle={{ padding: 16 }}>
             <Text style={styles.comparisonLabel}>NOM DU CONCURRENT</Text>
             <View style={styles.ownerChipWrap}>
-              {OWNER_BRANDS.map((brand) => {
+              {competitorBrands.map((brand) => {
                 const isActive = competitorName === brand;
                 return (
                   <TouchableOpacity
@@ -1646,6 +1671,9 @@ export default function VisitExecutionScreen({ route, navigation }) {
                 );
               })}
             </View>
+            {!competitorBrands.length && (
+              <Text style={styles.comparisonEmptyText}>No competitor brands are configured yet. You can still type one manually.</Text>
+            )}
             <TextInput
               style={styles.comparisonInput}
               value={competitorName}
@@ -1655,6 +1683,12 @@ export default function VisitExecutionScreen({ route, navigation }) {
             />
 
             <Text style={styles.comparisonLabel}>COMPARAISON DES PRIX</Text>
+            {!priceComparisons.length && (
+              <View style={styles.comparisonEmptyState}>
+                <MaterialCommunityIcons name="package-variant-closed" size={28} color="#94a3b8" />
+                <Text style={styles.comparisonEmptyText}>No active products are available from the centralized catalog.</Text>
+              </View>
+            )}
             {priceComparisons.map((item) => {
               const parsedCompetitorPrice = Number(item.competitorPrice);
               const hasCompetitorPrice = item.competitorPrice !== '' && Number.isFinite(parsedCompetitorPrice);
@@ -1776,7 +1810,33 @@ export default function VisitExecutionScreen({ route, navigation }) {
             </View>
 
             <Text style={styles.alertSectionLabel}>Marque concurrente *</Text>
-            <TextInput style={styles.alertInput} placeholder="Ex: Coca-Cola, Danone..." placeholderTextColor="#9ca3af" value={alertBrand} onChangeText={setAlertBrand} />
+            <TouchableOpacity
+              style={[styles.alertDropdown, !competitorBrands.length && styles.alertDropdownDisabled]}
+              onPress={() => competitorBrands.length && setShowAlertBrandDropdown(!showAlertBrandDropdown)}
+              disabled={!competitorBrands.length}
+            >
+              <Text style={alertBrand ? styles.alertDropdownText : styles.alertDropdownPlaceholder}>
+                {alertBrand || (competitorBrands.length ? 'Sélectionner la marque...' : 'Aucune marque concurrente disponible')}
+              </Text>
+              <MaterialCommunityIcons name={showAlertBrandDropdown ? 'chevron-up' : 'chevron-down'} size={22} color="#6b7280" />
+            </TouchableOpacity>
+            {showAlertBrandDropdown && (
+              <View style={styles.alertDropdownList}>
+                {competitorBrands.map((brand) => (
+                  <TouchableOpacity
+                    key={brand}
+                    style={[styles.alertDropdownItem, alertBrand === brand && styles.alertDropdownItemActive]}
+                    onPress={() => {
+                      setAlertBrand(brand);
+                      setShowAlertBrandDropdown(false);
+                    }}
+                  >
+                    <Text style={[styles.alertDropdownItemText, alertBrand === brand && styles.alertDropdownItemTextActive]}>{brand}</Text>
+                    {alertBrand === brand && <MaterialCommunityIcons name="check" size={18} color="#2563eb" />}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             <Text style={styles.alertSectionLabel}>Type d'alerte *</Text>
             <TouchableOpacity style={styles.alertDropdown} onPress={() => setShowAlertTypeDropdown(!showAlertTypeDropdown)}>
@@ -1821,82 +1881,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
             <TouchableOpacity style={styles.alertSubmitBtn} onPress={handleSubmitAlert}>
               <MaterialCommunityIcons name="send" size={20} color="#fff" />
               <Text style={styles.alertSubmitBtnText}>Envoyer l'alerte</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      {/* ── Product Modal ────────────────────────────────────────────────────── */}
-      <Modal visible={showProductModal} animationType="slide" transparent={false} onRequestClose={() => setShowProductModal(false)}>
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowProductModal(false)}>
-              <MaterialCommunityIcons name="close" size={24} color="#111" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Ajout Produit</Text>
-            <View style={{ width: 24 }} />
-          </View>
-
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
-            <Text style={styles.alertSectionLabel}>Nom du produit *</Text>
-            <TextInput style={styles.alertInput} placeholder="Ex: Lait Délice 1L..." placeholderTextColor="#9ca3af" value={productName} onChangeText={setProductName} />
-
-            <Text style={styles.alertSectionLabel}>Marque</Text>
-            <TextInput style={styles.alertInput} placeholder="Ex: Délice, Vitalait..." placeholderTextColor="#9ca3af" value={productBrand} onChangeText={setProductBrand} />
-
-            <Text style={styles.alertSectionLabel}>Catégorie *</Text>
-            <TouchableOpacity style={styles.alertDropdown} onPress={() => setShowProductCategoryDropdown(!showProductCategoryDropdown)}>
-              <Text style={productCategory ? styles.alertDropdownText : styles.alertDropdownPlaceholder}>
-                {productCategory ? PRODUCT_CATEGORIES.find((c) => c.value === productCategory)?.label : 'Sélectionner...'}
-              </Text>
-              <MaterialCommunityIcons name={showProductCategoryDropdown ? 'chevron-up' : 'chevron-down'} size={22} color="#6b7280" />
-            </TouchableOpacity>
-            {showProductCategoryDropdown && (
-              <View style={styles.alertDropdownList}>
-                {PRODUCT_CATEGORIES.map((cat) => (
-                  <TouchableOpacity
-                    key={cat.value}
-                    style={[styles.alertDropdownItem, productCategory === cat.value && styles.alertDropdownItemActive]}
-                    onPress={() => { setProductCategory(cat.value); setShowProductCategoryDropdown(false); }}
-                  >
-                    <Text style={[styles.alertDropdownItemText, productCategory === cat.value && styles.alertDropdownItemTextActive]}>{cat.label}</Text>
-                    {productCategory === cat.value && <MaterialCommunityIcons name="check" size={18} color="#2563eb" />}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            <Text style={styles.alertSectionLabel}>Prix (TND) *</Text>
-            <TextInput style={styles.alertInput} placeholder="Ex: 2.450" placeholderTextColor="#9ca3af" value={productPrice} onChangeText={setProductPrice} keyboardType="decimal-pad" />
-
-            <Text style={styles.alertSectionLabel}>Code / SKU</Text>
-            <TextInput style={styles.alertInput} placeholder="Optionnel - code barre..." placeholderTextColor="#9ca3af" value={productSku} onChangeText={setProductSku} />
-
-            <Text style={styles.alertSectionLabel}>Description</Text>
-            <TextInput style={styles.alertTextInput} placeholder="Description du produit..." placeholderTextColor="#9ca3af" value={productDescription} onChangeText={setProductDescription} multiline numberOfLines={3} textAlignVertical="top" />
-
-            <Text style={styles.alertSectionLabel}>Photo du produit</Text>
-            {productPhoto ? (
-              <View style={styles.alertPhotoContainer}>
-                <Image source={{ uri: productPhoto.uri }} style={styles.alertPhotoPreview} />
-                <TouchableOpacity onPress={() => setProductPhoto(null)} style={styles.alertRemovePhoto}>
-                  <MaterialCommunityIcons name="close-circle" size={28} color="#ef4444" />
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.alertPhotoBtn} onPress={handleProductTakePhoto}>
-                <MaterialCommunityIcons name="camera" size={24} color="#2563eb" />
-                <Text style={styles.alertPhotoBtnText}>Prendre photo</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={[styles.alertSubmitBtn, productSubmitting && { opacity: 0.6 }]}
-              onPress={handleSubmitProduct}
-              disabled={productSubmitting}
-            >
-              <MaterialCommunityIcons name="plus-circle" size={20} color="#fff" />
-              <Text style={styles.alertSubmitBtnText}>{productSubmitting ? 'Ajout en cours...' : 'Ajouter le produit'}</Text>
             </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
@@ -2068,6 +2052,8 @@ const styles = StyleSheet.create({
   ownerChipText: { fontSize: 12, fontWeight: '700', color: '#334155' },
   ownerChipTextActive: { color: '#1d4ed8' },
   comparisonInput: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#0f172a', marginBottom: 12 },
+  comparisonEmptyState: { backgroundColor: '#f8fafc', borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', padding: 18, alignItems: 'center', marginBottom: 12 },
+  comparisonEmptyText: { fontSize: 13, color: '#64748b', textAlign: 'center', lineHeight: 18 },
   comparisonCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e5e7eb', padding: 14, marginBottom: 12 },
   comparisonProductName: { fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 10 },
   comparisonPriceRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
@@ -2143,6 +2129,7 @@ const styles = StyleSheet.create({
   alertSectionLabel: { fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 8, marginTop: 16 },
   alertInput: { backgroundColor: '#f9fafb', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', padding: 14, fontSize: 14, color: '#111', marginBottom: 4 },
   alertDropdown: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f9fafb', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', padding: 14, marginBottom: 4 },
+  alertDropdownDisabled: { opacity: 0.6 },
   alertDropdownText: { fontSize: 14, color: '#111', fontWeight: '500' },
   alertDropdownPlaceholder: { fontSize: 14, color: '#9ca3af' },
   alertDropdownList: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', marginBottom: 4, overflow: 'hidden' },
