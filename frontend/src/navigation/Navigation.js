@@ -31,6 +31,10 @@ import SupervisorTeamScreen from '../screens/supervisor/SupervisorTeamScreen';
 import SupervisorMapScreen from '../screens/supervisor/SupervisorMapScreen';
 import SupervisorReportScreen from '../screens/supervisor/SupervisorReportScreen';
 import SupervisorNotificationsScreen from '../screens/supervisor/SupervisorNotificationsScreen';
+import SupervisorAttendanceScreen from '../screens/supervisor/SupervisorAttendanceScreen';
+import SupervisorVisitLogsScreen from '../screens/supervisor/SupervisorVisitLogsScreen';
+import SupervisorVisitLogDetailsScreen from '../screens/supervisor/SupervisorVisitLogDetailsScreen';
+import SupervisorPerformanceScreen from '../screens/supervisor/SupervisorPerformanceScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -49,7 +53,7 @@ function AuthStack() {
 
 const MAIN_TABS = [
   { name: 'Home',      label: 'Home',      icon: 'home-variant',           iconActive: 'home-variant',       color: '#4285f4' },
-  { name: 'Planning',  label: 'Planning',  icon: 'calendar-month-outline', iconActive: 'calendar-check',     color: '#8b5cf6' },
+  { name: 'Planning',  label: 'Schedule',  icon: 'calendar-month-outline', iconActive: 'calendar-check',     color: '#8b5cf6' },
   { name: 'Reports',   label: 'Reports',   icon: 'clipboard-text-outline',   iconActive: 'clipboard-text',     color: '#06b6d4' },
   { name: 'Profile',   label: 'Profile',   icon: 'account-outline',        iconActive: 'account-circle',     color: '#22c55e' },
 ];
@@ -140,6 +144,26 @@ function SupervisorStack() {
       <Stack.Screen
         name="SupervisorReport"
         component={SupervisorReportScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SupervisorAttendance"
+        component={SupervisorAttendanceScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SupervisorVisitLogs"
+        component={SupervisorVisitLogsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SupervisorVisitLogDetails"
+        component={SupervisorVisitLogDetailsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SupervisorPerformance"
+        component={SupervisorPerformanceScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen

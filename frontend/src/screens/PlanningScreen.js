@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -16,6 +18,8 @@ import { Calendar } from 'react-native-calendars';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { visitService, storeService } from '../services/apiService';
+
+const MAX_CHECK_IN_DISTANCE_METERS = 60;
 
 const toDateKey = (date) => {
   const year = date.getFullYear();
@@ -50,18 +54,69 @@ export default function PlanningScreen() {
   const [stores, setStores] = useState({});
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [plannedDateMarkers, setPlannedDateMarkers] = useState({});
+  const [userLocation, setUserLocation] = useState(null);
+  const [storeDistances, setStoreDistances] = useState({});
 
   useEffect(() => {
     generateWeekDays();
     fetchPlanningData();
   }, [selectedDate]);
 
-  // Refresh data when screen comes into focus (e.g., after checkout)
+  // Refresh data and GPS when screen comes into focus
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       fetchPlanningData();
+      fetchUserLocation();
     }, [selectedDate])
   );
+
+  useEffect(() => {
+    if (!userLocation || !Object.keys(stores).length) return;
+    const distMap = {};
+    Object.values(stores).forEach((store) => {
+      if (store.latitude && store.longitude) {
+        distMap[store.id] = haversineDistance(
+          userLocation.latitude, userLocation.longitude,
+          Number(store.latitude), Number(store.longitude)
+        );
+      }
+    });
+    setStoreDistances(distMap);
+  }, [userLocation, stores]);
+
+  const fetchUserLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setUserLocation(loc.coords);
+    } catch (_) {}
+  };
+
+  const haversineDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371000;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+    return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  };
+
+  const handleCardCheckIn = (visit) => {
+    navigation.navigate('VisitExecution', { visitId: visit.id, autoCheckIn: true });
+  };
+
+  const handleResumeVisit = async (visit) => {
+    try {
+      const saved = await AsyncStorage.getItem(`visitProgress_${visit.id}`);
+      const progress = saved ? JSON.parse(saved) : {};
+      const resumeStep = progress.currentStep || 1;
+      navigation.navigate('VisitExecution', { visitId: visit.id, resumeStep });
+    } catch (_) {
+      navigation.navigate('VisitExecution', { visitId: visit.id });
+    }
+  };
 
   const generateWeekDays = () => {
     const days = [];
@@ -263,25 +318,12 @@ export default function PlanningScreen() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.headerIcon} onPress={() => setShowCalendarModal(true)}>
-            <MaterialCommunityIcons name="calendar-blank" size={24} color="#2563eb" />
-          </TouchableOpacity>
           <View style={styles.headerTitleWrap}>
-            <Text style={styles.headerTitle}>Weekly Planning</Text>
-            <Text style={styles.headerSubtitle}>{formatWeekRange(weekDays)}</Text>
+            <Text style={styles.headerTitle}>Schedule</Text>
+            <Text style={styles.headerSubtitle}>{formatSelectedDate(selectedDate)}</Text>
           </View>
-          <TouchableOpacity style={styles.headerIcon}>
-            <MaterialCommunityIcons name="magnify" size={24} color="#666" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.selectedDateBanner}>
-          <View>
-            <Text style={styles.selectedDateLabel}>Selected day</Text>
-            <Text style={styles.selectedDateValue}>{formatSelectedDate(selectedDate)}</Text>
-          </View>
-          <TouchableOpacity style={styles.changeDateButton} onPress={() => setShowCalendarModal(true)}>
-            <Text style={styles.changeDateButtonText}>Open calendar</Text>
+          <TouchableOpacity style={styles.headerCalendarBtn} onPress={() => setShowCalendarModal(true)}>
+            <MaterialCommunityIcons name="calendar-month-outline" size={21} color="#2563eb" />
           </TouchableOpacity>
         </View>
 
@@ -318,30 +360,6 @@ export default function PlanningScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
         >
-          {/* Daily Progress Card */}
-          <View style={styles.progressCard}>
-            <View style={styles.progressHeader}>
-              <View>
-                <Text style={styles.progressTitle}>Selected Day Progress</Text>
-                <Text style={styles.routeId}>Route ID: #MR-4029</Text>
-              </View>
-              <Text style={styles.progressPercent}>{progressPercent}%</Text>
-            </View>
-            
-            <View style={styles.progressBarContainer}>
-              <View style={[styles.progressBar, { width: `${progressPercent}%` }]} />
-            </View>
-            
-            <View style={styles.progressStats}>
-              <Text style={styles.progressStatLeft}>
-                {completedCount} OF {totalCount} STORES
-              </Text>
-              <Text style={styles.progressStatRight}>
-                {remainingCount} REMAINING
-              </Text>
-            </View>
-          </View>
-
           {/* Schedule Section */}
           <View style={styles.scheduleSection}>
             <Text style={styles.sectionTitle}>SCHEDULE</Text>
@@ -384,44 +402,86 @@ export default function PlanningScreen() {
                       </View>
 
                       {/* Visit Card */}
-                      <TouchableOpacity 
-                        style={[
-                          styles.visitCard,
-                          visit.status === 'in_progress' && styles.visitCardActive,
-                          statusInfo.locked && styles.visitCardLocked
-                        ]}
-                        onPress={() => {
-                          if (statusInfo.locked) {
-                            Alert.alert('Visit verrouillée', 'Vous devez terminer la visite précédente avant de commencer celle-ci.');
-                            return;
-                          }
-                          navigation.navigate('VisitExecution', { visitId: visit.id });
-                        }}
-                        activeOpacity={statusInfo.locked ? 1 : 0.7}
-                      >
-                        <View style={styles.visitHeader}>
-                          <Text style={styles.storeName}>
-                            {store?.name || visit.store_name || 'Unknown Store'}
-                          </Text>
-                          <View style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}>
-                            <Text style={styles.statusText}>{statusInfo.label}</Text>
-                          </View>
-                        </View>
-                        
-                        {/* Removed scheduled time display as requested */}
+                      {(() => {
+                          const dist = store ? storeDistances[store.id] : undefined;
+                          const isNearby = dist !== undefined && dist <= MAX_CHECK_IN_DISTANCE_METERS;
+                          const isInProgress = visit.status === 'in_progress';
+                          const isCompleted = visit.status === 'completed';
 
-                        {statusInfo.showButton && (
-                          <TouchableOpacity
-                            style={styles.checkoutButton}
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              handleCheckOut(visit.id);
-                            }}
-                          >
-                            <Text style={styles.checkoutButtonText}>Check-out</Text>
-                          </TouchableOpacity>
-                        )}
-                      </TouchableOpacity>
+                          const handlePress = () => {
+                            if (statusInfo.locked) {
+                              Alert.alert('Visit Locked', 'Complete the previous visit before starting this one.');
+                              return;
+                            }
+                            if (isCompleted) return;
+                            if (isInProgress) { handleResumeVisit(visit); return; }
+                            if (isNearby) { handleCardCheckIn(visit); return; }
+                            Alert.alert(
+                              'Too Far',
+                              dist !== undefined
+                                ? `You are ${dist}m from the store. Move within ${MAX_CHECK_IN_DISTANCE_METERS}m to check in.`
+                                : 'Getting your location...'
+                            );
+                          };
+
+                          return (
+                            <TouchableOpacity
+                              style={[
+                                styles.visitCard,
+                                isInProgress && styles.visitCardActive,
+                                statusInfo.locked && styles.visitCardLocked,
+                              ]}
+                              onPress={handlePress}
+                              activeOpacity={isCompleted || statusInfo.locked ? 1 : 0.7}
+                            >
+                              <View style={styles.visitHeader}>
+                                <View style={{ flex: 1, marginRight: 8 }}>
+                                  <Text style={styles.storeName} numberOfLines={1}>
+                                    {store?.name || visit.store_name || 'Unknown Store'}
+                                  </Text>
+                                  {(store?.address || store?.city) && (
+                                    <Text style={styles.storeAddress} numberOfLines={1}>
+                                      {store?.address || store?.city}
+                                    </Text>
+                                  )}
+                                </View>
+
+                                {isCompleted ? (
+                                  <View style={[styles.statusBadge, { backgroundColor: '#d1fae5' }]}>
+                                    <Text style={[styles.statusText, { color: '#059669' }]}>DONE</Text>
+                                  </View>
+                                ) : statusInfo.locked ? (
+                                  <View style={[styles.statusBadge, { backgroundColor: '#f3f4f6' }]}>
+                                    <MaterialCommunityIcons name="lock-outline" size={13} color="#9ca3af" />
+                                  </View>
+                                ) : isInProgress ? (
+                                  <TouchableOpacity
+                                    style={styles.resumeBtn}
+                                    onPress={(e) => { e.stopPropagation(); handleResumeVisit(visit); }}
+                                  >
+                                    <MaterialCommunityIcons name="play-circle-outline" size={13} color="#fff" />
+                                    <Text style={styles.resumeBtnText}>Resume</Text>
+                                  </TouchableOpacity>
+                                ) : (
+                                  <TouchableOpacity
+                                    style={[styles.checkinBtn, !isNearby && styles.checkinBtnFaded]}
+                                    disabled={!isNearby}
+                                    onPress={(e) => { e.stopPropagation(); if (isNearby) handleCardCheckIn(visit); }}
+                                  >
+                                    <MaterialCommunityIcons
+                                      name={isNearby ? 'login-variant' : 'map-marker-distance'}
+                                      size={13}
+                                      color={isNearby ? '#fff' : '#9ca3af'}
+                                    />
+                                    <Text style={[styles.checkinBtnText, !isNearby && styles.checkinBtnTextFaded]}>
+                                      {isNearby ? 'Check-in' : dist !== undefined ? `${dist}m` : '...'}
+                                    </Text>
+                                  </TouchableOpacity>
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })()}
                     </View>
                   );
                 })}
@@ -475,13 +535,10 @@ export default function PlanningScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  container: {
-    flex: 1,
-  },
+  safe: { flex: 1, backgroundColor: '#f8fafc' },
+  container: { flex: 1 },
+
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -492,62 +549,24 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
-  headerIcon: {
-    padding: 4,
-    minWidth: 32,
-  },
-  headerTitleWrap: {
+  headerTitleWrap: { flex: 1 },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#111827' },
+  headerSubtitle: { fontSize: 15, color: '#6b7280', fontWeight: '600', marginTop: 3 },
+  headerCalendarBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#eff6ff',
     alignItems: 'center',
-    gap: 2,
+    justifyContent: 'center',
+    marginLeft: 12,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  selectedDateBanner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#eef4ff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#dbeafe',
-  },
-  selectedDateLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#2563eb',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 4,
-  },
-  selectedDateValue: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  changeDateButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: '#2563eb',
-  },
-  changeDateButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#fff',
-  },
+
+  // Week strip
   weekSelector: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 10,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
@@ -555,203 +574,124 @@ const styles = StyleSheet.create({
   },
   dayButton: {
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 7,
     paddingHorizontal: 8,
     borderRadius: 12,
-    minWidth: 42,
+    minWidth: 40,
   },
-  dayButtonActive: {
-    backgroundColor: '#eff6ff',
-  },
-  dayLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#6b7280',
-    marginBottom: 4,
-  },
-  dayLabelActive: {
-    color: '#2563eb',
-  },
-  dayNumber: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111',
-  },
-  dayNumberActive: {
-    color: '#2563eb',
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  progressCard: {
+  dayButtonActive: { backgroundColor: '#eff6ff' },
+  dayLabel: { fontSize: 11, fontWeight: '500', color: '#9ca3af', marginBottom: 3 },
+  dayLabelActive: { color: '#2563eb' },
+  dayNumber: { fontSize: 15, fontWeight: '600', color: '#374151' },
+  dayNumberActive: { color: '#2563eb', fontWeight: '800' },
+
+  // Content
+  content: { flex: 1, paddingHorizontal: 16, paddingTop: 14 },
+
+  // Slim Progress Strip
+  progressStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  progressTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111',
-    marginBottom: 4,
-  },
-  routeId: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  progressPercent: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#2563eb',
-  },
-  progressBarContainer: {
-    height: 8,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: '#2563eb',
-    borderRadius: 4,
-  },
-  progressStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  progressStatLeft: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#111',
-  },
-  progressStatRight: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  scheduleSection: {
-    marginBottom: 80,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginBottom: 16,
-    letterSpacing: 0.5,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#9ca3af',
-    marginTop: 12,
-  },
-  timeline: {
-    position: 'relative',
-  },
-  timelineItem: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  timelineTrack: {
-    width: 40,
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  timelineLine: {
-    width: 2,
+  progressStripZero: { borderColor: '#f3f4f6' },
+  progressStripLeft: { width: 58 },
+  progressStripCount: { fontSize: 13, fontWeight: '700', color: '#111827' },
+  progressStripCountZero: { color: '#9ca3af' },
+  progressRouteId: { fontSize: 10, color: '#9ca3af', fontWeight: '500', marginTop: 1 },
+  progressStripBarWrap: {
     flex: 1,
-    position: 'absolute',
-    top: 0,
-    height: 20,
+    height: 5,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginHorizontal: 12,
   },
-  timelineLineBottom: {
-    top: 20,
-    height: '100%',
+  progressStripFill: { height: '100%', backgroundColor: '#2563eb', borderRadius: 3 },
+  progressStripPct: { fontSize: 13, fontWeight: '700', color: '#2563eb', width: 38, textAlign: 'right' },
+  progressStripPctZero: { color: '#d1d5db' },
+
+  // Schedule
+  scheduleSection: { marginBottom: 80 },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9ca3af',
+    marginBottom: 14,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
-  timelineDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginTop: 8,
-    zIndex: 1,
-  },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyText: { fontSize: 14, color: '#9ca3af', marginTop: 12 },
+
+  // Timeline
+  timeline: { position: 'relative' },
+  timelineItem: { flexDirection: 'row', marginBottom: 14 },
+  timelineTrack: { width: 36, alignItems: 'center', marginRight: 12 },
+  timelineLine: { width: 2, flex: 1, position: 'absolute', top: 0, height: 20 },
+  timelineLineBottom: { top: 20, height: '100%' },
+  timelineDot: { width: 12, height: 12, borderRadius: 6, marginTop: 8, zIndex: 1 },
+
+  // Visit card
   visitCard: {
     flex: 1,
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
   visitCardActive: {
     borderColor: '#2563eb',
-    borderWidth: 2,
+    borderWidth: 1.5,
     shadowColor: '#2563eb',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
     elevation: 3,
   },
-  visitCardLocked: {
-    opacity: 0.5,
-    backgroundColor: '#f3f4f6',
-  },
-  visitHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  storeName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111',
-    flex: 1,
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
+  visitCardLocked: { opacity: 0.45, backgroundColor: '#f9fafb' },
+  visitHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  storeName: { fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 2 },
+  storeAddress: { fontSize: 11, color: '#9ca3af' },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   statusText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 9,
+    fontWeight: '800',
     color: '#fff',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
-  visitTime: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 12,
-  },
-  checkoutButton: {
-    backgroundColor: '#2563eb',
-    borderRadius: 8,
-    paddingVertical: 12,
+  checkinBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    gap: 4,
+    backgroundColor: '#2563eb',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  checkoutButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#fff',
+  checkinBtnFaded: { backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
+  checkinBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  checkinBtnTextFaded: { color: '#9ca3af' },
+  resumeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#7c3aed',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
+  resumeBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+
+  // Calendar modal
   calendarModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
@@ -782,11 +722,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
     marginBottom: 4,
   },
-  calendarModalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-  },
+  calendarModalTitle: { fontSize: 20, fontWeight: '700', color: '#111827' },
   calendarCloseButton: {
     width: 36,
     height: 36,
@@ -795,10 +731,5 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: '#f8fafc',
   },
-  calendarHintText: {
-    marginTop: 12,
-    fontSize: 13,
-    color: '#64748b',
-    textAlign: 'center',
-  },
+  calendarHintText: { marginTop: 12, fontSize: 13, color: '#64748b', textAlign: 'center' },
 });

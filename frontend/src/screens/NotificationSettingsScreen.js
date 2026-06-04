@@ -77,45 +77,45 @@ export default function NotificationSettingsScreen({ navigation }) {
         </View>
 
         {/* Notification Types */}
-        <Text style={styles.sectionTitle}>TYPES DE NOTIFICATION</Text>
+        <Text style={styles.sectionTitle}>NOTIFICATION TYPES</Text>
         <View style={styles.card}>
           <ToggleRow
             icon="calendar-edit"
-            title="Changements de planning"
-            subtitle="Modifications du planning de travail"
+            title="Schedule changes"
+            subtitle="Updates to your work schedule"
             prefKey="scheduleChanges"
             iconColor="#8b5cf6"
           />
           <ToggleRow
             icon="calendar-check"
-            title="Mises à jour congés"
-            subtitle="Statut de vos demandes de congé"
+            title="Leave updates"
+            subtitle="Status of your leave requests"
             prefKey="leaveUpdates"
             iconColor="#10b981"
           />
           <ToggleRow
             icon="message-text-outline"
-            title="Messages admin"
-            subtitle="Messages de l'administration"
+            title="Admin messages"
+            subtitle="Messages from administration"
             prefKey="adminMessages"
             iconColor="#f59e0b"
           />
         </View>
 
         {/* General */}
-        <Text style={styles.sectionTitle}>GÉNÉRAL</Text>
+        <Text style={styles.sectionTitle}>GENERAL</Text>
         <View style={styles.card}>
           <ToggleRow
             icon="volume-high"
-            title="Son"
-            subtitle="Activer le son des notifications"
+            title="Sound"
+            subtitle="Enable notification sounds"
             prefKey="soundEnabled"
             iconColor="#6b7280"
           />
           <ToggleRow
             icon="cellphone-vibrate"
             title="Vibration"
-            subtitle="Activer la vibration"
+            subtitle="Enable vibration"
             prefKey="vibrationEnabled"
             iconColor="#6b7280"
           />

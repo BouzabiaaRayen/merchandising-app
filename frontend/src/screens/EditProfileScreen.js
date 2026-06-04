@@ -16,7 +16,7 @@ export default function EditProfileScreen({ navigation }) {
 
   const handleSave = async () => {
     if (!firstName.trim() || !lastName.trim()) {
-      Alert.alert('Requis', 'Le prénom et le nom sont obligatoires.');
+      Alert.alert('Required', 'First name and last name are required.');
       return;
     }
     try {
@@ -27,14 +27,14 @@ export default function EditProfileScreen({ navigation }) {
         phone: phone.trim() || null,
       });
       if (refreshUser) await refreshUser();
-      Alert.alert('Succès', 'Profil mis à jour avec succès.', [
+      Alert.alert('Success', 'Profile updated successfully.', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (err) {
       console.error('Update profile error:', err);
       const detail = err.response?.data;
-      const msg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || 'Échec de la mise à jour.');
-      Alert.alert('Erreur', msg);
+      const msg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || 'Update failed.');
+      Alert.alert('Error', msg);
     } finally {
       setSaving(false);
     }
@@ -49,14 +49,14 @@ export default function EditProfileScreen({ navigation }) {
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
               <MaterialCommunityIcons name="arrow-left" size={24} color="#1e293b" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Modifier le profil</Text>
+            <Text style={styles.headerTitle}>Edit Profile</Text>
             <View style={{ width: 40 }} />
           </View>
 
           {/* Read-only info */}
           <View style={styles.readOnlyCard}>
             <View style={styles.readOnlyRow}>
-              <Text style={styles.readOnlyLabel}>Prénom d'utilisateur</Text>
+              <Text style={styles.readOnlyLabel}>Username</Text>
               <Text style={styles.readOnlyValue}>{user?.username || '-'}</Text>
             </View>
             <View style={styles.readOnlyRow}>
@@ -64,43 +64,43 @@ export default function EditProfileScreen({ navigation }) {
               <Text style={styles.readOnlyValue}>{user?.email || '-'}</Text>
             </View>
             <View style={styles.readOnlyRow}>
-              <Text style={styles.readOnlyLabel}>Rôle</Text>
+              <Text style={styles.readOnlyLabel}>Role</Text>
               <Text style={styles.readOnlyValue}>{user?.role || '-'}</Text>
             </View>
           </View>
 
           {/* Editable fields */}
-          <Text style={styles.sectionTitle}>INFORMATIONS PERSONNELLES</Text>
+          <Text style={styles.sectionTitle}>PERSONAL INFORMATION</Text>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Prénom</Text>
+            <Text style={styles.inputLabel}>First Name</Text>
             <TextInput
               style={styles.input}
               value={firstName}
               onChangeText={setFirstName}
-              placeholder="Entrez votre prénom"
+              placeholder="Enter your first name"
               placeholderTextColor="#9ca3af"
             />
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Nom</Text>
+            <Text style={styles.inputLabel}>Last Name</Text>
             <TextInput
               style={styles.input}
               value={lastName}
               onChangeText={setLastName}
-              placeholder="Entrez votre nom"
+              placeholder="Enter your last name"
               placeholderTextColor="#9ca3af"
             />
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Téléphone</Text>
+            <Text style={styles.inputLabel}>Phone</Text>
             <TextInput
               style={styles.input}
               value={phone}
               onChangeText={setPhone}
-              placeholder="Entrez votre numéro"
+              placeholder="Enter your phone number"
               placeholderTextColor="#9ca3af"
               keyboardType="phone-pad"
             />
@@ -114,7 +114,7 @@ export default function EditProfileScreen({ navigation }) {
             {saving ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.saveBtnText}>Enregistrer</Text>
+              <Text style={styles.saveBtnText}>Save</Text>
             )}
           </TouchableOpacity>
         </ScrollView>

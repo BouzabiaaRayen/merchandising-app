@@ -93,6 +93,9 @@ export const userService = {
   getUsers: (params = {}) =>
     api.get('/users/', { params }).then(r => r.data),
 
+  getTeamSummary: (params = {}) =>
+    api.get('/users/team_summary/', { params }).then(r => r.data),
+
   getUser: (id) =>
     api.get(`/users/${id}/`).then(r => r.data),
 
@@ -186,9 +189,20 @@ export const productService = {
 // ---------------------------------------------------------------------------
 // Visits
 // ---------------------------------------------------------------------------
+export const supervisorService = {
+  getTeamMemberRoute: (memberId) =>
+    api.get(`/supervisor/team/${memberId}/route/`).then(r => {
+      const raw = r.data;
+      return Array.isArray(raw) ? raw : (raw.results ?? raw);
+    }),
+};
+
 export const visitService = {
   getVisits: (params = {}) =>
     api.get('/merchandising/visits/', { params }).then(r => normalizeVisitResponse(r.data)),
+
+  getCurrentPlanningPeriod: () =>
+    api.get('/merchandising/planning-periods/current/').then(r => r.data),
 
   getVisit: (id) =>
     api.get(`/merchandising/visits/${id}/`).then(r => normalizeVisitResponse(r.data)),
@@ -387,6 +401,36 @@ export const documentService = {
 // ---------------------------------------------------------------------------
 // Leaves
 // ---------------------------------------------------------------------------
+const normalizeLeaveTypeChoices = (choices = []) => {
+  if (!Array.isArray(choices)) {
+    return [];
+  }
+
+  return choices
+    .map((choice) => {
+      if (typeof choice === 'string') {
+        return { value: choice, label: choice };
+      }
+
+      if (!choice || typeof choice !== 'object') {
+        return null;
+      }
+
+      const value = choice.value ?? choice.key ?? choice.id ?? choice.label ?? choice.name;
+      const label = choice.display_name ?? choice.label ?? choice.name ?? value;
+
+      if (!value) {
+        return null;
+      }
+
+      return {
+        value: String(value),
+        label: String(label),
+      };
+    })
+    .filter(Boolean);
+};
+
 export const leaveService = {
   getLeaves: async (params = {}) => {
     try {
@@ -415,6 +459,36 @@ export const leaveService = {
       }
       throw error;
     }
+  },
+
+  getLeaveTypes: async () => {
+    const endpoints = [
+      '/merchandising/leaves/',
+      '/merchandising/leave-requests/',
+    ];
+
+    for (const endpoint of endpoints) {
+      try {
+        const data = await api.options(endpoint).then(r => r.data);
+        const choices =
+          data?.actions?.POST?.leave_type?.choices ||
+          data?.actions?.PUT?.leave_type?.choices ||
+          data?.leave_type?.choices ||
+          data?.fields?.leave_type?.choices ||
+          [];
+
+        const normalized = normalizeLeaveTypeChoices(choices);
+        if (normalized.length > 0) {
+          return normalized;
+        }
+      } catch (error) {
+        if (error?.response?.status !== 404 && error?.response?.status !== 405) {
+          throw error;
+        }
+      }
+    }
+
+    return [];
   },
 
   getLeave: (id) =>

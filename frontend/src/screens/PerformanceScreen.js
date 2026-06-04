@@ -203,12 +203,12 @@ export default function PerformanceScreen({ navigation }) {
         {loading ? (
           <View style={styles.loadingWrap}>
             <ActivityIndicator size="large" color="#2563eb" />
-            <Text style={styles.loadingText}>Chargement...</Text>
+            <Text style={styles.loadingText}>Loading...</Text>
           </View>
         ) : !stats ? (
           <View style={styles.loadingWrap}>
             <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#ef4444" />
-            <Text style={styles.loadingText}>Erreur de chargement</Text>
+            <Text style={styles.loadingText}>Loading error</Text>
           </View>
         ) : (
           <>
@@ -219,12 +219,12 @@ export default function PerformanceScreen({ navigation }) {
                 color={stats.completionRate >= 80 ? '#16a34a' : stats.completionRate >= 50 ? '#f59e0b' : '#ef4444'}
               />
               <View style={styles.scoreInfo}>
-                <Text style={styles.scoreTitle}>Taux de complétion</Text>
-                <Text style={styles.scoreDetail}>{stats.totalVisits} complétées / {stats.totalVisits + stats.pending} total</Text>
+                <Text style={styles.scoreTitle}>Completion Rate</Text>
+                <Text style={styles.scoreDetail}>{stats.totalVisits} completed / {stats.totalVisits + stats.pending} total</Text>
                 {stats.streak > 0 && (
                   <View style={styles.streakBadge}>
                     <MaterialCommunityIcons name="fire" size={16} color="#f59e0b" />
-                    <Text style={styles.streakText}>{stats.streak} jours consécutifs</Text>
+                    <Text style={styles.streakText}>{stats.streak} consecutive days</Text>
                   </View>
                 )}
               </View>
@@ -235,19 +235,19 @@ export default function PerformanceScreen({ navigation }) {
               <View style={styles.todayLeft}>
                 <MaterialCommunityIcons name="calendar-today" size={22} color="#2563eb" />
                 <View>
-                  <Text style={styles.todayLabel}>Aujourd'hui</Text>
-                  <Text style={styles.todayValue}>{stats.todayVisits} visite{stats.todayVisits !== 1 ? 's' : ''} complétée{stats.todayVisits !== 1 ? 's' : ''}</Text>
+                  <Text style={styles.todayLabel}>Today</Text>
+                  <Text style={styles.todayValue}>{stats.todayVisits} completed visit{stats.todayVisits !== 1 ? 's' : ''}</Text>
                 </View>
               </View>
               <View style={styles.todayRight}>
                 <Text style={styles.pendingLabel}>{stats.pending}</Text>
-                <Text style={styles.pendingText}>en attente</Text>
+                <Text style={styles.pendingText}>pending</Text>
               </View>
             </View>
 
             {/* Weekly chart */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>CETTE SEMAINE</Text>
+              <Text style={styles.sectionTitle}>THIS WEEK</Text>
               <View style={styles.chartCard}>
                 <View style={styles.chartRow}>
                   {stats.weeklyData.map((d, i) => (
@@ -269,7 +269,7 @@ export default function PerformanceScreen({ navigation }) {
                 </View>
                 <View style={styles.chartSummary}>
                   <Text style={styles.chartSummaryText}>
-                    <Text style={{ fontWeight: '800', color: '#2563eb' }}>{stats.thisWeek}</Text> visites cette semaine
+                    <Text style={{ fontWeight: '800', color: '#2563eb' }}>{stats.thisWeek}</Text> visits this week
                   </Text>
                 </View>
               </View>
@@ -278,7 +278,7 @@ export default function PerformanceScreen({ navigation }) {
             {/* Monthly KPIs */}
             <View style={styles.section}>
               <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>CE MOIS</Text>
+                <Text style={styles.sectionTitle}>THIS MONTH</Text>
                 {stats.monthChange !== null && (
                   <View style={[styles.changeBadge, { backgroundColor: stats.monthChange >= 0 ? '#dcfce7' : '#fee2e2' }]}>
                     <MaterialCommunityIcons
@@ -293,32 +293,32 @@ export default function PerformanceScreen({ navigation }) {
                 )}
               </View>
               <View style={styles.kpiGrid}>
-                <KPI icon="check-decagram" label="Complétées" value={stats.thisMonth} color="#2563eb" large />
-                <KPI icon="clock-fast" label="Heures" value={`${stats.monthHours}h`} color="#8b5cf6" large />
+                <KPI icon="check-decagram" label="Completed" value={stats.thisMonth} color="#2563eb" large />
+                <KPI icon="clock-fast" label="Hours" value={`${stats.monthHours}h`} color="#8b5cf6" large />
               </View>
             </View>
 
             {/* Time stats */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>TEMPS PAR VISITE</Text>
+              <Text style={styles.sectionTitle}>TIME PER VISIT</Text>
               <View style={styles.timeCard}>
                 <View style={styles.timeRow}>
                   <View style={styles.timeItem}>
                     <MaterialCommunityIcons name="speedometer-medium" size={22} color="#10b981" />
                     <Text style={styles.timeValue}>{stats.avgMinutes} min</Text>
-                    <Text style={styles.timeLabel}>Moyenne</Text>
+                    <Text style={styles.timeLabel}>Average</Text>
                   </View>
                   <View style={[styles.timeDivider]} />
                   <View style={styles.timeItem}>
                     <MaterialCommunityIcons name="speedometer-slow" size={22} color="#f59e0b" />
                     <Text style={styles.timeValue}>{stats.longestVisitMin} min</Text>
-                    <Text style={styles.timeLabel}>Plus longue</Text>
+                    <Text style={styles.timeLabel}>Longest</Text>
                   </View>
                   <View style={[styles.timeDivider]} />
                   <View style={styles.timeItem}>
                     <MaterialCommunityIcons name="speedometer" size={22} color="#2563eb" />
                     <Text style={styles.timeValue}>{stats.shortestVisitMin} min</Text>
-                    <Text style={styles.timeLabel}>Plus courte</Text>
+                    <Text style={styles.timeLabel}>Shortest</Text>
                   </View>
                 </View>
               </View>
@@ -326,22 +326,22 @@ export default function PerformanceScreen({ navigation }) {
 
             {/* Coverage */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>COUVERTURE</Text>
+              <Text style={styles.sectionTitle}>COVERAGE</Text>
               <View style={styles.coverageCard}>
                 <View style={styles.coverageRow}>
                   <View style={[styles.coverageIcon, { backgroundColor: '#dbeafe' }]}>
                     <MaterialCommunityIcons name="store-check" size={24} color="#2563eb" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.coverageValue}>{stats.uniqueStores} magasins visités</Text>
-                    <Text style={styles.coverageSub}>{stats.totalVisits} visites au total</Text>
+                    <Text style={styles.coverageValue}>{stats.uniqueStores} stores visited</Text>
+                    <Text style={styles.coverageSub}>{stats.totalVisits} visits in total</Text>
                   </View>
                 </View>
                 {stats.topStoreName && (
                   <View style={styles.topStore}>
                     <MaterialCommunityIcons name="trophy" size={16} color="#f59e0b" />
                     <Text style={styles.topStoreText}>
-                      Plus visité : <Text style={{ fontWeight: '700' }}>{stats.topStoreName}</Text> ({stats.topStoreCount}x)
+                      Most visited: <Text style={{ fontWeight: '700' }}>{stats.topStoreName}</Text> ({stats.topStoreCount}x)
                     </Text>
                   </View>
                 )}

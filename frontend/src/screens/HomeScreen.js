@@ -11,7 +11,8 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
-  Image
+  Image,
+  Animated
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -60,6 +61,7 @@ export default function HomeScreen() {
   const locationCheckIntervalRef = useRef(null);
   const lastGpsSendRef = useRef(0); // timestamp of last server send
   const reportedGpsActiveRef = useRef(false);
+  const pulseAnim = useRef(new Animated.Value(0.3)).current;
 
   // Break state
   const [breakWindowStart, setBreakWindowStart] = useState(null); // e.g. "12:00"
@@ -305,7 +307,7 @@ export default function HomeScreen() {
     }, msUntilMidnight);
     return () => clearTimeout(timer);
   }, []);
-  
+
   const stopTrackingResources = ({ keepMonitor = false } = {}) => {
     if (locationSubscriptionRef.current) {
       locationSubscriptionRef.current.remove();
@@ -485,6 +487,20 @@ export default function HomeScreen() {
     };
   }, [user?.id]);
 
+  // Breathing pulse animation for GPS status dot
+  useEffect(() => {
+    if (gpsActive) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 0.3, duration: 900, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(0.3);
+    }
+  }, [gpsActive]);
+
   useEffect(() => {
     let interval;
     if (dayStarted && dayStartTime) {
@@ -593,7 +609,7 @@ export default function HomeScreen() {
     await AsyncStorage.setItem(userKey('breakEndTime'), now.toString());
     const elapsed = now - breakStartTime;
     const mins = Math.round(elapsed / 60000);
-    Alert.alert('Pause terminée', `Durée de pause: ${mins} min`);
+    Alert.alert('Break ended', `Break duration: ${mins} min`);
   };
 
   const fetchHomeData = async () => {
@@ -611,8 +627,9 @@ export default function HomeScreen() {
         role: user?.role
       }, null, 2));
       
-      // Fetch ALL visits without filtering to see what we get
+      // Fetch visits — pass merchandiser param so backend filters it if supported
       const visitsParams = { limit: 1000 };
+      if (user?.id) visitsParams.merchandiser = user.id;
       console.log('Fetching visits with params:', visitsParams);
       
       const visitsResponse = await visitService.getVisits(visitsParams);
@@ -626,19 +643,27 @@ export default function HomeScreen() {
         console.log('No visits returned from API!');
       }
       
-      // Filter visits for current user if not filtered by API
-      // Check various field names that might reference the user
-      const userVisits = user?.id 
+      // Type-safe ID extractor — handles number, string, or nested object {id, pk}
+      const toIdStr = (val) => {
+        if (val == null) return '';
+        if (typeof val === 'object') return String(val.id ?? val.pk ?? '');
+        return String(val);
+      };
+      const uid = user?.id != null ? String(user.id) : null;
+
+      // Filter client-side as a safety net in case backend ignores the param
+      const userVisits = uid
         ? allVisits.filter(v => {
-            const match = v.merchandiser === user.id || 
-                         v.user === user.id || 
-                         v.merchandiser_id === user.id ||
-                         v.user_id === user.id;
-            if (!match && allVisits.length > 0) {
-              console.log('Visit does not match user:', {
+            const match =
+              toIdStr(v.merchandiser)    === uid ||
+              toIdStr(v.user)            === uid ||
+              toIdStr(v.merchandiser_id) === uid ||
+              toIdStr(v.user_id)         === uid;
+            if (!match) {
+              console.log('Visit skipped — user mismatch:', {
                 visit_merchandiser: v.merchandiser,
                 visit_user: v.user,
-                current_user_id: user.id
+                uid,
               });
             }
             return match;
@@ -859,7 +884,7 @@ export default function HomeScreen() {
         const parsed = new Date(value);
         return Number.isNaN(parsed.getTime())
           ? ''
-          : parsed.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+          : parsed.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
       };
 
       const normalizeImageSource = (entry) => {
@@ -877,8 +902,8 @@ export default function HomeScreen() {
       const allProducts = (productsRes.data?.results || productsRes.data || []).filter(p => p.created_at?.startsWith(today) && p.created_by === user?.id);
 
       const alertTypeLabels = {
-        promotion: 'Promotion', price_change: 'Changement de prix',
-        new_product: 'Nouveau produit', competitor_activity: 'Activité concurrent',
+        promotion: 'Promotion', price_change: 'Price Change',
+        new_product: 'New Product', competitor_activity: 'Competitor Activity',
       };
 
       // ── Build per-store data ──
@@ -886,7 +911,7 @@ export default function HomeScreen() {
       for (const visit of completedVisits) {
         let fullVisit = visit;
         try { fullVisit = await visitService.getVisit(visit.id); } catch (e) {}
-        let store = { name: 'Magasin inconnu', address: '' };
+        let store = { name: 'Unknown Store', address: '' };
         try { if (visit.store) store = await storeService.getStore(visit.store); } catch (e) {}
 
         const checkIn = fullVisit.check_in_time ? new Date(fullVisit.check_in_time) : null;
@@ -919,6 +944,9 @@ export default function HomeScreen() {
           products: allProducts.filter(p => String(p.store) === String(visit.store)),
           photos: fullVisit.photos || [],
           facingData: fullVisit.facing_data || {},
+          aiAnalysis: fullVisit.facing_data && !Array.isArray(fullVisit.facing_data)
+            ? fullVisit.facing_data.aiAnalysis || null
+            : null,
           priceComps: fullVisit.price_comparisons || [],
           ruptures: fullVisit.stock_ruptures || [],
         });
@@ -930,9 +958,9 @@ export default function HomeScreen() {
         const elapsed = Date.now() - startTime;
         hoursWorked = `${Math.floor(elapsed / 3600000)}h ${Math.floor((elapsed % 3600000) / 60000)}m`;
       }
-      const dateStr = new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-      const dayStartStr = startTime ? new Date(startTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-      const dayEndStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      const dayStartStr = startTime ? new Date(startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+      const dayEndStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
       // ── Build events table rows per store ──
       const buildEventsTable = (s) => {
@@ -948,18 +976,18 @@ export default function HomeScreen() {
         };
 
         if (s.checkIn) {
-          addRow('Arrivée en magasin', 'Début de visite', formatPdfTime(s.checkIn));
+          addRow('Store Arrival', 'Visit started', formatPdfTime(s.checkIn));
         }
 
         if (s.breakStatus === 'taken' && s.breakStart && s.breakEnd) {
           const bs = formatPdfTime(s.breakStart);
           const be = formatPdfTime(s.breakEnd);
           addRow(
-            'Pause',
-            `Pause prise de ${bs || '--:--'} à ${be || '--:--'} (${s.breakTook || '?'} min / ${s.breakDuration || '?'} min)`
+            'Break',
+            `Break taken from ${bs || '--:--'} to ${be || '--:--'} (${s.breakTook || '?'} min / ${s.breakDuration || '?'} min)`
           );
         } else if (s.breakStatus === 'missed') {
-          addRow('Pause', 'Pause prévue mais non prise', '');
+          addRow('Break', 'Scheduled break not taken', '');
         }
 
         // Photos
@@ -968,41 +996,69 @@ export default function HomeScreen() {
           const label = typeof p === 'object' && (p.fileName || p.name)
             ? `${p.fileName || p.name}`
             : `Photo ${i + 1}`;
-          addRow('Photo de visite', `${label} ajoutée pendant la visite`, '', src);
+          addRow('Visit Photo', `${label} added during the visit`, '', src);
         });
 
         // Facing
         if (s.facingData?.productSummary?.length > 0) {
           const summary = s.facingData.productSummary.map(ps =>
-            `${ps.productName}: attendu ${ps.expected}, observé ${ps.observed} (${ps.gap >= 0 ? '+' : ''}${ps.gap})`
+            `${ps.productName}: expected ${ps.expected}, observed ${ps.observed} (${ps.gap >= 0 ? '+' : ''}${ps.gap})`
           ).join(' | ');
           addRow(
-            'Facing / Linéaire',
-            `Grille ${s.facingData.rows}×${s.facingData.columns} — ${s.facingData.totalObservedUnits || 0} unités${summary ? ` — ${summary}` : ''}`,
+            'Facing / Shelf',
+            `Grid ${s.facingData.rows}x${s.facingData.columns} - ${s.facingData.totalObservedUnits || 0} units${summary ? ` - ${summary}` : ''}`,
             '',
             normalizeImageSource(s.facingData.proofPhotoUri)
           );
+        }
+
+        if (s.aiAnalysis?.summary || s.aiAnalysis?.products?.length || s.aiAnalysis?.detections?.length) {
+          const aiSummary = s.aiAnalysis.summary || {};
+          const detectedProducts = (s.aiAnalysis.products || []).filter((product) => Number(product?.detectedCount) > 0);
+          const detections = s.aiAnalysis.detections || [];
+          addRow(
+            'AI Shelf Analysis',
+            `${detectedProducts.length} detected products, ${detections.length} detections${aiSummary.outOfStockCount ? `, ${aiSummary.outOfStockCount} stockouts` : ''}`,
+            formatPdfTime(s.aiAnalysis.analyzedAt),
+            normalizeImageSource(s.aiAnalysis.imageUri)
+          );
+
+          detectedProducts.forEach((product) => {
+            addRow(
+              'AI Product',
+              `${product.productName || 'Unnamed product'} - detected: ${product.detectedCount ?? 0}`,
+              formatPdfTime(s.aiAnalysis.analyzedAt)
+            );
+          });
+
+          detections.forEach((detection) => {
+            addRow(
+              'AI Detection',
+              `${detection.label || detection.productName || 'Detection'}`,
+              formatPdfTime(s.aiAnalysis.analyzedAt)
+            );
+          });
         }
 
         // Price comparisons
         s.priceComps.forEach(pc => {
           const diff = pc.ourPrice && pc.competitorPrice ? (pc.competitorPrice - pc.ourPrice).toFixed(2) : '—';
           addRow(
-            'Prix concurrent',
-            `${pc.productName} — Notre prix: ${pc.ourPrice} TND, ${pc.competitor || 'Concurrent'}: ${pc.competitorPrice} TND (diff: ${diff})`
+            'Competitor Price',
+            `${pc.productName} - Our price: ${pc.ourPrice} TND, ${pc.competitor || 'Competitor'}: ${pc.competitorPrice} TND (diff: ${diff})`
           );
         });
 
         // Ruptures
         s.ruptures.forEach(r => {
-          addRow('Rupture de stock', r.productName || r.productId || 'Produit non renseigné');
+          addRow('Out of Stock', r.productName || r.productId || 'Unnamed product');
         });
 
         // Alerts
         s.alerts.forEach(a => {
           const time = formatPdfTime(a.created_at);
           addRow(
-            `Alerte — ${alertTypeLabels[a.alert_type] || a.alert_type}`,
+            `Alert - ${alertTypeLabels[a.alert_type] || a.alert_type}`,
             `${a.competitor_brand || ''}${a.description ? ' : ' + a.description : ''}`,
             time,
             normalizeImageSource(a.photo)
@@ -1014,7 +1070,7 @@ export default function HomeScreen() {
           const time = formatPdfTime(p.created_at);
           const details = [p.name, p.brand, p.category, p.price ? `${p.price} TND` : ''].filter(Boolean).join(' — ');
           addRow(
-            'Produit ajouté',
+            'Product Added',
             details + (p.description ? ` (${p.description})` : ''),
             time,
             normalizeImageSource(p.image)
@@ -1027,7 +1083,7 @@ export default function HomeScreen() {
         }
 
         if (s.checkOut) {
-          addRow('Sortie du magasin', 'Fin de visite', formatPdfTime(s.checkOut));
+          addRow('Store Departure', 'Visit completed', formatPdfTime(s.checkOut));
         }
 
         return rows;
@@ -1035,51 +1091,116 @@ export default function HomeScreen() {
 
       // ── Store sections HTML ──
       const storesHTML = storeBlocks.map((s, idx) => {
-        let breakLine = '';
+        let breakLine = '<span class="store-meta-pill">No break scheduled</span>';
         if (s.breakStatus === 'taken') {
           const bs = formatPdfTime(s.breakStart);
           const be = formatPdfTime(s.breakEnd);
-          breakLine = `<tr><td class="lbl">Pause</td><td colspan="3">&#9989; ${escapeHtml(bs || '--:--')} &rarr; ${escapeHtml(be || '--:--')} (${escapeHtml(s.breakTook || '?')}min / ${escapeHtml(s.breakDuration || '?')}min)</td></tr>`;
+          breakLine = `<span class="store-meta-pill success">Break taken ${escapeHtml(bs || '--:--')} -> ${escapeHtml(be || '--:--')} (${escapeHtml(s.breakTook || '?')} min)</span>`;
         } else if (s.breakStatus === 'missed') {
-          breakLine = `<tr><td class="lbl">Pause</td><td colspan="3" style="color:#dc2626;">&#9888;&#65039; Manquée</td></tr>`;
+          breakLine = '<span class="store-meta-pill danger">Missed break</span>';
         }
 
         const events = buildEventsTable(s);
         const photoCount = events.filter((e) => e.image).length;
+        const checkInLabel = formatPdfTime(s.checkIn) || '--:--';
+        const checkOutLabel = formatPdfTime(s.checkOut) || '--:--';
+        const alertCount = s.alerts.length;
+        const productCount = s.products.length;
 
         const eventsRows = events.length > 0
           ? events.map((e, i) => `
-              <tr style="background:${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-                <td style="padding:6px 8px;border:1px solid #e2e8f0;font-weight:600;color:#334155;white-space:nowrap;vertical-align:top;">${escapeHtml(e.time || '—')}</td>
-                <td style="padding:6px 8px;border:1px solid #e2e8f0;font-weight:600;color:#334155;white-space:nowrap;vertical-align:top;">${escapeHtml(e.type)}</td>
-                <td style="padding:6px 8px;border:1px solid #e2e8f0;vertical-align:top;">${escapeHtml(e.description)}</td>
-                <td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;vertical-align:top;">${e.image ? `<img src=\"${e.image}\" style=\"max-width:65px;max-height:45px;border-radius:3px;\"/>` : '—'}</td>
+              <tr style="background:${i % 2 === 0 ? '#ffffff' : '#f8fbff'};">
+                <td style="padding:9px 10px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#334155;white-space:nowrap;vertical-align:top;">${escapeHtml(e.time || '—')}</td>
+                <td style="padding:9px 10px;border-bottom:1px solid #e2e8f0;vertical-align:top;">
+                  <span style="display:inline-block;padding:4px 8px;border-radius:999px;background:#e0ecff;color:#1d4ed8;font-size:10px;font-weight:700;">${escapeHtml(e.type)}</span>
+                </td>
+                <td style="padding:9px 10px;border-bottom:1px solid #e2e8f0;color:#475569;vertical-align:top;line-height:1.55;">${escapeHtml(e.description)}</td>
+                <td style="padding:9px 10px;border-bottom:1px solid #e2e8f0;text-align:center;vertical-align:top;">
+                  ${e.image ? `<div style="display:inline-block;padding:3px;border:1px solid #dbeafe;border-radius:10px;background:#eff6ff;"><img src=\"${e.image}\" style=\"display:block;max-width:72px;max-height:52px;border-radius:7px;\"/></div>` : '<span style="color:#94a3b8;font-weight:600;">None</span>'}
+                </td>
               </tr>`).join('')
-          : `<tr><td colspan="4" style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;border:1px solid #e2e8f0;">Aucun événement enregistré pour cette visite.</td></tr>`;
+          : `<tr><td colspan="4" style="padding:16px;text-align:center;color:#94a3b8;font-style:italic;border-bottom:1px solid #e2e8f0;">No events recorded for this visit.</td></tr>`;
 
         return `
-          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;page-break-inside:avoid;">
-            <!-- Store header -->
+          <table class="store-card">
             <tr>
-              <td colspan="4" style="background:#2563eb;color:#fff;padding:10px 14px;font-size:14px;font-weight:700;">
-                <table style="border-collapse:collapse;"><tr>
-                  <td style="width:28px;height:28px;border:2px solid #fff;border-radius:50%;text-align:center;vertical-align:middle;font-weight:800;font-size:12px;color:#fff;">${idx + 1}</td>
-                  <td style="padding-left:10px;color:#fff;font-size:14px;font-weight:700;">${escapeHtml(s.storeName)}</td>
-                </tr></table>
+              <td>
+                <table style="width:100%;border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:0;">
+                      <table style="width:100%;border-collapse:collapse;">
+                        <tr>
+                          <td style="padding:0 0 14px 0;">
+                            <table style="width:100%;border-collapse:collapse;">
+                              <tr>
+                                <td style="width:44px;vertical-align:top;">
+                                  <div class="store-index">${idx + 1}</div>
+                                </td>
+                                <td style="padding-left:10px;vertical-align:top;">
+                                  <div class="store-title">${escapeHtml(s.storeName)}</div>
+                                  <div class="store-subtitle">${escapeHtml(s.storeAddress || 'Address not provided')}${s.storeCity ? `, ${escapeHtml(s.storeCity)}` : ''}</div>
+                                </td>
+                                <td style="text-align:right;vertical-align:top;">
+                                  <div class="store-duration">${escapeHtml(s.duration || '—')}</div>
+                                  <div class="store-duration-label">Visit Duration</div>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <table class="store-summary-grid">
+                        <tr>
+                          <td>
+                            <div class="metric-label">Arrival</div>
+                            <div class="metric-value">${escapeHtml(checkInLabel)}</div>
+                          </td>
+                          <td>
+                            <div class="metric-label">Departure</div>
+                            <div class="metric-value">${escapeHtml(checkOutLabel)}</div>
+                          </td>
+                          <td>
+                            <div class="metric-label">Alerts</div>
+                            <div class="metric-value">${alertCount}</div>
+                          </td>
+                          <td>
+                            <div class="metric-label">Products</div>
+                            <div class="metric-value">${productCount}</div>
+                          </td>
+                          <td>
+                            <div class="metric-label">Photos</div>
+                            <div class="metric-value">${photoCount}</div>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <table style="width:100%;border-collapse:collapse;margin:14px 0 16px 0;">
+                        <tr>
+                          <td style="padding:0;">${breakLine}</td>
+                        </tr>
+                      </table>
+
+                      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+                        <tr>
+                          <td class="section-heading">Activity Log</td>
+                        </tr>
+                      </table>
+
+                      <table class="events-table">
+                        <tr>
+                          <td class="events-head time">Time</td>
+                          <td class="events-head type">Type</td>
+                          <td class="events-head desc">Description</td>
+                          <td class="events-head photo">Photo</td>
+                        </tr>
+                        ${eventsRows}
+                      </table>
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
-            <tr><td colspan="4" style="background:#eff6ff;color:#1d4ed8;padding:6px 14px;font-size:10px;font-weight:700;border-left:1px solid #bfdbfe;border-right:1px solid #bfdbfe;">${events.length} événements consignés • ${photoCount} photos associées</td></tr>
-            <!-- Store info -->
-            <tr><td class="lbl">Adresse</td><td colspan="2">${escapeHtml(s.storeAddress)}${s.storeCity ? ', ' + escapeHtml(s.storeCity) : ''}</td></tr>
-            ${breakLine}
-            <!-- Events header -->
-            <tr>
-              <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;width:11%;">Heure</td>
-              <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;width:22%;">Type</td>
-              <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;">Description</td>
-              <td style="background:#e0ecff;padding:6px 8px;font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;border:1px solid #93c5fd;width:14%;">Photo</td>
-            </tr>
-            ${eventsRows}
           </table>
         `;
       }).join('');
@@ -1089,52 +1210,122 @@ export default function HomeScreen() {
 <style>
   @page { margin: 18mm 14mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b; font-size: 11px; line-height: 1.45; }
-  table { border-collapse: collapse; }
-  .lbl { width: 100px; font-weight: 700; color: #475569; background: #f8fafc; padding: 5px 14px; border-bottom: 1px solid #f1f5f9; font-size: 11px; }
-  td { font-size: 11px; padding: 5px 14px; border-bottom: 1px solid #f1f5f9; }
+  body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b; font-size: 11px; line-height: 1.5; background: #ffffff; }
+  table { width: 100%; border-collapse: collapse; }
+  .page-shell { padding: 4px 0 0; }
+  .hero-card { margin-bottom: 18px; border-radius: 18px; overflow: hidden; background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%); }
+  .hero-top td { padding: 24px 24px 10px 24px; border: none; }
+  .hero-kicker { display: inline-block; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,0.14); color: #dbeafe; font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .hero-title { margin-top: 14px; color: #ffffff; font-size: 26px; font-weight: 800; letter-spacing: 0.5px; }
+  .hero-subtitle { margin-top: 6px; color: rgba(219, 234, 254, 0.92); font-size: 11px; line-height: 1.6; }
+  .hero-meta td { width: 33.33%; padding: 14px 24px 22px 24px; border: none; vertical-align: top; }
+  .hero-meta-label { color: rgba(191, 219, 254, 0.82); font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .hero-meta-value { margin-top: 5px; color: #ffffff; font-size: 14px; font-weight: 700; }
+  .section-heading { padding: 0 0 8px 0; color: #0f172a; font-size: 12px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase; border: none; }
+  .summary-grid { margin-bottom: 18px; }
+  .summary-grid td { width: 25%; padding: 0 6px; border: none; vertical-align: top; }
+  .summary-card { min-height: 88px; padding: 16px 14px; border: 1px solid #dbe7ff; border-radius: 16px; background: #f8fbff; }
+  .summary-label { color: #64748b; font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .summary-value { margin-top: 8px; color: #0f172a; font-size: 20px; font-weight: 800; }
+  .summary-subtext { margin-top: 4px; color: #475569; font-size: 10px; }
+  .store-card { margin-bottom: 18px; border: 1px solid #dbe7ff; border-radius: 20px; overflow: hidden; background: #ffffff; page-break-inside: avoid; }
+  .store-card > tbody > tr > td { padding: 18px 18px 16px 18px; border: none; }
+  .store-index { width: 34px; height: 34px; line-height: 34px; text-align: center; border-radius: 50%; background: #dbeafe; color: #1d4ed8; font-size: 13px; font-weight: 800; }
+  .store-title { color: #0f172a; font-size: 15px; font-weight: 800; }
+  .store-subtitle { margin-top: 4px; color: #64748b; font-size: 10px; line-height: 1.5; }
+  .store-duration { color: #0f172a; font-size: 15px; font-weight: 800; text-align: right; }
+  .store-duration-label { margin-top: 4px; color: #64748b; font-size: 9px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; }
+  .store-summary-grid { margin-bottom: 2px; border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; }
+  .store-summary-grid td { width: 20%; padding: 12px 10px; border-right: 1px solid #e2e8f0; background: #f8fafc; text-align: center; }
+  .store-summary-grid td:last-child { border-right: none; }
+  .metric-label { color: #64748b; font-size: 9px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
+  .metric-value { margin-top: 5px; color: #0f172a; font-size: 14px; font-weight: 800; }
+  .store-meta-pill { display: inline-block; padding: 7px 12px; border-radius: 999px; background: #e2e8f0; color: #334155; font-size: 10px; font-weight: 700; }
+  .store-meta-pill.success { background: #dcfce7; color: #166534; }
+  .store-meta-pill.danger { background: #fee2e2; color: #b91c1c; }
+  .events-table { border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; }
+  .events-head { padding: 10px; background: #eff6ff; color: #1d4ed8; font-size: 9px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase; border-bottom: 1px solid #bfdbfe; }
+  .events-head.time { width: 12%; }
+  .events-head.type { width: 20%; }
+  .events-head.photo { width: 15%; }
+  .footer-note { margin-top: 20px; padding-top: 12px; border-top: 1px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 9px; }
 </style></head><body>
-
-  <!-- ═══ HEADER ═══ -->
-  <table style="width:100%;border-bottom:3px solid #2563eb;margin-bottom:16px;">
-    <tr><td colspan="2" style="text-align:center;font-size:20px;font-weight:800;color:#2563eb;letter-spacing:2px;padding:8px 0 12px;">RAPPORT JOURNALIER</td></tr>
-    <tr><td style="font-weight:700;color:#475569;width:150px;padding:3px 8px;">Merchandiser</td><td style="padding:3px 8px;">${escapeHtml(`${user?.first_name || ''} ${user?.last_name || user?.username || ''}`.trim())}</td></tr>
-    <tr><td style="font-weight:700;color:#475569;padding:3px 8px;">Date</td><td style="padding:3px 8px;">${escapeHtml(dateStr)}</td></tr>
-    <tr><td style="font-weight:700;color:#475569;padding:3px 8px;">Début de journée</td><td style="padding:3px 8px;">${escapeHtml(dayStartStr)}</td></tr>
-    <tr><td style="font-weight:700;color:#475569;padding:3px 8px;">Fin de journée</td><td style="padding:3px 8px;">${escapeHtml(dayEndStr)}</td></tr>
-    <tr><td style="font-weight:700;color:#475569;padding:3px 8px 10px;">Durée totale</td><td style="padding:3px 8px 10px;"><strong>${escapeHtml(hoursWorked)}</strong></td></tr>
-  </table>
-
-  <!-- ═══ SUMMARY ═══ -->
-  <table style="width:100%;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:18px;background:#f8fafc;">
-    <tr>
-      <td style="text-align:center;padding:10px 0;width:25%;"><div style="font-size:20px;font-weight:800;color:#2563eb;">${completedVisits.length}</div><div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#64748b;">Magasins</div></td>
-      <td style="text-align:center;padding:10px 0;width:25%;border-left:1px solid #e2e8f0;"><div style="font-size:20px;font-weight:800;color:#2563eb;">${hoursWorked}</div><div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#64748b;">Heures</div></td>
-      <td style="text-align:center;padding:10px 0;width:25%;border-left:1px solid #e2e8f0;"><div style="font-size:20px;font-weight:800;color:#2563eb;">${allAlerts.length}</div><div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#64748b;">Alertes</div></td>
-      <td style="text-align:center;padding:10px 0;width:25%;border-left:1px solid #e2e8f0;"><div style="font-size:20px;font-weight:800;color:#2563eb;">${allProducts.length}</div><div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#64748b;">Produits</div></td>
+<div class="page-shell">
+  <table class="hero-card">
+    <tr class="hero-top">
+      <td>
+        <div class="hero-kicker">Merchandising App</div>
+        <div class="hero-title">Daily Report</div>
+        <div class="hero-subtitle">A clean and structured summary of the field day, including visits, alerts, tracked products, and the activity log for each store.</div>
+      </td>
+    </tr>
+    <tr class="hero-meta">
+      <td>
+        <div class="hero-meta-label">Merchandiser</div>
+        <div class="hero-meta-value">${escapeHtml(`${user?.first_name || ''} ${user?.last_name || user?.username || ''}`.trim())}</div>
+      </td>
+      <td>
+        <div class="hero-meta-label">Report Date</div>
+        <div class="hero-meta-value">${escapeHtml(dateStr)}</div>
+      </td>
+      <td>
+        <div class="hero-meta-label">Time Range</div>
+        <div class="hero-meta-value">${escapeHtml(dayStartStr)} → ${escapeHtml(dayEndStr)}</div>
+      </td>
     </tr>
   </table>
 
-  <!-- ═══ STORES ═══ -->
-  ${storesHTML || '<p style="text-align:center;color:#94a3b8;padding:20px;">Aucune visite enregistrée</p>'}
-
-  <!-- ═══ FOOTER ═══ -->
-  <table style="width:100%;margin-top:24px;border-top:1px solid #e2e8f0;">
-    <tr><td style="text-align:center;font-size:9px;color:#94a3b8;padding-top:12px;">Rapport généré le ${new Date().toLocaleString('fr-FR')} — Merchandising App &copy; ${new Date().getFullYear()}</td></tr>
+  <table style="margin-bottom:8px;"><tr><td class="section-heading">Overview</td></tr></table>
+  <table class="summary-grid">
+    <tr>
+      <td>
+        <div class="summary-card">
+          <div class="summary-label">Stores Visited</div>
+          <div class="summary-value">${completedVisits.length}</div>
+          <div class="summary-subtext">Visits completed today</div>
+        </div>
+      </td>
+      <td>
+        <div class="summary-card">
+          <div class="summary-label">Time Worked</div>
+          <div class="summary-value">${escapeHtml(hoursWorked)}</div>
+          <div class="summary-subtext">From ${escapeHtml(dayStartStr)} to ${escapeHtml(dayEndStr)}</div>
+        </div>
+      </td>
+      <td>
+        <div class="summary-card">
+          <div class="summary-label">Alerts Raised</div>
+          <div class="summary-value">${allAlerts.length}</div>
+          <div class="summary-subtext">Across all categories</div>
+        </div>
+      </td>
+      <td>
+        <div class="summary-card">
+          <div class="summary-label">Products Logged</div>
+          <div class="summary-value">${allProducts.length}</div>
+          <div class="summary-subtext">Products recorded during the day</div>
+        </div>
+      </td>
+    </tr>
   </table>
 
+  <table style="margin-bottom:8px;"><tr><td class="section-heading">Store Details</td></tr></table>
+  ${storesHTML || '<div style="text-align:center;color:#94a3b8;padding:28px 0;">No visits recorded for this day.</div>'}
+
+  <div class="footer-note">Report generated on ${new Date().toLocaleString('en-US')} — Merchandising App &copy; ${new Date().getFullYear()}</div>
+</div>
 </body></html>`;
 
       const { uri } = await Print.printToFileAsync({ html });
 
       // Upload to backend
       try {
-        const fileName = `rapport_${user?.username || 'merchandiser'}_${today}.pdf`;
+        const fileName = `report_${user?.username || 'merchandiser'}_${today}.pdf`;
         await documentService.uploadDocument(
           { uri, type: 'application/pdf', name: fileName },
           {
-            title: `Rapport Journalier - ${dateStr}`,
-            description: `${user?.first_name || user?.username || 'Merchandiser'} - ${completedVisits.length} magasins, ${hoursWorked} travaillées, ${allAlerts.length} alertes, ${allProducts.length} produits`,
+            title: `Daily Report - ${dateStr}`,
+            description: `${user?.first_name || user?.username || 'Merchandiser'} - ${completedVisits.length} stores, ${hoursWorked} worked, ${allAlerts.length} alerts, ${allProducts.length} products`,
             document_type: 'daily_report',
             merchandiser: user?.id,
           }
@@ -1148,7 +1339,7 @@ export default function HomeScreen() {
       await shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
     } catch (error) {
       console.error('Error generating end-of-day PDF:', error);
-      Alert.alert('Erreur', 'Échec de la génération du rapport PDF');
+      Alert.alert('Error', 'Failed to generate the PDF report');
     }
   };
 
@@ -1161,28 +1352,28 @@ export default function HomeScreen() {
 
       if (totalVisits === 0) {
         Alert.alert(
-          'Aucune visite',
-          'Aucune visite planifiée pour aujourd\'hui. Vous ne pouvez pas terminer la journée sans visites.'
+          'No visits',
+          'No visits are scheduled for today. You cannot end the day without visits.'
         );
         return;
       }
 
       if (!allCompleted) {
         Alert.alert(
-          'Travail incomplet',
-          `Vous avez complété ${completedVisits.length}/${totalVisits} visites.\nVeuillez terminer toutes les visites avant de finir la journée.`
+          'Work incomplete',
+          `You have completed ${completedVisits.length}/${totalVisits} visits.\nPlease finish all visits before ending the day.`
         );
         return;
       }
 
       // All visits completed — allow end day
       Alert.alert(
-        'Fin de journée',
-        'Toutes les visites sont complétées. Voulez-vous terminer votre journée et générer le rapport ?',
+        'End of day',
+        'All visits are complete. Do you want to end your day and generate the report?',
         [
-          { text: 'Annuler', style: 'cancel' },
+          { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Terminer',
+            text: 'End Day',
             style: 'destructive',
             onPress: async () => {
               try {
@@ -1203,11 +1394,11 @@ export default function HomeScreen() {
                   userService.patchUser(user.id, { day_started: false, day_start_time: null }).catch(() => {});
                 }
 
-                Alert.alert('Journée terminée', 'Toutes les visites complétées ! Génération du rapport...');
+                Alert.alert('Day completed', 'All visits are complete. Generating the report...');
                 await generateEndOfDayPDF(completedVisits, savedStartTime);
               } catch (error) {
                 console.error('Error ending day:', error);
-                Alert.alert('Erreur', 'Impossible de terminer la journée');
+                Alert.alert('Error', 'Unable to end the day');
               }
             }
           }
@@ -1342,465 +1533,360 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* GPS Status Card */}
-        <View style={styles.gpsCard}>
-          <View style={styles.gpsIcon}>
-            <MaterialCommunityIcons name="crosshairs-gps" size={28} color="#fff" />
-          </View>
-          <View style={styles.gpsContent}>
-            <Text style={styles.gpsLabel}>GPS Status</Text>
-            <View style={styles.gpsStatusRow}>
-              <View style={[styles.gpsStatusDot, gpsActive && styles.gpsStatusDotActive]} />
-              <Text style={[styles.gpsStatusText, gpsActive && styles.gpsStatusTextActive]}>
-                {getGpsStatusText()}
-              </Text>
-            </View>
-            <Text style={styles.gpsStatusHint}>{getGpsStatusHint()}</Text>
-            {gpsActive && location && (
-              <Text style={styles.gpsCoords}>
-                📍 {location.coords.latitude.toFixed(4)}, {location.coords.longitude.toFixed(4)}
-              </Text>
-            )}
-          </View>
+        {/* GPS Status Pill */}
+        <View style={[styles.gpsPillRow, !gpsActive && styles.gpsPillRowOff]}>
+          <MaterialCommunityIcons
+            name={gpsActive ? 'map-marker' : 'map-marker-off'}
+            size={14}
+            color={gpsActive ? '#10b981' : '#d97706'}
+          />
+          <Text style={[styles.gpsPillText, { color: gpsActive ? '#059669' : '#92400e' }]}>
+            {gpsActive ? 'GPS Active' : getGpsStatusText()}
+          </Text>
+          {gpsActive ? (
+            <Animated.View style={[styles.gpsDot, { opacity: pulseAnim }]} />
+          ) : (
+            <View style={[styles.gpsDot, { backgroundColor: '#f59e0b' }]} />
+          )}
         </View>
 
-        {/* 2. Today's Route label + 3. Map */}
-        <Text style={styles.routeLabel}>Today's Route</Text>
-        <View style={styles.mapContainer}>
-          <StoreMap stores={todayStores} height={200} />
-        </View>
-
-        {/* 4. Ready to Begin Card */}
+        {/* ─── BEFORE DAY STARTED ─── */}
         {!dayStarted && (
-          <View style={styles.readyCard}>
-            <Text style={styles.readyTitle}>Ready to begin?</Text>
-            <Text style={styles.readyText}>
-              Start your shift to track mileage and store visits for your assigned route.
-            </Text>
-            {!gpsActive && (
-              <Text style={styles.startWorkdayHint}>
-                Turn on phone location first to start your workday.
+          <>
+            {/* Prominent Start Workday card */}
+            <View style={styles.startCard}>
+              <Text style={styles.startCardTitle}>Ready to begin?</Text>
+              <Text style={styles.startCardSub}>
+                Start your shift to track your store visits for the day.
               </Text>
-            )}
-            <TouchableOpacity
-              style={[styles.startWorkdayBtn, !canStartWorkday && styles.startWorkdayBtnDisabled]}
-              onPress={handleStartDay}
-              disabled={!canStartWorkday}
-            >
-              <MaterialCommunityIcons name="play" size={18} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.startWorkdayText}>Start Workday</Text>
-            </TouchableOpacity>
-          </View>
+              {!gpsActive && (
+                <Text style={styles.startCardHint}>
+                  Turn on phone location first to start your workday.
+                </Text>
+              )}
+              <TouchableOpacity
+                style={[styles.bigStartBtn, !canStartWorkday && styles.bigStartBtnDisabled]}
+                onPress={handleStartDay}
+                disabled={!canStartWorkday}
+              >
+                <MaterialCommunityIcons name="play-circle" size={22} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.bigStartText}>Start Workday</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Faded preview of what's coming */}
+            <View style={styles.fadedWrapper} pointerEvents="none">
+              {/* Daily Progress preview */}
+              <View style={styles.progressSection}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Daily Progress</Text>
+                  <View style={styles.progressBadge}>
+                    <Text style={styles.progressBadgeText}>{homeData.todayPercent}% Complete</Text>
+                  </View>
+                </View>
+                <View style={styles.progressItem}>
+                  <Text style={styles.progressLabel}>Store Visits</Text>
+                  <Text style={styles.progressValue}>{homeData.storesVisited} / {homeData.storesTotal} Stores</Text>
+                </View>
+              </View>
+
+              {/* Daily Agenda preview */}
+              <View style={styles.agendaCard}>
+                <View style={styles.agendaHeader}>
+                  <Text style={styles.sectionTitle}>Daily Agenda</Text>
+                  <View style={styles.agendaCounter}>
+                    <Text style={styles.agendaCounterText}>{homeData.storesVisited}/{homeData.storesTotal} visits</Text>
+                  </View>
+                </View>
+                {todayStores.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <MaterialCommunityIcons name="calendar-blank-outline" size={44} color="#d1d5db" />
+                    <Text style={styles.emptyStateTitle}>No stores assigned today</Text>
+                    <Text style={styles.emptyStateSub}>Your agenda will appear here once visits are planned.</Text>
+                  </View>
+                ) : (
+                  todayStores.slice(0, 3).map((store) => (
+                    <View key={store.id} style={styles.agendaItem}>
+                      <View style={styles.agendaItemIcon}>
+                        <MaterialCommunityIcons name="store-outline" size={18} color="#2563eb" />
+                      </View>
+                      <Text style={styles.agendaItemName} numberOfLines={1}>{store.name}</Text>
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
+          </>
         )}
 
-        {/* 5. Daily Progress */}
-        <View style={styles.progressSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Daily Progress</Text>
-            <View style={styles.progressBadge}>
-              <Text style={styles.progressBadgeText}>{homeData.todayPercent}% Complete</Text>
+        {/* ─── DURING SHIFT ─── */}
+        {dayStarted && (
+          <>
+            {/* Daily Progress */}
+            <View style={styles.progressSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Daily Progress</Text>
+                <View style={styles.progressBadge}>
+                  <Text style={styles.progressBadgeText}>{homeData.todayPercent}% Complete</Text>
+                </View>
+              </View>
+              <View style={styles.progressItem}>
+                <Text style={styles.progressLabel}>Store Visits</Text>
+                <Text style={styles.progressValue}>{homeData.storesVisited} / {homeData.storesTotal} Stores</Text>
+              </View>
+              <View style={styles.progressItem}>
+                <MaterialCommunityIcons name="clock-outline" size={16} color="#6b7280" />
+                <Text style={styles.estimatedTime}>Time worked: {timeWorked}</Text>
+              </View>
             </View>
-          </View>
 
-          <View style={styles.progressItem}>
-            <Text style={styles.progressLabel}>Store Visits</Text>
-            <Text style={styles.progressValue}>
-              {homeData.storesVisited} / {homeData.storesTotal} Stores
-            </Text>
-          </View>
+            {/* Daily Agenda — merged route + schedule */}
+            <View style={styles.agendaCard}>
+              <View style={styles.agendaHeader}>
+                <Text style={styles.sectionTitle}>Daily Agenda</Text>
+                <View style={styles.agendaCounter}>
+                  <Text style={styles.agendaCounterText}>{homeData.storesVisited}/{homeData.storesTotal} visits</Text>
+                </View>
+              </View>
 
-          {dayStarted && (
-            <View style={styles.progressItem}>
-              <MaterialCommunityIcons name="clock-outline" size={16} color="#666" />
-              <Text style={styles.estimatedTime}>Time worked: {timeWorked}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* 6. Today's Schedule card — pause reminder + stores */}
-        <View style={styles.scheduleSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Today's Schedule</Text>
-          </View>
-
-          {/* Break reminder (right under title) */}
-          {breakWindowStart && breakWindowEnd && (
-            <View style={styles.breakReminder}>
-              <MaterialCommunityIcons name="coffee-outline" size={18} color="#f59e0b" />
-              <Text style={styles.breakReminderText}>
-                Pause: {breakWindowStart} - {breakWindowEnd} ({breakDuration || 30} min)
-              </Text>
-              {breakEndTime && (
-                <View style={styles.breakDoneBadge}>
-                  <MaterialCommunityIcons name="check" size={12} color="#10b981" />
+              {/* Break reminder */}
+              {breakWindowStart && breakWindowEnd && (
+                <View style={styles.breakReminder}>
+                  <MaterialCommunityIcons name="coffee-outline" size={18} color="#f59e0b" />
+                  <Text style={styles.breakReminderText}>
+                    Break: {breakWindowStart} – {breakWindowEnd} ({breakDuration || 30} min)
+                  </Text>
+                  {breakEndTime && (
+                    <View style={styles.breakDoneBadge}>
+                      <MaterialCommunityIcons name="check" size={12} color="#10b981" />
+                    </View>
+                  )}
                 </View>
               )}
-            </View>
-          )}
 
-          {/* Store list */}
-          {todayStores.length > 0 ? (
-            todayStores.map((store) => {
-              const status = getStoreVisitStatus(store.id);
-              const statusStyle = status === 'COMPLETED' ? styles.routeStatusCompleted : 
-                                 status === 'IN PROGRESS' ? styles.routeStatusInProgress : 
-                                 styles.routeStatusPending;
-              
-              return (
-                <View key={store.id} style={styles.routeItem}>
-                  <View style={styles.routeIconWrapper}>
-                    <MaterialCommunityIcons name="store" size={20} color="#2563eb" />
-                  </View>
-                  <View style={styles.routeInfo}>
-                    <Text style={styles.routeName} numberOfLines={1}>{store.name}</Text>
-                    <Text style={styles.routeAddress} numberOfLines={1}>
-                      {store.address || store.city}
-                    </Text>
-                  </View>
-                  <View style={[styles.routeStatus, statusStyle]}>
-                    <Text style={styles.routeStatusText}>{status}</Text>
-                  </View>
+              {/* Store list or single empty state */}
+              {todayStores.length > 0 ? (
+                todayStores.map((store) => {
+                  const status = getStoreVisitStatus(store.id);
+                  const statusStyle =
+                    status === 'COMPLETED'   ? styles.routeStatusCompleted :
+                    status === 'IN PROGRESS' ? styles.routeStatusInProgress :
+                                              styles.routeStatusPending;
+                  return (
+                    <View key={store.id} style={styles.agendaItem}>
+                      <View style={styles.agendaItemIcon}>
+                        <MaterialCommunityIcons name="store-outline" size={18} color="#2563eb" />
+                      </View>
+                      <View style={styles.agendaItemInfo}>
+                        <Text style={styles.agendaItemName} numberOfLines={1}>{store.name}</Text>
+                        {(store.address || store.city) && (
+                          <Text style={styles.agendaItemSub} numberOfLines={1}>{store.address || store.city}</Text>
+                        )}
+                      </View>
+                      <View style={[styles.statusBadge, statusStyle]}>
+                        <Text style={styles.statusBadgeText}>{status}</Text>
+                      </View>
+                    </View>
+                  );
+                })
+              ) : (
+                <View style={styles.emptyState}>
+                  <MaterialCommunityIcons name="calendar-blank-outline" size={44} color="#d1d5db" />
+                  <Text style={styles.emptyStateTitle}>No stores assigned today</Text>
+                  <Text style={styles.emptyStateSub}>Your agenda will appear here once visits are planned.</Text>
                 </View>
-              );
-            })
-          ) : (
-            <View style={styles.emptyRoute}>
-              <MaterialCommunityIcons name="map-marker-off" size={32} color="#ccc" />
-              <Text style={styles.emptyRouteText}>No stores assigned for today</Text>
-            </View>
-          )}
-        </View>
+              )}
 
-        {/* Break + End Day buttons (outside the card, only when day started) */}
-        {dayStarted && (
-          <View>
+            </View>
+
+            {/* Today's Route card */}
+            <View style={styles.agendaCard}>
+              <View style={styles.agendaHeader}>
+                <Text style={styles.sectionTitle}>Today's Route</Text>
+              </View>
+              <View style={styles.mapContainerInCard}>
+                <StoreMap stores={todayStores} height={200} />
+              </View>
+            </View>
+
+            {/* Break button */}
             {breakWindowStart && breakWindowEnd && !breakEndTime && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
                   styles.breakBtn,
-                  (!isBreakWindowActive() || isOnBreak === false && isBreakWindowPassed()) && styles.breakBtnDisabled
+                  !isOnBreak && (!isBreakWindowActive() || isBreakWindowPassed()) && styles.breakBtnDisabled,
                 ]}
                 onPress={isOnBreak ? handleEndBreak : handleStartBreak}
                 disabled={!isOnBreak && (!isBreakWindowActive() || isBreakWindowPassed())}
               >
-                <MaterialCommunityIcons 
-                  name={isOnBreak ? 'pause-circle' : 'coffee'} 
-                  size={20} 
-                  color="#fff" 
-                  style={{ marginRight: 8 }} 
+                <MaterialCommunityIcons
+                  name={isOnBreak ? 'pause-circle' : 'coffee'}
+                  size={20}
+                  color="#fff"
+                  style={{ marginRight: 8 }}
                 />
                 <Text style={styles.breakBtnText}>
-                  {isOnBreak 
-                    ? `Fin Pause (${breakElapsed})` 
-                    : isBreakWindowPassed() 
-                      ? 'Pause manquée' 
-                      : `Prendre Pause (${breakWindowStart} - ${breakWindowEnd})`}
+                  {isOnBreak
+                    ? `End Break (${breakElapsed})`
+                    : isBreakWindowPassed()
+                      ? 'Break window passed'
+                      : `Take Break (${breakWindowStart} – ${breakWindowEnd})`}
                 </Text>
               </TouchableOpacity>
             )}
             {breakEndTime && (
               <View style={styles.breakCompletedBanner}>
                 <MaterialCommunityIcons name="check-circle" size={18} color="#10b981" />
-                <Text style={styles.breakCompletedText}>Pause terminée ✓</Text>
+                <Text style={styles.breakCompletedText}>Break completed ✓</Text>
               </View>
             )}
-            {/* Only show End Workday if dayStarted is true */}
-            {dayStarted && (
-              <TouchableOpacity style={styles.endDayBtn} onPress={handleStartDay}>
-                <MaterialCommunityIcons name="stop-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-                <Text style={styles.endDayText}>End Workday</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+
+            {/* End Workday at the bottom */}
+            <TouchableOpacity style={styles.endDayBtn} onPress={handleStartDay}>
+              <MaterialCommunityIcons name="stop-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.endDayText}>End Workday</Text>
+            </TouchableOpacity>
+          </>
         )}
 
-        <View style={{ height: 20 }} />
+        <View style={{ height: 24 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
+  safe: { flex: 1, backgroundColor: '#f8fafc' },
   container: { paddingHorizontal: 16, paddingTop: 12 },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
-  
+
   // Header
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 16,
-    paddingVertical: 8
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingVertical: 8 },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
   bellBadge: {
-    position: 'absolute',
-    top: -6,
-    right: -8,
-    backgroundColor: '#ef4444',
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 2,
-    borderColor: '#fff',
+    position: 'absolute', top: -6, right: -8, backgroundColor: '#ef4444',
+    borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center',
+    alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: '#fff',
   },
-  bellBadgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  avatar: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    backgroundColor: '#e8f0fe', 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    marginRight: 12
-  },
-  avatarImg: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-  },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#222' },
-  headerDate: { fontSize: 13, color: '#666', marginTop: 2 },
+  bellBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#eff6ff', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  avatarImg: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
+  headerDate: { fontSize: 12, color: '#9ca3af', marginTop: 1 },
 
-  // GPS Card
-  gpsCard: {
-    backgroundColor: '#4285f4',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#4285f4',
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4
+  // GPS Pill
+  gpsPillRow: {
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
+    backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 12,
+    paddingVertical: 6, marginBottom: 14, borderWidth: 1, borderColor: '#bbf7d0',
   },
-  gpsIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12
+  gpsPillRowOff: { backgroundColor: '#fff7ed', borderColor: '#fed7aa' },
+  gpsPillText: { fontSize: 12, fontWeight: '600', marginHorizontal: 5 },
+  gpsDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10b981' },
+
+  // Start card (pre-shift)
+  startCard: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 14,
+    borderWidth: 1, borderColor: '#e5e7eb',
+    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 }, elevation: 3,
   },
-  gpsContent: { flex: 1 },
-  gpsLabel: { fontSize: 13, color: '#fff', marginBottom: 4, fontWeight: '500' },
-  gpsStatusRow: { flexDirection: 'row', alignItems: 'center' },
-  gpsStatusDot: { 
-    width: 8, 
-    height: 8, 
-    borderRadius: 4, 
-    backgroundColor: '#f59e0b',
-    marginRight: 6 
+  startCardTitle: { fontSize: 21, fontWeight: '800', color: '#111827', marginBottom: 6 },
+  startCardSub: { fontSize: 14, color: '#6b7280', lineHeight: 21, marginBottom: 16 },
+  startCardHint: {
+    fontSize: 13, color: '#b45309', marginBottom: 12,
+    backgroundColor: '#fffbeb', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
   },
-  gpsStatusDotActive: { backgroundColor: '#10b981' },
-  gpsStatusText: { fontSize: 14, color: '#fff', fontWeight: 'bold' },
-  gpsStatusTextActive: { color: '#fff' },
-  gpsStatusHint: { fontSize: 12, color: 'rgba(255, 255, 255, 0.9)', marginTop: 4 },
-  gpsCoords: { fontSize: 11, color: 'rgba(255, 255, 255, 0.8)', marginTop: 4 },
+  bigStartBtn: {
+    backgroundColor: '#2563eb', borderRadius: 12, paddingVertical: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+  },
+  bigStartBtnDisabled: { backgroundColor: '#9ca3af' },
+  bigStartText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  // Faded wrapper (pre-shift preview)
+  fadedWrapper: { opacity: 0.35 },
+
+  // Progress section
+  progressSection: {
+    backgroundColor: '#fff', borderRadius: 12, padding: 16,
+    marginBottom: 12, borderWidth: 1, borderColor: '#e5e7eb',
+  },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  progressBadge: { backgroundColor: '#eff6ff', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
+  progressBadgeText: { fontSize: 12, color: '#2563eb', fontWeight: '600' },
+  progressItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 7 },
+  progressLabel: { fontSize: 14, color: '#6b7280' },
+  progressValue: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  estimatedTime: { fontSize: 13, color: '#6b7280', marginLeft: 6 },
+
+  // Agenda card (merged route + schedule)
+  agendaCard: {
+    backgroundColor: '#fff', borderRadius: 12, padding: 16,
+    marginBottom: 12, borderWidth: 1, borderColor: '#e5e7eb',
+  },
+  agendaHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  agendaCounter: { backgroundColor: '#f0fdf4', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
+  agendaCounterText: { fontSize: 12, color: '#059669', fontWeight: '600' },
+  agendaItem: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+  },
+  agendaItemIcon: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: '#eff6ff',
+    justifyContent: 'center', alignItems: 'center', marginRight: 12,
+  },
+  agendaItemInfo: { flex: 1, marginRight: 8 },
+  agendaItemName: { fontSize: 14, fontWeight: '600', color: '#111827', marginBottom: 2 },
+  agendaItemSub: { fontSize: 12, color: '#9ca3af' },
+
+  // Empty state
+  emptyState: { alignItems: 'center', paddingVertical: 28 },
+  emptyStateTitle: { fontSize: 15, fontWeight: '600', color: '#6b7280', marginTop: 10, marginBottom: 4 },
+  emptyStateSub: { fontSize: 13, color: '#9ca3af', textAlign: 'center', lineHeight: 18, paddingHorizontal: 16 },
+
+  // Status badges
+  statusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  statusBadgeText: { fontSize: 9, color: '#fff', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  routeStatusCompleted: { backgroundColor: '#059669' },
+  routeStatusInProgress: { backgroundColor: '#f59e0b' },
+  routeStatusPending: { backgroundColor: '#9ca3af' },
 
   // Map
-  mapContainer: {
-    borderRadius: 12,
+  mapContainerInCard: {
+    marginHorizontal: -16,
+    marginBottom: -16,
     overflow: 'hidden',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
   },
 
-  // Ready to Begin Card
-  readyCard: {
-    backgroundColor: '#f8f9fc',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e8eaed'
-  },
-  readyTitle: { fontSize: 20, fontWeight: 'bold', color: '#222', marginBottom: 8 },
-  readyText: { fontSize: 14, color: '#666', lineHeight: 20, marginBottom: 16 },
-  startWorkdayBtn: {
-    backgroundColor: '#4285f4',
-    borderRadius: 8,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  startWorkdayBtnDisabled: {
-    backgroundColor: '#94a3b8',
-  },
-  startWorkdayHint: {
-    fontSize: 13,
-    color: '#b45309',
-    marginBottom: 12,
-  },
-  startWorkdayText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-
-  // Sections
-  progressSection: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e8eaed'
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12
-  },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#222' },
-  progressBadge: {
-    backgroundColor: '#e8f0fe',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4
-  },
-  progressBadgeText: { fontSize: 12, color: '#4285f4', fontWeight: '600' },
-  progressItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8
-  },
-  progressLabel: { fontSize: 14, color: '#666' },
-  progressValue: { fontSize: 14, fontWeight: '600', color: '#222' },
-  estimatedTime: { fontSize: 13, color: '#666', marginLeft: 6 },
-
-  // Route label
-  routeLabel: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#222',
-    marginBottom: 8,
-  },
-  // Schedule Section (stores + break + end day)
-  scheduleSection: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e8eaed'
-  },
-  routeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0'
-  },
-  routeIconWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#e8f0fe',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12
-  },
-  routeInfo: { flex: 1 },
-  routeName: { fontSize: 14, fontWeight: '600', color: '#222', marginBottom: 2 },
-  routeAddress: { fontSize: 12, color: '#666' },
-  routeStatus: {
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4
-  },
-  routeStatusCompleted: { backgroundColor: '#10b981' },
-  routeStatusInProgress: { backgroundColor: '#f59e0b' },
-  routeStatusPending: { backgroundColor: '#6b7280' },
-  routeStatusText: { fontSize: 10, color: '#fff', fontWeight: 'bold' },
-  emptyRoute: {
-    alignItems: 'center',
-    paddingVertical: 24
-  },
-  emptyRouteText: { fontSize: 14, color: '#999', marginTop: 8 },
-
-  // Break Button
-  breakBtn: {
-    backgroundColor: '#8b5cf6',
-    borderRadius: 8,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12
-  },
-  breakBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  breakBtnDisabled: {
-    backgroundColor: '#d1d5db',
-  },
+  // Break
   breakReminder: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fffbeb',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#fde68a',
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fffbeb',
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10,
+    marginBottom: 12, borderWidth: 1, borderColor: '#fde68a',
   },
-  breakReminderText: {
-    fontSize: 13,
-    color: '#92400e',
-    fontWeight: '500',
-    marginLeft: 8,
-    flex: 1,
+  breakReminderText: { fontSize: 13, color: '#92400e', fontWeight: '500', marginLeft: 8, flex: 1 },
+  breakDoneBadge: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#d1fae5', justifyContent: 'center', alignItems: 'center' },
+  breakBtn: {
+    backgroundColor: '#7c3aed', borderRadius: 10, paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10,
   },
-  breakDoneBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#d1fae5',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  breakBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  breakBtnDisabled: { backgroundColor: '#d1d5db' },
   breakCompletedBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ecfdf5',
-    borderRadius: 8,
-    paddingVertical: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#ecfdf5', borderRadius: 8, paddingVertical: 10,
+    marginBottom: 10, borderWidth: 1, borderColor: '#a7f3d0',
   },
-  breakCompletedText: {
-    fontSize: 14,
-    color: '#065f46',
-    fontWeight: '600',
-    marginLeft: 6,
-  },
+  breakCompletedText: { fontSize: 14, color: '#065f46', fontWeight: '600', marginLeft: 6 },
 
-  // End Day Button
+  // End Day
   endDayBtn: {
-    backgroundColor: '#dc2626',
-    borderRadius: 8,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16
+    backgroundColor: '#dc2626', borderRadius: 10, paddingVertical: 15,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
   },
-  endDayText: { color: '#fff', fontSize: 16, fontWeight: '600' }
+  endDayText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

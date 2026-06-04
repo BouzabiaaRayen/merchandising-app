@@ -1,631 +1,534 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  FlatList,
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  SafeAreaView, ActivityIndicator, RefreshControl,
+  Image, Linking, Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { visitService, userService, leaveService } from '../../services/apiService';
+import { visitService } from '../../services/apiService';
+import { getAvatarUrl } from '../../services/supabaseClient';
 
-const REPORT_TYPES = [
-  { key: 'attendance', label: 'Attendance', icon: 'calendar-check', color: '#4285f4' },
-  { key: 'visits', label: 'Visit Logs', icon: 'clipboard-text', color: '#8b5cf6' },
-  { key: 'exceptions', label: 'Exceptions', icon: 'alert-circle', color: '#f97316' },
-  { key: 'performance', label: 'Performance', icon: 'chart-bar', color: '#22c55e' },
-];
+const BLUE   = '#4285f4';
+const GREEN  = '#22c55e';
+const GRAY   = '#94a3b8';
+const RED    = '#ef4444';
+
+function formatPeriodRange(startDate, endDate) {
+  if (!startDate || !endDate) return null;
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+
+  const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
+  if (sameMonth) {
+    return `${start.toLocaleDateString([], { month: 'short' })} ${start.getDate()} - ${end.getDate()}`;
+  }
+
+  return `${start.toLocaleDateString([], { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+}
+
+function getVisitDateKey(visit) {
+  const raw = visit?.scheduled_date ?? visit?.planned_date ?? visit?.date ?? '';
+  return String(raw).split('T')[0];
+}
+
+function getScheduleStatus(visit) {
+  if (visit?.check_out_time) return 'completed';
+
+  const raw = String(visit?.status ?? '').toLowerCase();
+  if (raw === 'completed' || raw === 'done') return 'completed';
+  if (raw === 'cancelled' || raw === 'missed') return 'missed';
+
+  const dateKey = getVisitDateKey(visit);
+  if (dateKey) {
+    const today = new Date();
+    const todayKey = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+      .toISOString()
+      .split('T')[0];
+    if (dateKey < todayKey) return 'missed';
+  }
+
+  return 'planned';
+}
+
+function formatSectionTitle(dateKey) {
+  if (!dateKey) return 'Unknown Date';
+  const d = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return dateKey;
+  const weekday = d.toLocaleDateString([], { weekday: 'short' });
+  const day = d.toLocaleDateString([], { day: 'numeric' });
+  const month = d.toLocaleDateString([], { month: 'short' });
+  return `${weekday} ${day} ${month}`;
+}
+
+function getMonthKey(visit) {
+  const dateKey = getVisitDateKey(visit);
+  return dateKey ? dateKey.slice(0, 7) : null;
+}
+
+function formatMonthTitle(monthKey) {
+  if (!monthKey) return 'Unknown Month';
+  const value = new Date(`${monthKey}-01T00:00:00`);
+  if (Number.isNaN(value.getTime())) return monthKey;
+  return value.toLocaleDateString([], { month: 'long', year: 'numeric' });
+}
+
+function getCurrentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function StatusIcon({ status }) {
+  if (status === 'completed') {
+    return (
+      <MaterialCommunityIcons name="check-circle" size={16} color={GREEN} />
+    );
+  }
+
+  if (status === 'missed') {
+    return (
+      <MaterialCommunityIcons name="close-circle-outline" size={16} color={RED} />
+    );
+  }
+
+  return <MaterialCommunityIcons name="checkbox-blank-circle-outline" size={15} color="#94a3b8" />;
+}
+
+function VisitRow({ visit, isLast }) {
+  const status = getScheduleStatus(visit);
+  const store = visit.store_details ?? visit.store_detail ?? visit.store;
+  const storeName = visit.store_name ?? store?.name ?? (typeof store === 'string' ? store : `Store #${store}`);
+  const address = visit.store_address ?? store?.address ?? store?.location ?? null;
+
+  return (
+    <View style={[styles.visitRow, isLast && styles.visitRowLast]}>
+      <View style={styles.visitRowText}>
+        <Text style={styles.storeName} numberOfLines={1}>{storeName}</Text>
+        {!!address && <Text style={styles.storeAddress} numberOfLines={2}>{address}</Text>}
+      </View>
+      <View style={styles.statusIconWrap}>
+        <StatusIcon status={status} />
+      </View>
+    </View>
+  );
+}
+
+function DayCard({ group }) {
+  return (
+    <View style={styles.dayGroupRow}>
+      <View style={styles.timelineCol}>
+        <View style={styles.timelineDot} />
+      </View>
+      <View style={styles.dayCard}>
+        <Text style={styles.dayCardTitle}>{group.title}</Text>
+        {group.visits.map((visit, index) => {
+          const isLast = index === group.visits.length - 1;
+          return (
+            <View key={String(visit.id ?? `${group.key}-${index}`)}>
+              <VisitRow visit={visit} isLast={isLast} />
+              {!isLast ? <View style={styles.partialDivider} /> : null}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function MonthCard({ month, expanded, onToggle }) {
+  return (
+    <View style={styles.monthBlock}>
+      <TouchableOpacity style={styles.monthAccordion} onPress={onToggle} activeOpacity={0.82}>
+        <View>
+          <Text style={styles.monthAccordionTitle}>{month.title}</Text>
+          <Text style={styles.monthAccordionSummary}>{month.total} visits</Text>
+        </View>
+        <MaterialCommunityIcons
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={18}
+          color="#64748b"
+        />
+      </TouchableOpacity>
+
+      {expanded ? month.days.map((day) => <DayCard key={day.key} group={day} />) : null}
+    </View>
+  );
+}
+
+function EmptyRoute() {
+  return (
+    <View style={{ alignItems: 'center', paddingTop: 60 }}>
+      <MaterialCommunityIcons name="map-marker-off-outline" size={64} color="#cbd5e1" />
+      <Text style={{ fontSize: 17, fontWeight: '700', color: '#94a3b8', marginTop: 16 }}>No visits assigned</Text>
+      <Text style={{ fontSize: 13, color: '#cbd5e1', marginTop: 6, textAlign: 'center' }}>No stores are planned for this period.</Text>
+    </View>
+  );
+}
 
 export default function SupervisorReportScreen() {
-  const route = useRoute();
+  const route      = useRoute();
   const navigation = useNavigation();
-  const initialType = route.params?.type ?? 'visits';
-  const singleType = route.params?.singleType === true;
+  const { memberId, memberName, memberPhone, memberAvatar } = route.params ?? {};
 
-  const [activeType, setActiveType] = useState(initialType);
-  const [loading, setLoading] = useState(true);
+  const [visits,     setVisits]     = useState([]);
+  const [member,     setMember]     = useState(null);
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [expandedMonths, setExpandedMonths] = useState({});
+  const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [data, setData] = useState([]);
-  const [users, setUsers] = useState([]);
 
-  const fetchData = useCallback(async (type) => {
+  const loadData = useCallback(async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const visitsRes = await (memberId
+        ? visitService.getVisits({
+          merchandiser: memberId,
+          page_size: 5000,
+        }).catch(() => ({ results: [] }))
+        : Promise.resolve([]));
 
-      const [usersResp] = await Promise.allSettled([
-        userService.getUsers({ role: 'merchandiser', page_size: 200 }),
-      ]);
-      let rawUsers = [];
-      if (usersResp.status === 'fulfilled') {
-        const raw = usersResp.value;
-        rawUsers = Array.isArray(raw) ? raw : (raw.results ?? []);
-        setUsers(rawUsers);
-      }
+      const raw = Array.isArray(visitsRes) ? visitsRes : (visitsRes.results ?? []);
+      const allVisits = raw
+        .filter((v) => Boolean(getVisitDateKey(v)))
+        .sort((a, b) => (a.scheduled_date ?? '').localeCompare(b.scheduled_date ?? ''));
 
-      if (type === 'visits' || type === 'exceptions' || type === 'performance') {
-        const resp = await visitService.getVisits({ date: today, page_size: 500 });
-        const raw = Array.isArray(resp) ? resp : (resp.results ?? []);
-        setData(raw);
-      } else if (type === 'attendance') {
-        // attendance: group by user – show which merchandisers have/haven't started their day
-        const resp = await visitService.getVisits({ date: today, page_size: 500 });
-        const raw = Array.isArray(resp) ? resp : (resp.results ?? []);
-        setData(raw);
-      }
+      setVisits(allVisits);
+
+      const visitMember = allVisits.find((visit) => visit?.merchandiser_details)?.merchandiser_details;
+      setMember(visitMember ?? null);
     } catch (err) {
-      console.warn('SupervisorReport fetchData err:', err);
-      setData([]);
+      console.warn('SupervisorReportScreen err:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [memberId]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+  const onRefresh = () => { setRefreshing(true); loadData(); };
+
+  const displayName = member
+    ? ([member.first_name, member.last_name].filter(Boolean).join(' ') || member.username)
+    : (memberName ?? 'Merchandiser');
+  const phone  = member?.phone_number ?? member?.phone ?? memberPhone;
+  const avatarRaw = member?.avatar_url || member?.avatar || member?.profile_picture || memberAvatar;
+  const avatar = getAvatarUrl(avatarRaw);
+  const initials = displayName.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
+
+  const periodLabel = useMemo(() => {
+    const sortedKeys = visits.map(getVisitDateKey).filter(Boolean).sort((a, b) => a.localeCompare(b));
+    if (sortedKeys.length === 0) return 'Archive';
+
+    const fallbackRange = formatPeriodRange(sortedKeys[0], sortedKeys[sortedKeys.length - 1]);
+    return fallbackRange ? `Archive: ${fallbackRange}` : 'Archive';
+  }, [visits]);
+
+  const filteredVisits = useMemo(() => {
+    if (activeFilter === 'all') return visits;
+    return visits.filter((visit) => {
+      const status = getScheduleStatus(visit);
+      if (activeFilter === 'completed') return status === 'completed';
+      if (activeFilter === 'planned') return status === 'planned';
+      return true;
+    });
+  }, [visits, activeFilter]);
+
+  const filterCounts = useMemo(() => {
+    const completed = visits.filter((v) => getScheduleStatus(v) === 'completed').length;
+    const planned = visits.filter((v) => getScheduleStatus(v) === 'planned').length;
+    return {
+      all: visits.length,
+      completed,
+      planned,
+    };
+  }, [visits]);
+
+  const monthGroups = useMemo(() => {
+    const grouped = {};
+    filteredVisits.forEach((visit) => {
+      const monthKey = getMonthKey(visit);
+      const dateKey = getVisitDateKey(visit);
+      if (!monthKey || !dateKey) return;
+      if (!grouped[monthKey]) grouped[monthKey] = {};
+      if (!grouped[monthKey][dateKey]) grouped[monthKey][dateKey] = [];
+      grouped[monthKey][dateKey].push(visit);
+    });
+
+    return Object.keys(grouped)
+      .sort((a, b) => b.localeCompare(a))
+      .map((monthKey) => ({
+        key: monthKey,
+        title: formatMonthTitle(monthKey),
+        total: Object.values(grouped[monthKey]).reduce((sum, items) => sum + items.length, 0),
+        days: Object.keys(grouped[monthKey])
+          .sort((a, b) => a.localeCompare(b))
+          .map((dateKey) => ({
+            key: dateKey,
+            title: formatSectionTitle(dateKey),
+            visits: grouped[monthKey][dateKey],
+          })),
+      }));
+  }, [filteredVisits]);
 
   useEffect(() => {
-    setLoading(true);
-    fetchData(activeType);
-  }, [activeType, fetchData]);
+    const currentMonthKey = getCurrentMonthKey();
+    setExpandedMonths((prev) => {
+      const next = {};
+      monthGroups.forEach((month, index) => {
+        if (Object.prototype.hasOwnProperty.call(prev, month.key)) {
+          next[month.key] = prev[month.key];
+        } else {
+          next[month.key] = month.key === currentMonthKey || (index === 0 && !monthGroups.some((entry) => entry.key === currentMonthKey));
+        }
+      });
+      return next;
+    });
+  }, [monthGroups]);
 
-  const onRefresh = () => { setRefreshing(true); fetchData(activeType); };
+  const toggleMonth = useCallback((monthKey) => {
+    setExpandedMonths((prev) => ({
+      ...prev,
+      [monthKey]: !prev[monthKey],
+    }));
+  }, []);
+
+  const chips = [
+    { key: 'all', label: 'All' },
+    { key: 'completed', label: 'Completed' },
+    { key: 'planned', label: 'Planned' },
+  ];
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <MaterialCommunityIcons name="arrow-left" size={22} color="#333" />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <MaterialCommunityIcons name="arrow-left" size={22} color="#1e293b" />
         </TouchableOpacity>
-        <Text style={styles.title}>
-          {singleType
-            ? (REPORT_TYPES.find((r) => r.key === activeType)?.label ?? 'Report')
-            : 'Team Reports'}
-        </Text>
-        <View style={{ width: 30 }} />
+        <View style={styles.headerCenter}>
+          {avatar ? (
+            <Image source={{ uri: avatar }} style={styles.headerAvatar} />
+          ) : (
+            <View style={styles.headerAvatarFallback}>
+              <Text style={styles.headerAvatarInitials}>{initials || '?'}</Text>
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerName} numberOfLines={1}>{displayName}</Text>
+            <Text style={styles.headerSub}>{periodLabel}</Text>
+          </View>
+        </View>
+        {phone ? (
+          <TouchableOpacity onPress={() => Linking.openURL(`tel:${phone}`)} style={styles.callBtn}>
+            <MaterialCommunityIcons name="phone" size={20} color={BLUE} />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 36 }} />
+        )}
       </View>
 
-      {/* Type selector — hidden when opened from a specific card */}
-      {!singleType && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.typeScroll}
-          contentContainerStyle={styles.typeScrollContent}
-        >
-          {REPORT_TYPES.map((rt) => (
-            <TouchableOpacity
-              key={rt.key}
-              style={[
-                styles.typeTab,
-                activeType === rt.key && { backgroundColor: rt.color, borderColor: rt.color },
-              ]}
-              onPress={() => setActiveType(rt.key)}
-            >
-              <MaterialCommunityIcons
-                name={rt.icon}
-                size={16}
-                color={activeType === rt.key ? '#fff' : rt.color}
-              />
-              <Text style={[styles.typeTabText, activeType === rt.key && { color: '#fff' }]}>
-                {rt.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+      {!loading && (
+        <View style={styles.chipsRow}>
+          <View style={styles.segmentedControl}>
+            {chips.map((chip) => {
+              const active = activeFilter === chip.key;
+              return (
+                <TouchableOpacity
+                  key={chip.key}
+                  style={[styles.segment, active && styles.segmentActive]}
+                  onPress={() => setActiveFilter(chip.key)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                    {chip.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.summaryText}>
+            {filteredVisits.length} shown · {filterCounts[activeFilter] ?? filteredVisits.length} total
+          </Text>
+        </View>
       )}
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#4285f4" />
-        </View>
+        <View style={styles.centered}><ActivityIndicator size="large" color={BLUE} /></View>
       ) : (
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4285f4']} />
-          }
-        >
-          {activeType === 'visits' && <VisitLogsReport visits={data} users={users} />}
-          {activeType === 'attendance' && <AttendanceReport visits={data} users={users} />}
-          {activeType === 'exceptions' && <ExceptionsReport visits={data} users={users} />}
-          {activeType === 'performance' && <PerformanceReport visits={data} users={users} />}
-        </ScrollView>
+        <View style={styles.timelineListWrap}>
+          <View style={styles.timelineRail} />
+          <FlatList
+            data={monthGroups}
+            keyExtractor={(item) => item.key}
+            removeClippedSubviews
+            initialNumToRender={10}
+            windowSize={10}
+            contentContainerStyle={monthGroups.length === 0
+              ? { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }
+              : { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 24 }}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[BLUE]} />}
+            ListEmptyComponent={<EmptyRoute />}
+            renderItem={({ item }) => (
+              <MonthCard
+                month={item}
+                expanded={!!expandedMonths[item.key]}
+                onToggle={() => toggleMonth(item.key)}
+              />
+            )}
+          />
+        </View>
       )}
     </SafeAreaView>
   );
 }
 
-// ─── Report sub-views ────────────────────────────────────────────────────────
-
-function VisitLogsReport({ visits, users }) {
-  if (visits.length === 0) return <EmptyState message="No visits recorded today" />;
-
-  const userMap = {};
-  users.forEach((u) => { userMap[u.id] = u; });
-
-  return (
-    <View style={styles.reportSection}>
-      <SummaryRow
-        items={[
-          { label: 'Total', value: visits.length, color: '#4285f4' },
-          { label: 'Completed', value: visits.filter(v => v.status === 'completed' || v.status === 'COMPLETED').length, color: '#22c55e' },
-          { label: 'Pending', value: visits.filter(v => v.status === 'pending' || v.status === 'PENDING' || v.status === 'planned').length, color: '#f97316' },
-          { label: 'Cancelled', value: visits.filter(v => v.status === 'cancelled' || v.status === 'CANCELLED').length, color: '#ef4444' },
-        ]}
-      />
-      {visits.map((v, i) => {
-        const uid = v.merchandiser ?? v.user;
-        const agent = userMap[uid];
-        const agentName = agent
-          ? (agent.first_name || '') + (agent.last_name ? ' ' + agent.last_name : '') || agent.username
-          : `Agent #${uid ?? '?'}`;
-        const store = v.store_detail ?? v.store;
-        const storeName = store?.name ?? (typeof store === 'object' ? 'Unknown Store' : `Store #${store}`);
-        const status = v.status?.toLowerCase() ?? 'unknown';
-
-        return (
-          <View key={v.id ?? i} style={styles.logCard}>
-            <View style={[styles.logAccent, { backgroundColor: statusColor(status) }]} />
-            <View style={[styles.logAvatarCircle, { backgroundColor: statusColor(status) + '22' }]}>
-              <Text style={[styles.logAvatarText, { color: statusColor(status) }]}>
-                {agentName[0]?.toUpperCase() ?? '?'}
-              </Text>
-            </View>
-            <View style={styles.logBody}>
-              <Text style={styles.logStore}>{storeName}</Text>
-              <Text style={styles.logAgent}>{agentName}</Text>
-              <View style={styles.logFooter}>
-                <StatusBadge status={status} />
-                {v.check_in_time && (
-                  <View style={styles.timeChip}>
-                    <MaterialCommunityIcons name="login" size={10} color="#888" />
-                    <Text style={styles.logTime}>
-                      {new Date(v.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </View>
-                )}
-                {v.check_out_time && (
-                  <View style={styles.timeChip}>
-                    <MaterialCommunityIcons name="logout" size={10} color="#888" />
-                    <Text style={styles.logTime}>
-                      {new Date(v.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function AttendanceReport({ visits, users }) {
-  const visitsByUser = {};
-  visits.forEach((v) => {
-    const uid = v.merchandiser ?? v.user;
-    if (!uid) return;
-    if (!visitsByUser[uid]) visitsByUser[uid] = [];
-    visitsByUser[uid].push(v);
-  });
-
-  const activeMembers = users.filter((u) => u.is_active);
-
-  // Count ended-day members (day_started=false but day_start_time set today)
-  const today = new Date().toISOString().split('T')[0];
-  const startedCount = activeMembers.filter((u) => u.day_started === true).length;
-  const endedCount = activeMembers.filter((u) => {
-    if (u.day_started === true) return false;
-    if (!u.day_start_time) return false;
-    return u.day_start_time.slice(0, 10) === today;
-  }).length;
-  const notStartedCount = activeMembers.length - startedCount - endedCount;
-
-  return (
-    <View style={styles.reportSection}>
-      <SummaryRow
-        items={[
-          { label: 'Total Agents', value: activeMembers.length, color: '#4285f4' },
-          { label: 'Started', value: startedCount, color: '#22c55e' },
-          { label: 'Ended Day', value: endedCount, color: '#8b5cf6' },
-          { label: 'Not Started', value: notStartedCount, color: '#f97316' },
-        ]}
-      />
-      {activeMembers.map((u) => {
-        const dayStarted = u.day_started === true;
-        const endedToday = !dayStarted && u.day_start_time?.slice(0, 10) === today;
-        const statusLabel = dayStarted ? 'Working' : endedToday ? 'Ended Day' : 'Not Started';
-        const statusColor = dayStarted ? '#22c55e' : endedToday ? '#8b5cf6' : '#f97316';
-        const uVisits = visitsByUser[u.id] ?? [];
-        const name =
-          (u.first_name || '') + (u.last_name ? ' ' + u.last_name : '') || u.username;
-        const startTimeLabel = u.day_start_time
-          ? new Date(u.day_start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          : null;
-        return (
-          <View key={u.id} style={styles.logCard}>
-            <View style={[styles.logAccent, { backgroundColor: statusColor }]} />
-            <View style={[styles.logAvatarCircle, { backgroundColor: statusColor + '22' }]}>
-              <Text style={[styles.logAvatarText, { color: statusColor }]}>
-                {name[0]?.toUpperCase() ?? '?'}
-              </Text>
-            </View>
-            <View style={styles.logBody}>
-              <Text style={styles.logStore}>{name}</Text>
-              <Text style={styles.logAgent}>@{u.username}</Text>
-              <View style={styles.logFooter}>
-                <StatusBadge
-                  status={statusLabel}
-                  customLabel={statusLabel}
-                  customColor={statusColor}
-                />
-                {startTimeLabel && (
-                  <View style={styles.timeChip}>
-                    <MaterialCommunityIcons name="clock-start" size={10} color="#888" />
-                    <Text style={styles.logTime}>Started {startTimeLabel}</Text>
-                  </View>
-                )}
-                <View style={styles.timeChip}>
-                  <MaterialCommunityIcons name="store-outline" size={10} color="#888" />
-                  <Text style={styles.logTime}>
-                    {uVisits.length} visit{uVisits.length !== 1 ? 's' : ''} assigned
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function ExceptionsReport({ visits, users }) {
-  const userMap = {};
-  users.forEach((u) => { userMap[u.id] = u; });
-
-  const exceptions = visits.filter(
-    (v) =>
-      v.status === 'cancelled' ||
-      v.status === 'CANCELLED' ||
-      v.notes?.toLowerCase().includes('exception') ||
-      v.cancellation_reason
-  );
-
-  if (exceptions.length === 0) return <EmptyState message="No exceptions today" icon="check-circle" color="#22c55e" />;
-
-  return (
-    <View style={styles.reportSection}>
-      <SummaryRow
-        items={[
-          { label: 'Exceptions', value: exceptions.length, color: '#f97316' },
-          { label: 'Cancelled', value: exceptions.filter(v => v.status?.toLowerCase() === 'cancelled').length, color: '#ef4444' },
-        ]}
-      />
-      {exceptions.map((v, i) => {
-        const uid = v.merchandiser ?? v.user;
-        const agent = userMap[uid];
-        const agentName = agent
-          ? (agent.first_name || '') + (agent.last_name ? ' ' + agent.last_name : '') || agent.username
-          : `Agent #${uid ?? '?'}`;
-        const store = v.store_detail ?? v.store;
-        const storeName = store?.name ?? 'Unknown Store';
-        const reason = v.cancellation_reason ?? v.notes ?? 'No reason provided';
-
-        return (
-          <View key={v.id ?? i} style={styles.logCard}>
-            <View style={[styles.logAccent, { backgroundColor: '#f97316' }]} />
-            <View style={[styles.logAvatarCircle, { backgroundColor: '#f9731622' }]}>
-              <MaterialCommunityIcons name="alert-outline" size={18} color="#f97316" />
-            </View>
-            <View style={styles.logBody}>
-              <Text style={styles.logStore}>{storeName}</Text>
-              <Text style={styles.logAgent}>{agentName}</Text>
-              <View style={styles.reasonBox}>
-                <Text style={styles.exceptionReason}>{reason}</Text>
-              </View>
-              <StatusBadge status={v.status?.toLowerCase()} />
-            </View>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function PerformanceReport({ visits, users }) {
-  const userMap = {};
-  users.forEach((u) => { userMap[u.id] = u; });
-
-  const statsByUser = {};
-  visits.forEach((v) => {
-    const uid = v.merchandiser ?? v.user;
-    if (!uid) return;
-    if (!statsByUser[uid]) statsByUser[uid] = { total: 0, completed: 0, cancelled: 0 };
-    statsByUser[uid].total++;
-    const st = v.status?.toLowerCase();
-    if (st === 'completed') statsByUser[uid].completed++;
-    if (st === 'cancelled') statsByUser[uid].cancelled++;
-  });
-
-  const activeMembers = users.filter((u) => u.is_active);
-  const ranked = activeMembers
-    .map((u) => ({
-      user: u,
-      stats: statsByUser[u.id] ?? { total: 0, completed: 0, cancelled: 0 },
-    }))
-    .sort((a, b) => b.stats.completed - a.stats.completed);
-
-  return (
-    <View style={styles.reportSection}>
-      <SummaryRow
-        items={[
-          {
-            label: 'Avg Completion',
-            value:
-              activeMembers.length > 0
-                ? Math.round(
-                    ranked.reduce((acc, r) => {
-                      return acc + (r.stats.total > 0 ? (r.stats.completed / r.stats.total) * 100 : 0);
-                    }, 0) / activeMembers.length
-                  ) + '%'
-                : '—',
-            color: '#22c55e',
-          },
-          { label: 'Agents Ranked', value: ranked.length, color: '#4285f4' },
-        ]}
-      />
-      {ranked.map(({ user, stats }, index) => {
-        const name =
-          (user.first_name || '') + (user.last_name ? ' ' + user.last_name : '') || user.username;
-        const pct = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
-        const barColor = pct >= 80 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
-        const medalBgColors = ['#f59e0b', '#94a3b8', '#cd7f32'];
-        const rankBg = index < 3 ? medalBgColors[index] : '#e8f0fe';
-        const rankTextColor = index < 3 ? '#fff' : '#4285f4';
-        const medalIcons = ['trophy', 'medal', 'medal-outline'];
-
-        return (
-          <View key={user.id} style={styles.perfCard}>
-            <View style={[styles.perfRank, { backgroundColor: rankBg }]}>
-              {index < 3 ? (
-                <MaterialCommunityIcons name={medalIcons[index]} size={17} color={rankTextColor} />
-              ) : (
-                <Text style={[styles.perfRankText, { color: rankTextColor }]}>#{index + 1}</Text>
-              )}
-            </View>
-            <View style={styles.perfInfo}>
-              <View style={styles.perfNameRow}>
-                <Text style={styles.perfName} numberOfLines={1}>{name}</Text>
-                <Text style={[styles.perfPct, { color: barColor }]}>{pct}%</Text>
-              </View>
-              <View style={styles.perfBarBg}>
-                <View style={[styles.perfBarFill, { width: `${pct}%`, backgroundColor: barColor }]} />
-              </View>
-              <Text style={styles.perfLabel}>
-                {stats.completed} completed · {stats.cancelled} cancelled · {stats.total} total
-              </Text>
-            </View>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-// ─── Shared helpers ──────────────────────────────────────────────────────────
-
-const ICON_MAP = {
-  'Total': 'clipboard-list-outline',
-  'Completed': 'check-circle-outline',
-  'Pending': 'clock-outline',
-  'Cancelled': 'close-circle-outline',
-  'Total Agents': 'account-group-outline',
-  'Started': 'login',
-  'Not Started': 'account-clock-outline',
-  'Exceptions': 'alert-circle-outline',
-  'Avg Completion': 'chart-line',
-  'Agents Ranked': 'trophy-outline',
-};
-
-function SummaryRow({ items }) {
-  return (
-    <View style={styles.summaryRow}>
-      {items.map((item) => {
-        const iconName = ICON_MAP[item.label] ?? 'information-outline';
-        return (
-          <View key={item.label} style={styles.summaryCard}>
-            <View style={[styles.summaryIconCircle, { backgroundColor: item.color + '18' }]}>
-              <MaterialCommunityIcons name={iconName} size={20} color={item.color} />
-            </View>
-            <Text style={[styles.summaryValue, { color: item.color }]}>{item.value}</Text>
-            <Text style={styles.summaryLabel}>{item.label}</Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function StatusBadge({ status, customLabel, customColor }) {
-  const label = customLabel ?? (status ? status.charAt(0).toUpperCase() + status.slice(1) : '—');
-  const color = customColor ?? statusColor(status ?? '');
-  return (
-    <View style={[styles.badge, { backgroundColor: color + '22' }]}>
-      <Text style={[styles.badgeText, { color }]}>{label}</Text>
-    </View>
-  );
-}
-
-function EmptyState({ message, icon = 'clipboard-text-outline', color = '#ccc' }) {
-  return (
-    <View style={styles.emptyState}>
-      <MaterialCommunityIcons name={icon} size={52} color={color} />
-      <Text style={styles.emptyText}>{message}</Text>
-    </View>
-  );
-}
-
-function statusColor(status) {
-  const s = (status ?? '').toLowerCase();
-  if (s === 'completed') return '#22c55e';
-  if (s === 'cancelled') return '#ef4444';
-  if (s === 'in_progress' || s === 'in progress') return '#4285f4';
-  if (s === 'checked-in') return '#22c55e';
-  return '#f97316';
-}
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f0f2f8' },
+  safe: { flex: 1, backgroundColor: '#ffffff', paddingTop: Platform.OS === 'android' ? 30 : 0 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scroll: { flex: 1 },
-  scrollContent: { paddingBottom: 24 },
 
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 12,
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e8eaed',
+  },
+  backBtn: { padding: 4, marginRight: 8 },
+  headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  headerAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: 10 },
+  headerAvatarFallback: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: '#e8f0fe', justifyContent: 'center', alignItems: 'center', marginRight: 10,
+  },
+  headerAvatarInitials: { fontSize: 15, fontWeight: '700', color: BLUE },
+  headerName: { fontSize: 16, fontWeight: '700', color: '#1e293b' },
+  headerSub: { fontSize: 11, color: '#64748b', marginTop: 1 },
+  callBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#e8f0fe', justifyContent: 'center', alignItems: 'center',
+  },
+
+  chipsRow: {
     backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#e8eaed',
+    borderBottomColor: '#f1f5f9',
   },
-  backBtn: { padding: 4 },
-  title: { fontSize: 17, fontWeight: '800', color: '#1a1a2e' },
-
-  typeScroll: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e8eaed' },
-  typeScrollContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
-  typeTab: {
+  segmentedControl: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#e8eaed',
-    backgroundColor: '#fff',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 3,
   },
-  typeTabText: { fontSize: 13, fontWeight: '600', color: '#333' },
-
-  reportSection: { padding: 14, gap: 10 },
-
-  summaryRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
-  summaryCard: {
+  segment: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-    gap: 3,
-  },
-  summaryIconCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
+    paddingVertical: 6,
+    borderRadius: 10,
   },
-  summaryValue: { fontSize: 22, fontWeight: '900' },
-  summaryLabel: { fontSize: 10, color: '#999', textAlign: 'center', marginTop: 1 },
+  segmentActive: {
+    backgroundColor: '#ffffff',
+  },
+  segmentText: { fontSize: 11, color: '#64748b', fontWeight: '600' },
+  segmentTextActive: { color: '#1d4ed8' },
+  summaryText: {
+    marginTop: 6,
+    fontSize: 10,
+    color: '#94a3b8',
+    fontWeight: '600',
+    textAlign: 'right',
+  },
 
-  logCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-    alignItems: 'center',
+  timelineListWrap: {
+    flex: 1,
+    position: 'relative',
   },
-  logAccent: { width: 4, alignSelf: 'stretch', flexShrink: 0 },
-  logAvatarCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 10,
-    flexShrink: 0,
+  timelineRail: {
+    position: 'absolute',
+    left: 29,
+    top: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor: '#e5e7eb',
   },
-  logAvatarText: { fontSize: 15, fontWeight: '800' },
-  logBody: { flex: 1, padding: 12 },
-  logStore: { fontSize: 14, fontWeight: '700', color: '#1a1a2e' },
-  logAgent: { fontSize: 12, color: '#888', marginTop: 2 },
-  logFooter: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' },
-  timeChip: {
+  monthBlock: {
+    marginBottom: 12,
+  },
+  monthAccordion: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#f5f6fa',
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-  },
-  logTime: { fontSize: 11, color: '#888' },
-  reasonBox: {
-    backgroundColor: '#fff5f0',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    marginTop: 5,
-    marginBottom: 6,
-    borderLeftWidth: 3,
-    borderLeftColor: '#f97316',
-  },
-  exceptionReason: { fontSize: 12, color: '#c2440c', fontStyle: 'italic' },
-
-  badge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontSize: 11, fontWeight: '700' },
-
-  perfCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  perfRank: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  perfRankText: { fontSize: 13, fontWeight: '800' },
-  perfInfo: { flex: 1 },
-  perfNameRow: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+    marginLeft: 34,
+  },
+  monthAccordionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  monthAccordionSummary: {
+    marginTop: 2,
+    fontSize: 11,
+    color: '#6b7280',
+  },
+  dayGroupRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  timelineCol: {
+    width: 26,
     alignItems: 'center',
+    paddingTop: 14,
+    marginRight: 8,
+  },
+  timelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: BLUE,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  dayCard: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 6,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  dayCardTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: BLUE,
     marginBottom: 6,
   },
-  perfName: { fontSize: 14, fontWeight: '700', color: '#1a1a2e', flex: 1, marginRight: 8 },
-  perfPct: { fontSize: 15, fontWeight: '900' },
-  perfBarBg: { height: 7, backgroundColor: '#e8eaed', borderRadius: 4, overflow: 'hidden', marginBottom: 5 },
-  perfBarFill: { height: '100%', borderRadius: 4 },
-  perfLabel: { fontSize: 11, color: '#999' },
 
-  emptyState: { alignItems: 'center', marginTop: 60 },
-  emptyText: { color: '#bbb', marginTop: 12, fontSize: 15 },
+  visitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    paddingVertical: 10,
+  },
+  visitRowLast: { borderBottomWidth: 0 },
+  visitRowText: { flex: 1, paddingRight: 10 },
+  storeName: { fontSize: 14, fontWeight: '700', color: '#374151' },
+  storeAddress: { marginTop: 2, fontSize: 12, color: '#9ca3af' },
+  statusIconWrap: { width: 20, alignItems: 'flex-end' },
+  partialDivider: {
+    height: 1,
+    marginLeft: 12,
+    marginRight: 8,
+    backgroundColor: '#f3f4f6',
+  },
 });

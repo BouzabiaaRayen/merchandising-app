@@ -9,11 +9,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { visitService, storeService } from '../services/apiService';
 
 const STATUS_CONFIG = {
-  completed: { label: 'Complétée', color: '#16a34a', bg: '#dcfce7', icon: 'check-circle' },
-  pending: { label: 'En attente', color: '#f59e0b', bg: '#fef3c7', icon: 'clock-outline' },
-  scheduled: { label: 'Planifiée', color: '#2563eb', bg: '#dbeafe', icon: 'calendar-clock' },
-  cancelled: { label: 'Annulée', color: '#ef4444', bg: '#fee2e2', icon: 'close-circle' },
-  in_progress: { label: 'En cours', color: '#8b5cf6', bg: '#ede9fe', icon: 'progress-clock' },
+  completed: { label: 'Completed', color: '#16a34a', bg: '#dcfce7', icon: 'check-circle' },
+  pending: { label: 'Pending', color: '#f59e0b', bg: '#fef3c7', icon: 'clock-outline' },
+  scheduled: { label: 'Scheduled', color: '#2563eb', bg: '#dbeafe', icon: 'calendar-clock' },
+  cancelled: { label: 'Cancelled', color: '#ef4444', bg: '#fee2e2', icon: 'close-circle' },
+  in_progress: { label: 'In Progress', color: '#8b5cf6', bg: '#ede9fe', icon: 'progress-clock' },
 };
 
 export default function VisitHistoryScreen({ navigation }) {
@@ -43,7 +43,7 @@ export default function VisitHistoryScreen({ navigation }) {
           try {
             const s = await storeService.getStore(id);
             cache[id] = s.name;
-          } catch { cache[id] = 'Magasin inconnu'; }
+          } catch { cache[id] = 'Unknown Store'; }
         })
       );
       setStoreCache(cache);
@@ -63,12 +63,12 @@ export default function VisitHistoryScreen({ navigation }) {
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
     const d = new Date(dateStr);
-    return d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
   };
 
   const formatTime = (dateStr) => {
     if (!dateStr) return '-';
-    return new Date(dateStr).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
   const getDuration = (checkIn, checkOut) => {
@@ -77,12 +77,12 @@ export default function VisitHistoryScreen({ navigation }) {
     if (diff <= 0) return null;
     const h = Math.floor(diff / 3600);
     const m = Math.floor((diff % 3600) / 60);
-    return h > 0 ? `${h}h ${m}min` : `${m}min`;
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
   };
 
   const renderVisit = ({ item }) => {
     const cfg = STATUS_CONFIG[item.status] || STATUS_CONFIG.pending;
-    const storeName = item.store_name || storeCache[item.store] || 'Magasin';
+    const storeName = item.store_name || storeCache[item.store] || 'Store';
     const duration = getDuration(item.check_in_time, item.check_out_time);
 
     return (
@@ -118,7 +118,7 @@ export default function VisitHistoryScreen({ navigation }) {
           {duration && (
             <View style={styles.detailRow}>
               <MaterialCommunityIcons name="timer-outline" size={16} color="#6b7280" />
-              <Text style={styles.detailText}>Durée: {duration}</Text>
+              <Text style={styles.detailText}>Duration: {duration}</Text>
             </View>
           )}
         </View>
@@ -140,7 +140,7 @@ export default function VisitHistoryScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <MaterialCommunityIcons name="arrow-left" size={24} color="#1e293b" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Historique des visites</Text>
+        <Text style={styles.headerTitle}>Visit History</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -151,8 +151,8 @@ export default function VisitHistoryScreen({ navigation }) {
       ) : visits.length === 0 ? (
         <View style={styles.emptyWrap}>
           <MaterialCommunityIcons name="store-off-outline" size={56} color="#cbd5e1" />
-          <Text style={styles.emptyTitle}>Aucune visite</Text>
-          <Text style={styles.emptySubtitle}>Vos visites apparaîtront ici</Text>
+          <Text style={styles.emptyTitle}>No visits</Text>
+          <Text style={styles.emptySubtitle}>Your visits will appear here</Text>
         </View>
       ) : (
         <FlatList

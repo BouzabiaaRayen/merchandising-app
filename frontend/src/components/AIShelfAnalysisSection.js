@@ -5,7 +5,6 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -47,7 +46,7 @@ const formatConfidence = (confidence) => {
 const formatHealthState = (healthState) => {
   if (healthState === 'healthy') {
     return {
-      label: 'IA disponible',
+      label: 'AI available',
       icon: 'check-decagram',
       color: '#166534',
       backgroundColor: '#dcfce7',
@@ -56,7 +55,7 @@ const formatHealthState = (healthState) => {
 
   if (healthState === 'error') {
     return {
-      label: 'IA indisponible',
+      label: 'AI unavailable',
       icon: 'alert-circle-outline',
       color: '#b91c1c',
       backgroundColor: '#fee2e2',
@@ -64,7 +63,7 @@ const formatHealthState = (healthState) => {
   }
 
   return {
-    label: 'Verification IA',
+    label: 'Checking AI',
     icon: 'progress-clock',
     color: '#92400e',
     backgroundColor: '#fef3c7',
@@ -105,13 +104,12 @@ export default function AIShelfAnalysisSection({
   pendingImage,
   analyzedImage,
   result,
+  catalogProducts,
   loading,
   error,
   healthState,
   disabled,
   canUseCamera,
-  showAdvancedSettings,
-  settings,
   showOverlay,
   hasStoreContext,
   isAdminMode,
@@ -120,8 +118,6 @@ export default function AIShelfAnalysisSection({
   onAnalyze,
   onRetry,
   onToggleOverlay,
-  onToggleAdvanced,
-  onSettingsChange,
 }) {
   const [imageLayoutWidth, setImageLayoutWidth] = useState(0);
   const [showRawDetails, setShowRawDetails] = useState(false);
@@ -130,36 +126,100 @@ export default function AIShelfAnalysisSection({
   const analysisImage = analyzedImage || pendingImage;
   const health = formatHealthState(healthState);
   const hasDetections = Boolean(result?.detections?.length);
-  const hasProducts = Boolean(result?.products?.length);
-  const { inStockProducts, outOfStockProducts } = useMemo(() => {
-    if (!result || !result.products) {
-      return { inStockProducts: [], outOfStockProducts: [] };
+  const normalizedCatalogProducts = useMemo(() => {
+    if (!Array.isArray(catalogProducts)) {
+      return [];
     }
 
-    const inStock = [];
-    const outOfStock = [];
+    return catalogProducts.map((product) => ({
+      ...product,
+      normalizedName: String(product?.name || '').trim().toLowerCase(),
+      normalizedMeta: String(product?.meta || '').trim().toLowerCase(),
+    }));
+  }, [catalogProducts]);
+  const detectedProducts = useMemo(() => {
+    if (!result || !result.products) {
+      return [];
+    }
 
-    result.products.forEach((product) => {
-      const status = product.status.toUpperCase();
-      if (status === 'IN STOCK' || status === 'LAST ITEMS') {
-        inStock.push(product);
-      } else {
-        outOfStock.push(product);
+    return result.products.filter((product) => Number(product?.detectedCount) > 0);
+  }, [result]);
+  const lectureProducts = useMemo(() => {
+    const matchedProducts = [];
+    const seenCatalogIds = new Set();
+
+    detectedProducts.forEach((product, index) => {
+      const detectedLabel = String(product?.productName || '').trim().toLowerCase();
+      if (!detectedLabel) {
+        return;
       }
+
+      const catalogMatches = normalizedCatalogProducts.filter((catalogProduct) => (
+        catalogProduct.normalizedName === detectedLabel ||
+        catalogProduct.normalizedName.includes(detectedLabel) ||
+        detectedLabel.includes(catalogProduct.normalizedName) ||
+        catalogProduct.normalizedMeta.includes(detectedLabel)
+      ));
+
+      catalogMatches.forEach((catalogProduct) => {
+        const catalogId = String(catalogProduct.id || `${detectedLabel}-${index}`);
+        if (seenCatalogIds.has(catalogId)) {
+          return;
+        }
+
+        seenCatalogIds.add(catalogId);
+        matchedProducts.push({
+          id: catalogId,
+          productName: catalogProduct.name || product.productName || 'Unnamed product',
+          detectedCount: Number(product.detectedCount || 0),
+          stockStatus: String(catalogProduct.stockStatus || 'OUT OF STOCK').toUpperCase(),
+          stockQuantity: Number(catalogProduct.stockQuantity || 0),
+          meta: catalogProduct.meta || '',
+        });
+      });
     });
 
-    return { inStockProducts: inStock, outOfStockProducts: outOfStock };
-  }, [result]);
+    return matchedProducts;
+  }, [detectedProducts, normalizedCatalogProducts]);
+  const hasProducts = lectureProducts.length > 0;
+  const catalogStockSummary = useMemo(() => lectureProducts.reduce((summary, product) => {
+    if (product.stockStatus === 'IN STOCK') {
+      summary.inStock += 1;
+      return summary;
+    }
+
+    summary.outOfStock += 1;
+    return summary;
+  }, {
+    inStock: 0,
+    outOfStock: 0,
+  }), [lectureProducts]);
+
+  const getCatalogStockPresentation = (stockStatus) => {
+    if (stockStatus === 'IN STOCK') {
+      return {
+        label: 'In stock',
+        containerStyle: styles.inStockBadge,
+        textStyle: styles.inStockBadgeText,
+      };
+    }
+
+    return {
+      label: 'Out of stock',
+      containerStyle: styles.outOfStockBadge,
+      textStyle: styles.outOfStockBadgeText,
+    };
+  };
 
   return (
     <View style={styles.sectionWrap}>
       <View style={styles.heroCard}>
         <View style={styles.heroHeader}>
           <View style={styles.heroTitleWrap}>
-            <Text style={styles.eyebrow}>NOUVEAU FLUX RUPTURE</Text>
-            <Text style={styles.title}>Analyse IA Rayon</Text>
+            <Text style={styles.eyebrow}>NEW OUT-OF-STOCK FLOW</Text>
+            <Text style={styles.title}>AI Shelf Analysis</Text>
             <Text style={styles.subtitle}>
-              Capturez le rayon, lancez l'analyse et utilisez le resultat IA comme reference stock terrain.
+              Capture the shelf, run the analysis, and use the AI result as your field stock reference.
             </Text>
           </View>
           <View style={[styles.healthBadge, { backgroundColor: health.backgroundColor }]}> 
@@ -180,12 +240,12 @@ export default function AIShelfAnalysisSection({
               <View style={styles.dropzoneOverlay}>
                 <View>
                   <Text style={styles.dropzonePreviewTitle}>
-                    {pendingImage && analyzedImage ? 'Nouvelle image prete' : 'Image rayon prete'}
+                    {pendingImage && analyzedImage ? 'New image ready' : 'Shelf image ready'}
                   </Text>
                   <Text style={styles.dropzonePreviewSubtitle}>
                     {pendingImage && analyzedImage
-                      ? 'Le dernier resultat reste affiche jusqu a la prochaine analyse.'
-                      : 'Touchez pour changer la photo ou capturer une nouvelle vue.'}
+                      ? 'The latest result stays visible until the next analysis.'
+                      : 'Tap to replace the photo or capture a new view.'}
                   </Text>
                 </View>
                 <MaterialCommunityIcons name="image-edit-outline" size={22} color="#ffffff" />
@@ -196,9 +256,9 @@ export default function AIShelfAnalysisSection({
               <View style={styles.dropzoneIconWrap}>
                 <MaterialCommunityIcons name="image-search-outline" size={34} color="#2563eb" />
               </View>
-              <Text style={styles.dropzoneTitle}>Ajouter une photo de rayon</Text>
+              <Text style={styles.dropzoneTitle}>Add a shelf photo</Text>
               <Text style={styles.dropzoneSubtitle}>
-                Galerie ou capture terrain, puis analyse automatique des produits visibles.
+                Upload from the gallery or capture on site, then analyze the visible products automatically.
               </Text>
             </>
           )}
@@ -211,7 +271,7 @@ export default function AIShelfAnalysisSection({
             disabled={disabled}
           >
             <MaterialCommunityIcons name="upload-outline" size={18} color={disabled ? '#94a3b8' : '#2563eb'} />
-            <Text style={[styles.secondaryActionText, disabled && styles.secondaryActionTextDisabled]}>Importer</Text>
+            <Text style={[styles.secondaryActionText, disabled && styles.secondaryActionTextDisabled]}>Upload</Text>
           </TouchableOpacity>
 
           {canUseCamera && (
@@ -224,39 +284,7 @@ export default function AIShelfAnalysisSection({
               <Text style={[styles.secondaryActionText, disabled && styles.secondaryActionTextDisabled]}>Camera</Text>
             </TouchableOpacity>
           )}
-
-          <TouchableOpacity style={styles.secondaryAction} onPress={onToggleAdvanced}>
-            <MaterialCommunityIcons name={showAdvancedSettings ? 'tune-off' : 'tune'} size={18} color="#2563eb" />
-            <Text style={styles.secondaryActionText}>Parametres IA</Text>
-          </TouchableOpacity>
         </View>
-
-        {showAdvancedSettings && (
-          <View style={styles.advancedPanel}>
-            <View style={styles.advancedField}>
-              <Text style={styles.advancedLabel}>Confidence</Text>
-              <TextInput
-                style={styles.advancedInput}
-                value={settings.confidence}
-                onChangeText={(value) => onSettingsChange('confidence', value.replace(',', '.').replace(/[^\d.]/g, ''))}
-                placeholder="0.25"
-                placeholderTextColor="#9ca3af"
-                keyboardType="decimal-pad"
-              />
-            </View>
-            <View style={styles.advancedField}>
-              <Text style={styles.advancedLabel}>Image size</Text>
-              <TextInput
-                style={styles.advancedInput}
-                value={settings.imgsz}
-                onChangeText={(value) => onSettingsChange('imgsz', value.replace(/[^\d]/g, ''))}
-                placeholder="640"
-                placeholderTextColor="#9ca3af"
-                keyboardType="number-pad"
-              />
-            </View>
-          </View>
-        )}
 
         <TouchableOpacity
           style={[styles.primaryButton, (!previewImage || disabled || loading) && styles.primaryButtonDisabled]}
@@ -269,7 +297,7 @@ export default function AIShelfAnalysisSection({
             <MaterialCommunityIcons name="radar" size={18} color="#ffffff" />
           )}
           <Text style={styles.primaryButtonText}>
-            {loading ? 'Analyse en cours...' : result ? 'Relancer l\'analyse' : 'Lancer l\'analyse IA'}
+            {loading ? 'Analysis in progress...' : result ? 'Run analysis again' : 'Start AI analysis'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -277,8 +305,8 @@ export default function AIShelfAnalysisSection({
       {loading && (
         <View style={styles.feedbackCard}>
           <ActivityIndicator size="large" color="#2563eb" />
-          <Text style={styles.feedbackTitle}>Analyse en cours...</Text>
-          <Text style={styles.feedbackText}>Le moteur IA verifie les produits visibles et calcule l'etat stock du rayon.</Text>
+          <Text style={styles.feedbackTitle}>Analysis in progress...</Text>
+          <Text style={styles.feedbackText}>The AI engine is checking visible products and calculating shelf stock status.</Text>
         </View>
       )}
 
@@ -286,12 +314,12 @@ export default function AIShelfAnalysisSection({
         <View style={[styles.feedbackCard, styles.errorCard]}>
           <View style={styles.feedbackIconRow}>
             <MaterialCommunityIcons name="alert-circle-outline" size={22} color="#b91c1c" />
-            <Text style={styles.errorTitle}>Analyse interrompue</Text>
+            <Text style={styles.errorTitle}>Analysis interrupted</Text>
           </View>
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={onRetry} disabled={!previewImage || loading}>
             <MaterialCommunityIcons name="refresh" size={16} color="#ffffff" />
-            <Text style={styles.retryButtonText}>Reessayer</Text>
+            <Text style={styles.retryButtonText}>Try again</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -300,13 +328,13 @@ export default function AIShelfAnalysisSection({
         <View style={styles.resultsCard}>
           <View style={styles.resultsHeader}>
             <View>
-              <Text style={styles.resultsTitle}>Resultat d'analyse</Text>
-              <Text style={styles.resultsSubtitle}>Lecture IA exploitable pour la visite en cours.</Text>
+              <Text style={styles.resultsTitle}>Analysis result</Text>
+              <Text style={styles.resultsSubtitle}>AI reading ready to use for the current visit.</Text>
             </View>
             {hasDetections && (
               <TouchableOpacity style={styles.overlayToggle} onPress={onToggleOverlay}>
                 <MaterialCommunityIcons name={showOverlay ? 'layers-off-outline' : 'layers-outline'} size={16} color="#2563eb" />
-                <Text style={styles.overlayToggleText}>{showOverlay ? 'Masquer overlay' : 'Afficher overlay'}</Text>
+                <Text style={styles.overlayToggleText}>{showOverlay ? 'Hide overlay' : 'Show overlay'}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -314,7 +342,7 @@ export default function AIShelfAnalysisSection({
           {hasStoreContext && (
             <View style={styles.storeComparisonBadge}>
               <MaterialCommunityIcons name="store-check-outline" size={15} color="#1d4ed8" />
-              <Text style={styles.storeComparisonText}>Comparer avec le stock magasin</Text>
+              <Text style={styles.storeComparisonText}>Compare with store stock</Text>
             </View>
           )}
 
@@ -350,72 +378,54 @@ export default function AIShelfAnalysisSection({
           )}
 
           <View style={styles.productsBlock}>
-            <Text style={styles.blockTitle}>Lecture produits</Text>
+            <Text style={styles.blockTitle}>Product reading</Text>
             {!hasProducts ? (
               <View style={styles.emptyStateCard}>
                 <MaterialCommunityIcons name="package-variant-remove" size={28} color="#94a3b8" />
-                <Text style={styles.emptyStateTitle}>Aucun produit detecte</Text>
-                <Text style={styles.emptyStateText}>Essayez une photo plus nette ou relancez l'analyse avec un cadrage plus large.</Text>
+                <Text style={styles.emptyStateTitle}>No products detected</Text>
+                <Text style={styles.emptyStateText}>Try a clearer photo or run the analysis again with a wider frame.</Text>
               </View>
             ) : (
               <>
-                {inStockProducts.length > 0 && (
-                  <View style={styles.productList}>
-                    {inStockProducts.map((product) => (
-                      <View key={product.id} style={styles.productListItem}>
-                        <Text style={styles.productListItemName}>In Stock {product.productName}</Text>
-                        <View style={styles.productListItemCount}>
-                          <Text style={styles.productListItemCountText}>{product.detectedCount}</Text>
-                        </View>
-                        <MaterialCommunityIcons name="chevron-right" size={22} color="#9ca3af" />
-                      </View>
-                    ))}
+                <View style={styles.stockSummaryRow}>
+                  <View style={[styles.stockSummaryCard, styles.stockSummaryInStock]}>
+                    <Text style={styles.stockSummaryValue}>{catalogStockSummary.inStock}</Text>
+                    <Text style={styles.stockSummaryLabel}>Detected and in stock</Text>
                   </View>
-                )}
-                {outOfStockProducts.length > 0 && (
-                  <View style={styles.productList}>
-                    {outOfStockProducts.map((product) => (
-                      <View key={product.id} style={styles.productListItem}>
-                        <Text style={styles.productListItemName}>Out Of Stock {product.productName}</Text>
-                        <View style={[styles.productListItemCount, styles.outOfStockCount]}>
-                          <Text style={styles.productListItemCountText}>{product.detectedCount}</Text>
-                        </View>
-                        <MaterialCommunityIcons name="chevron-right" size={22} color="#9ca3af" />
-                      </View>
-                    ))}
+                  <View style={[styles.stockSummaryCard, styles.stockSummaryOutOfStock]}>
+                    <Text style={styles.stockSummaryValue}>{catalogStockSummary.outOfStock}</Text>
+                    <Text style={styles.stockSummaryLabel}>Detected and out of stock</Text>
                   </View>
-                )}
+                </View>
+                <View style={styles.productList}>
+                  {lectureProducts.map((product) => {
+                    const stockPresentation = getCatalogStockPresentation(product.stockStatus);
+
+                    return (
+                      <View key={product.id} style={styles.productListItem}>
+                        <View style={styles.productListItemContent}>
+                          <Text style={styles.productListItemName}>{product.productName || 'Unnamed product'}</Text>
+                        </View>
+                        <View style={styles.productListItemRight}>
+                          <View style={[styles.stockStatusBadge, stockPresentation.containerStyle]}>
+                            <Text style={[styles.stockStatusBadgeText, stockPresentation.textStyle]}>
+                              {stockPresentation.label} {product.stockQuantity}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
               </>
             )}
           </View>
-
-          {hasDetections && (
-            <View style={styles.productsBlock}>
-              <Text style={styles.blockTitle}>Details detections</Text>
-              {result.detections.map((detection) => (
-                <View key={`detail-${detection.id}`} style={styles.detectionCard}>
-                  <View style={styles.detectionCardHeader}>
-                    <Text style={styles.detectionName}>{detection.label}</Text>
-                    <View style={styles.confidenceBadge}>
-                      <MaterialCommunityIcons name="signal" size={12} color="#1d4ed8" />
-                      <Text style={styles.confidenceText}>{formatConfidence(detection.confidence)}</Text>
-                    </View>
-                  </View>
-                  {!!detection.box && (
-                    <Text style={styles.detectionMeta}>
-                      x:{Math.round(detection.box.x)} y:{Math.round(detection.box.y)} w:{Math.round(detection.box.width)} h:{Math.round(detection.box.height)}
-                    </Text>
-                  )}
-                </View>
-              ))}
-            </View>
-          )}
 
           {isAdminMode && (
             <View style={styles.debugBlock}>
               <TouchableOpacity style={styles.debugToggle} onPress={() => setShowRawDetails((current) => !current)}>
                 <MaterialCommunityIcons name={showRawDetails ? 'chevron-up' : 'chevron-down'} size={18} color="#334155" />
-                <Text style={styles.debugToggleText}>Details IA bruts</Text>
+                <Text style={styles.debugToggleText}>Raw AI details</Text>
               </TouchableOpacity>
               {showRawDetails && (
                 <View style={styles.debugPanel}>
@@ -820,6 +830,34 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
+  stockSummaryRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  stockSummaryCard: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+  },
+  stockSummaryInStock: {
+    backgroundColor: '#dcfce7',
+  },
+  stockSummaryOutOfStock: {
+    backgroundColor: '#fee2e2',
+  },
+  stockSummaryValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  stockSummaryLabel: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#334155',
+  },
   productList: {
     backgroundColor: '#f8fafc',
     borderRadius: 16,
@@ -830,33 +868,45 @@ const styles = StyleSheet.create({
   productListItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
-  productListItemName: {
+  productListItemContent: {
     flex: 1,
+    paddingRight: 12,
+  },
+  productListItemName: {
     fontSize: 14,
     fontWeight: '600',
     color: '#334155',
   },
-  productListItemCount: {
-    backgroundColor: '#e2e8f0',
-    borderRadius: 99,
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 12,
+  productListItemRight: {
+    alignItems: 'flex-end',
+    gap: 8,
   },
-  outOfStockCount: {
-    backgroundColor: '#cbd5e1',
+  stockStatusBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  productListItemCountText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#475569',
+  stockStatusBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  inStockBadge: {
+    backgroundColor: '#dcfce7',
+  },
+  inStockBadgeText: {
+    color: '#166534',
+  },
+  outOfStockBadge: {
+    backgroundColor: '#fee2e2',
+  },
+  outOfStockBadgeText: {
+    color: '#b91c1c',
   },
   debugBlock: {
     marginTop: 18,

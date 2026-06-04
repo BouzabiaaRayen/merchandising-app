@@ -15,20 +15,37 @@ const normalizeApiBaseUrl = (url) => {
   return `${trimmed}/api/v1`;
 };
 
+const forceDjangoPort = (url) => {
+  if (!url) return url;
+
+  // Core app endpoints (auth, notifications, profile...) must target Django on 8000.
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:8001)(\/|$)/i.test(url)) {
+    const corrected = url.replace(/:8001(?=\/|$)/i, ':8000');
+    console.warn('API URL pointed to AI port 8001; using Django port 8000 instead:', corrected);
+    return corrected;
+  }
+
+  return url;
+};
+
 const resolveRuntimeApiUrl = () => {
-  const explicitEnvUrl = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
+  const explicitEnvUrl =
+    process.env.EXPO_PUBLIC_API_URL ||
+    process.env.API_URL ||
+    process.env.API_BASE_URL;
   const configuredUrl = Constants.expoConfig?.extra?.apiUrl;
 
   const normalizedExplicitEnvUrl = normalizeApiBaseUrl(explicitEnvUrl);
   if (normalizedExplicitEnvUrl) {
-    return normalizedExplicitEnvUrl;
+    return forceDjangoPort(normalizedExplicitEnvUrl);
   }
 
   const normalizedConfiguredUrl = normalizeApiBaseUrl(configuredUrl);
   if (normalizedConfiguredUrl) {
+    const correctedConfiguredUrl = forceDjangoPort(normalizedConfiguredUrl);
     const isLocalhostConfigured = /:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(normalizedConfiguredUrl);
     if (!isLocalhostConfigured || Platform.OS === 'web') {
-      return normalizedConfiguredUrl;
+      return correctedConfiguredUrl;
     }
   }
 

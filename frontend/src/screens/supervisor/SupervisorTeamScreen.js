@@ -1,225 +1,184 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useCallback, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  SafeAreaView,
-  ActivityIndicator,
-  RefreshControl,
-  TextInput,
-  Alert,
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  SafeAreaView, ActivityIndicator, RefreshControl,
+  Image, Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { userService, visitService, gpsService } from '../../services/apiService';
+import { useNavigation } from '@react-navigation/native';
+import { userService, visitService } from '../../services/apiService';
+import { useAuth } from '../../contexts/AuthContext';
 
-const STATUS_COLORS = {
-  active: '#22c55e',
-  inactive: '#94a3b8',
-  gps_off: '#f97316',
-};
+const BLUE = '#4285f4';
+
+function isTeamMember(member, supervisorId) {
+  if (!supervisorId) return true;
+  const resolved = typeof member.supervisor === 'object' ? member.supervisor?.id : member.supervisor;
+  return String(resolved ?? member.supervisor_id ?? '') === String(supervisorId);
+}
+
+function getMemberName(member) {
+  return [member.first_name, member.last_name].filter(Boolean).join(' ') || member.username;
+}
+
+function getVisitDateKey(visit) {
+  const raw = visit?.scheduled_date ?? visit?.planned_date ?? visit?.date ?? '';
+  return String(raw).split('T')[0];
+}
 
 export default function SupervisorTeamScreen() {
+  const navigation = useNavigation();
+  const { user: currentUser } = useAuth();
   const [members, setMembers] = useState([]);
-  const [filtered, setFiltered] = useState([]);
+  const [visitMap, setVisitMap] = useState({});
+  const [planningPeriod, setPlanningPeriod] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('all');
-
-  // visit counts & gps per member
-  const [visitMap, setVisitMap] = useState({});
-  const [gpsMap, setGpsMap] = useState({});
 
   const fetchData = useCallback(async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const [usersResp, visitsResp] = await Promise.allSettled([
-        userService.getUsers({ role: 'merchandiser', page_size: 200 }),
-        visitService.getVisits({ date: today, page_size: 500 }),
+      const supervisorId = currentUser?.id;
+      if (!supervisorId) {
+        setMembers([]);
+        setVisitMap({});
+        setPlanningPeriod(null);
+        return;
+      }
+
+      const [summaryResp, periodResp] = await Promise.allSettled([
+        userService.getTeamSummary({ supervisor: supervisorId }),
+        visitService.getCurrentPlanningPeriod(),
       ]);
 
-      let rawMembers = [];
-      if (usersResp.status === 'fulfilled') {
-        const raw = usersResp.value;
-        rawMembers = Array.isArray(raw) ? raw : (raw.results ?? []);
-        setMembers(rawMembers);
+      let teamMembers = [];
+      if (summaryResp.status === 'fulfilled') {
+        const summary = summaryResp.value ?? {};
+        teamMembers = Array.isArray(summary.team_members) ? summary.team_members : [];
       }
 
-      // Build visit count map
-      let vMap = {};
-      if (visitsResp.status === 'fulfilled') {
-        const raw = visitsResp.value;
-        const visits = Array.isArray(raw) ? raw : (raw.results ?? []);
-        visits.forEach((v) => {
-          const uid = v.merchandiser ?? v.user;
-          if (!uid) return;
-          if (!vMap[uid]) vMap[uid] = { total: 0, completed: 0 };
-          vMap[uid].total++;
-          if (v.status === 'completed' || v.status === 'COMPLETED') vMap[uid].completed++;
-        });
-        setVisitMap(vMap);
+      if (teamMembers.length === 0) {
+        const usersResp = await userService.getUsers({
+          role: 'merchandiser',
+          page_size: 500,
+          supervisor: supervisorId,
+          supervisor_id: supervisorId,
+        }).catch(() => ({ results: [] }));
+
+        const all = Array.isArray(usersResp) ? usersResp : (usersResp.results ?? []);
+        teamMembers = all.filter((m) => isTeamMember(m, supervisorId));
       }
 
-      // GPS: fetch latest location per merchandiser individually
-      const activeMembers = rawMembers.filter((m) => m.is_active);
-      const gpsResults = await Promise.all(
-        activeMembers.map((m) =>
-          gpsService
-            .getLocations({ user: m.id, page_size: 1, ordering: '-recorded_at' })
-            .then((r) => {
-              const locs = Array.isArray(r) ? r : (r.results ?? []);
-              return locs[0] ? { memberId: String(m.id), loc: locs[0] } : null;
-            })
-            .catch(() => null)
-        )
-      );
+      const period = periodResp.status === 'fulfilled' ? periodResp.value : null;
+      let resolvedPeriod = period;
+      let startDate = period?.start_date;
+      let endDate = period?.end_date;
 
-      let gMap = {};
-      gpsResults.forEach((entry) => {
-        if (entry) gMap[entry.memberId] = entry.loc;
+      let visits = [];
+      if (startDate && endDate) {
+        const visitsResp = await visitService.getVisits({
+          start_date: startDate,
+          end_date: endDate,
+          page_size: 5000,
+        }).catch(() => ({ results: [] }));
+        visits = Array.isArray(visitsResp) ? visitsResp : (visitsResp.results ?? []);
+      } else {
+        const visitsResp = await visitService.getVisits({
+          page_size: 5000,
+        }).catch(() => ({ results: [] }));
+        visits = Array.isArray(visitsResp) ? visitsResp : (visitsResp.results ?? []);
+
+        const visitDates = visits
+          .map(getVisitDateKey)
+          .filter(Boolean)
+          .sort((a, b) => a.localeCompare(b));
+
+        if (visitDates.length > 0) {
+          startDate = visitDates[0];
+          endDate = visitDates[visitDates.length - 1];
+          resolvedPeriod = {
+            name: 'Current Planning Period',
+            start_date: startDate,
+            end_date: endDate,
+            derived: true,
+          };
+        }
+      }
+
+      const teamIds = new Set(teamMembers.map((m) => String(m.id)));
+      const nextVisitMap = {};
+      teamMembers.forEach((member) => {
+        nextVisitMap[String(member.id)] = { total: 0 };
       });
-      setGpsMap(gMap);
+
+      visits.forEach((visit) => {
+        const uid = String(visit.merchandiser ?? visit.user ?? '');
+        if (!uid || !teamIds.has(uid)) return;
+        if ((visit.status ?? '').toLowerCase() === 'cancelled') return;
+        nextVisitMap[uid].total += 1;
+      });
+
+      setMembers(teamMembers.filter((m) => m.is_active));
+      setVisitMap(nextVisitMap);
+      setPlanningPeriod(resolvedPeriod);
     } catch (err) {
-      console.warn('SupervisorTeam fetchData error:', err);
+      console.warn('SupervisorTeam fetchData:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // filter + search
-  useEffect(() => {
-    const fifteenMinAgo = Date.now() - 15 * 60 * 1000;
-    const oneHourAgo = Date.now() - 60 * 60 * 1000;
-    let result = members.filter((m) => m.is_active);
-
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (m) =>
-          (m.first_name + ' ' + m.last_name).toLowerCase().includes(q) ||
-          (m.username ?? '').toLowerCase().includes(q)
-      );
-    }
-
-    if (selectedStatus !== 'all') {
-      result = result.filter((m) => getMemberStatus(m, gpsMap, fifteenMinAgo, oneHourAgo) === selectedStatus);
-    }
-
-    setFiltered(result);
-  }, [members, search, selectedStatus, gpsMap]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchData();
-  };
-
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#4285f4" />
-        </View>
+        <View style={styles.centered}><ActivityIndicator size="large" color={BLUE} /></View>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Team</Text>
-          <Text style={styles.subtitle}>{members.filter((m) => m.is_active).length} field agents</Text>
-        </View>
-        <View style={styles.headerStats}>
-          {[
-            { key: 'active', label: 'Active', color: '#22c55e' },
-            { key: 'gps_off', label: 'GPS Off', color: '#f97316' },
-          ].map(({ key, label, color }) => {
-            const fma = Date.now() - 15 * 60 * 1000;
-            const oha = Date.now() - 60 * 60 * 1000;
-            const count = members.filter(m => m.is_active && getMemberStatus(m, gpsMap, fma, oha) === key).length;
-            return (
-              <View key={key} style={[styles.headerStatChip, { borderColor: color + '50' }]}>
-                <View style={[styles.headerStatDot, { backgroundColor: color }]} />
-                <Text style={[styles.headerStatText, { color }]}>{count} {label}</Text>
-              </View>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* Search */}
-      <View style={styles.searchRow}>
-        <MaterialCommunityIcons name="magnify" size={18} color="#999" style={{ marginRight: 6 }} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search agents..."
-          placeholderTextColor="#aaa"
-          value={search}
-          onChangeText={setSearch}
-          returnKeyType="search"
-        />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
-            <MaterialCommunityIcons name="close-circle" size={16} color="#aaa" />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Status filter tabs */}
-      <View style={styles.filterRow}>
-        {[
-          { key: 'all', label: 'All', color: '#4285f4' },
-          { key: 'active', label: 'Active', color: '#22c55e' },
-          { key: 'inactive', label: 'Inactive', color: '#94a3b8' },
-          { key: 'gps_off', label: 'GPS Off', color: '#f97316' },
-        ].map(({ key: s, label, color }) => {
-          const fma = Date.now() - 15 * 60 * 1000;
-          const oha = Date.now() - 60 * 60 * 1000;
-          const count = s === 'all'
-            ? members.filter(m => m.is_active).length
-            : members.filter(m => m.is_active && getMemberStatus(m, gpsMap, fma, oha) === s).length;
-          const isActive = selectedStatus === s;
-          return (
-            <TouchableOpacity
-              key={s}
-              style={[styles.filterTab, isActive && { backgroundColor: color, borderColor: color }]}
-              onPress={() => setSelectedStatus(s)}
-            >
-              <Text style={[styles.filterTabText, isActive && styles.filterTabTextActive]}>{label}</Text>
-              <View style={[styles.filterBadge, isActive && styles.filterBadgeActive]}>
-                <Text style={[styles.filterBadgeText, isActive && styles.filterBadgeTextActive]}>{count}</Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+        <Text style={styles.title}>Team</Text>
+        <Text style={styles.subtitle}>{members.length} field agents</Text>
+        {planningPeriod?.start_date && planningPeriod?.end_date ? (
+          <Text style={styles.periodLine}>Current Planning Period: {planningPeriod.start_date} to {planningPeriod.end_date}</Text>
+        ) : null}
       </View>
 
       <FlatList
-        data={filtered}
+        data={members}
         keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => (
-          <MemberCard
+        renderItem={({ item, index }) => (
+          <MemberRow
             member={item}
-            visits={visitMap[item.id]}
-            gps={gpsMap[item.id]}
+            totalVisits={visitMap[String(item.id)]?.total ?? 0}
+            isLast={index === members.length - 1}
+            onPress={() => navigation.navigate('SupervisorReport', {
+              memberId: item.id,
+              memberName: item.first_name ?? item.username,
+            })}
           />
         )}
         contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4285f4']} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              fetchData();
+            }}
+            colors={[BLUE]}
+          />
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <MaterialCommunityIcons name="account-group-outline" size={48} color="#ccc" />
+            <MaterialCommunityIcons name="account-off-outline" size={48} color="#d1d5db" />
             <Text style={styles.emptyText}>No agents found</Text>
           </View>
         }
@@ -228,236 +187,67 @@ export default function SupervisorTeamScreen() {
   );
 }
 
-function getMemberStatus(member, gpsMap, fifteenMinAgo, oneHourAgo) {
-  // If user explicitly turned GPS off, reflect it immediately
-  if (member.gps_active === false) return 'gps_off';
-  const loc = gpsMap[String(member.id)];
-  if (!loc) return 'gps_off';
-  const t = new Date(loc.recorded_at ?? loc.timestamp).getTime();
-  if (t >= fifteenMinAgo) return 'active';
-  if (oneHourAgo != null && t >= oneHourAgo) return 'inactive';
-  return 'gps_off';
-}
-
-function MemberCard({ member, visits, gps }) {
-  const fifteenMinAgo = Date.now() - 15 * 60 * 1000;
-  const oneHourAgo = Date.now() - 60 * 60 * 1000;
-  const status = getMemberStatus(member, gps ? { [String(member.id)]: gps } : {}, fifteenMinAgo, oneHourAgo);
-
-  const statusLabel = status === 'active' ? 'Active' : status === 'inactive' ? 'Inactive' : 'GPS Off';
-  const sColor = STATUS_COLORS[status] ?? '#94a3b8';
-
-  const fullName =
-    (member.first_name || '') + (member.last_name ? ' ' + member.last_name : '') ||
-    member.username;
-
-  const completed = visits?.completed ?? 0;
-  const total = visits?.total ?? 0;
-  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-  const barColor = pct >= 80 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
-
-  const lastSeen = (gps?.recorded_at ?? gps?.timestamp)
-    ? formatRelativeTime(new Date(gps.recorded_at ?? gps.timestamp))
-    : 'Never';
-
-  const initials = (
-    ((member.first_name?.[0] ?? '') + (member.last_name?.[0] ?? '')) || (member.username?.[0] ?? '?')
-  ).toUpperCase();
+function MemberRow({ member, totalVisits, isLast, onPress }) {
+  const fullName = getMemberName(member);
+  const initials = ((member.first_name?.[0] || '') + (member.last_name?.[0] || '') || member.username?.[0] || '?').toUpperCase();
 
   return (
-    <View style={styles.memberCard}>
-      <View style={[styles.memberAccent, { backgroundColor: sColor }]} />
-      <View style={[styles.memberAvatar, { backgroundColor: sColor + '20', borderColor: sColor + '50' }]}>
-        <Text style={[styles.memberAvatarText, { color: sColor }]}>{initials}</Text>
-      </View>
-      <View style={styles.memberInfo}>
-        <View style={styles.memberRow}>
-          <View style={{ flex: 1, marginRight: 8 }}>
-            <Text style={styles.memberName} numberOfLines={1}>{fullName}</Text>
-            <Text style={styles.memberUsername}>@{member.username}</Text>
-          </View>
-          <View style={[styles.statusPill, { backgroundColor: sColor + '18', borderColor: sColor + '50' }]}>
-            <View style={[styles.statusDot, { backgroundColor: sColor }]} />
-            <Text style={[styles.statusText, { color: sColor }]}>{statusLabel}</Text>
-          </View>
-        </View>
-
-        <View style={styles.memberMetaRow}>
-          <View style={styles.memberMetaChip}>
-            <MaterialCommunityIcons name="store-outline" size={11} color="#999" />
-            <Text style={styles.memberMetaText}>
-              {total > 0 ? `${completed}/${total} visits` : 'No visits today'}
-            </Text>
-          </View>
-          <View style={styles.memberMetaChip}>
-            <MaterialCommunityIcons name="clock-outline" size={11} color="#999" />
-            <Text style={styles.memberMetaText}>{lastSeen}</Text>
-          </View>
-        </View>
-
-        {total > 0 && (
-          <View style={styles.visitProgressRow}>
-            <View style={styles.visitBarBg}>
-              <View style={[styles.visitBarFill, { width: `${pct}%`, backgroundColor: barColor }]} />
-            </View>
-            <Text style={styles.visitPct}>{pct}%</Text>
+    <TouchableOpacity style={[styles.row, isLast && styles.rowLast]} onPress={onPress} activeOpacity={0.65}>
+      <View style={styles.avatarWrap}>
+        {member.avatar_url ? (
+          <Image source={{ uri: member.avatar_url }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, styles.avatarFallback]}>
+            <Text style={styles.avatarInitials}>{initials}</Text>
           </View>
         )}
       </View>
-    </View>
+
+      <View style={styles.info}>
+        <Text style={styles.name} numberOfLines={1}>{fullName}</Text>
+        <Text style={styles.periodVisits}>{totalVisits} Total Visits</Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
-function formatRelativeTime(date) {
-  const diff = Date.now() - date.getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return date.toLocaleDateString();
-}
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f0f2f8' },
+  safe: { flex: 1, backgroundColor: '#f8fafc', paddingTop: Platform.OS === 'android' ? 40 : 0 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
+  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+  title: { fontSize: 26, fontWeight: '800', color: '#1e293b' },
+  subtitle: { fontSize: 13, color: '#94a3b8', marginTop: 2 },
+  periodLine: { marginTop: 6, fontSize: 11, color: '#64748b' },
+
+  listContent: { paddingHorizontal: 16, paddingBottom: 20 },
+
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fff',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#e8eaed',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    borderBottomColor: '#f1f5f9',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
   },
-  title: { fontSize: 22, fontWeight: '800', color: '#1a1a2e' },
-  subtitle: { fontSize: 13, color: '#888', marginTop: 2 },
+  rowLast: {
+    borderBottomWidth: 0,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+  },
 
-  headerStats: { flexDirection: 'row', gap: 6 },
-  headerStatChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#fafafa',
-  },
-  headerStatDot: { width: 7, height: 7, borderRadius: 3.5 },
-  headerStatText: { fontSize: 11, fontWeight: '700' },
+  avatarWrap: { marginRight: 12 },
+  avatar: { width: 42, height: 42, borderRadius: 21 },
+  avatarFallback: { backgroundColor: '#dbeafe', justifyContent: 'center', alignItems: 'center' },
+  avatarInitials: { fontSize: 14, fontWeight: '800', color: BLUE },
 
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    marginHorizontal: 12,
-    marginTop: 10,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#eaecf0',
-  },
-  searchInput: { flex: 1, fontSize: 14, color: '#333' },
+  info: { flex: 1 },
+  name: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginBottom: 3 },
+  periodVisits: { fontSize: 12, color: '#64748b' },
 
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 6,
-  },
-  filterTab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    borderWidth: 1.5,
-    borderColor: '#e0e0e0',
-    gap: 5,
-  },
-  filterTabText: { fontSize: 12, color: '#555', fontWeight: '600' },
-  filterTabTextActive: { color: '#fff' },
-  filterBadge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#e8eaed',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  filterBadgeActive: { backgroundColor: 'rgba(255,255,255,0.3)' },
-  filterBadgeText: { fontSize: 10, fontWeight: '700', color: '#555' },
-  filterBadgeTextActive: { color: '#fff' },
-
-  listContent: { padding: 12, gap: 10, paddingBottom: 24 },
-
-  memberCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  memberAccent: { width: 4, flexShrink: 0 },
-  memberAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-    alignSelf: 'center',
-    marginLeft: 12,
-  },
-  memberAvatarText: { fontWeight: '800', fontSize: 17 },
-  memberInfo: { flex: 1, padding: 12 },
-  memberRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  memberName: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
-  memberUsername: { fontSize: 12, color: '#aaa', marginTop: 1 },
-
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    gap: 4,
-    flexShrink: 0,
-  },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 11, fontWeight: '700' },
-
-  memberMetaRow: { flexDirection: 'row', gap: 12, marginTop: 7 },
-  memberMetaChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  memberMetaText: { fontSize: 11, color: '#999' },
-
-  visitProgressRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  visitBarBg: {
-    flex: 1,
-    height: 5,
-    backgroundColor: '#e8eaed',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  visitBarFill: { height: '100%', borderRadius: 3 },
-  visitPct: { fontSize: 11, color: '#888', fontWeight: '700', minWidth: 30, textAlign: 'right' },
-
-  empty: { alignItems: 'center', marginTop: 60 },
-  emptyText: { color: '#bbb', marginTop: 12, fontSize: 15 },
+  empty: { alignItems: 'center', paddingTop: 60 },
+  emptyText: { fontSize: 14, color: '#cbd5e1', marginTop: 12 },
 });

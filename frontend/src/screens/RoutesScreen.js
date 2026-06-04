@@ -8,11 +8,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { visitService, storeService } from '../services/apiService';
 
 const STATUS_CONFIG = {
-  completed:   { label: 'Complétée',  color: '#16a34a', bg: '#dcfce7', icon: 'check-circle' },
-  pending:     { label: 'En attente', color: '#f59e0b', bg: '#fef3c7', icon: 'clock-outline' },
-  scheduled:   { label: 'Planifiée',  color: '#2563eb', bg: '#dbeafe', icon: 'calendar-clock' },
-  cancelled:   { label: 'Annulée',    color: '#ef4444', bg: '#fee2e2', icon: 'close-circle' },
-  in_progress: { label: 'En cours',   color: '#8b5cf6', bg: '#ede9fe', icon: 'progress-clock' },
+  completed:   { label: 'Completed',  color: '#16a34a', bg: '#dcfce7', icon: 'check-circle' },
+  pending:     { label: 'Pending', color: '#f59e0b', bg: '#fef3c7', icon: 'clock-outline' },
+  scheduled:   { label: 'Scheduled',  color: '#2563eb', bg: '#dbeafe', icon: 'calendar-clock' },
+  cancelled:   { label: 'Cancelled',    color: '#ef4444', bg: '#fee2e2', icon: 'close-circle' },
+  in_progress: { label: 'In Progress',   color: '#8b5cf6', bg: '#ede9fe', icon: 'progress-clock' },
 };
 
 export default function RoutesScreen({ navigation }) {
@@ -43,7 +43,7 @@ export default function RoutesScreen({ navigation }) {
       // Group by scheduled_date
       const grouped = {};
       visits.forEach(v => {
-        const date = v.scheduled_date?.split('T')[0] || 'Sans date';
+        const date = v.scheduled_date?.split('T')[0] || 'No date';
         if (!grouped[date]) grouped[date] = [];
         grouped[date].push(v);
       });
@@ -88,15 +88,15 @@ export default function RoutesScreen({ navigation }) {
   }, []);
 
   const formatDateLabel = (dateStr, isToday) => {
-    if (dateStr === 'Sans date') return dateStr;
+    if (dateStr === 'No date') return dateStr;
     const d = new Date(dateStr + 'T00:00:00');
-    const label = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-    return isToday ? `Aujourd'hui — ${label}` : label.charAt(0).toUpperCase() + label.slice(1);
+    const label = d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
+    return isToday ? `Today - ${label}` : label;
   };
 
   const formatTime = (dateStr) => {
     if (!dateStr) return null;
-    return new Date(dateStr).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
   const renderSectionHeader = ({ section }) => {
@@ -140,7 +140,7 @@ export default function RoutesScreen({ navigation }) {
           <View style={styles.visitTop}>
             <View style={{ flex: 1 }}>
               <Text style={styles.storeName} numberOfLines={1}>
-                {store?.name || item.store_name || 'Magasin'}
+                {store?.name || item.store_name || 'Store'}
               </Text>
               {store?.address ? (
                 <Text style={styles.storeAddress} numberOfLines={1}>{store.address}</Text>
@@ -184,20 +184,20 @@ export default function RoutesScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <MaterialCommunityIcons name="arrow-left" size={24} color="#1e293b" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mes Routes</Text>
+        <Text style={styles.headerTitle}>My Routes</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#2563eb" />
-          <Text style={styles.loadingText}>Chargement des routes...</Text>
+          <Text style={styles.loadingText}>Loading routes...</Text>
         </View>
       ) : sections.length === 0 ? (
         <View style={styles.emptyWrap}>
           <MaterialCommunityIcons name="map-marker-off-outline" size={56} color="#cbd5e1" />
-          <Text style={styles.emptyTitle}>Aucune route assignée</Text>
-          <Text style={styles.emptySubtitle}>Vos routes apparaîtront ici une fois planifiées</Text>
+          <Text style={styles.emptyTitle}>No assigned routes</Text>
+          <Text style={styles.emptySubtitle}>Your routes will appear here once they are scheduled.</Text>
         </View>
       ) : (
         <SectionList

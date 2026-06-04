@@ -1,657 +1,366 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
-  Platform,
+  Modal,
+  Linking,
   Alert,
-  Modal
+  Platform,
 } from 'react-native';
+import { Calendar } from 'react-native-calendars';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import * as Print from 'expo-print';
-import { shareAsync } from 'expo-sharing';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../contexts/AuthContext';
-import { visitService, storeService, documentService } from '../services/apiService';
+import { documentService } from '../services/apiService';
 
-const ReportsScreen = () => {
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-US', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+};
+
+const toDateKey = (dateStr) => {
+  if (!dateStr) return null;
+  return new Date(dateStr).toISOString().split('T')[0]; // YYYY-MM-DD
+};
+
+export default function ReportsScreen() {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
   const [reports, setReports] = useState([]);
-  const [todayData, setTodayData] = useState(null);
-  // Removed PDF generation state and logic
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(null); // YYYY-MM-DD or null = show all
+  const [calendarVisible, setCalendarVisible] = useState(false);
+  const [markedDates, setMarkedDates] = useState({});
+  const [menuDoc, setMenuDoc] = useState(null); // doc whose 3-dot menu is open
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 }); // screen position of the menu
 
-  useEffect(() => {
-    fetchTodayData();
-  }, []);
-
-  // Refresh data when screen comes into focus
-  useFocusEffect(
-    React.useCallback(() => {
-      fetchTodayData();
-    }, [])
-  );
-
-  const fetchTodayData = async () => {
+  const loadReports = useCallback(async (isRefresh = false) => {
     try {
-      setLoading(true);
-      
-      // Get work day start time from AsyncStorage
-      const dayStartTime = await AsyncStorage.getItem('dayStartTime');
-      const dayStarted = await AsyncStorage.getItem('dayStarted');
-      const isDayInProgress = dayStarted === 'true' && !!dayStartTime;
-      
-      // Get today's date
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Fetch all visits
-      const visitsResponse = await visitService.getVisits({ page_size: 1000 });
-      const allVisits = visitsResponse.results || visitsResponse;
-      
-      // Filter today's visits for current user
-      const todayVisits = allVisits.filter(v => {
-        const matchUser = v.merchandiser === user?.id || v.user === user?.id || 
-                          v.merchandiser_id === user?.id || v.user_id === user?.id;
-        const visitDate = v.scheduled_date?.split('T')[0];
-        return matchUser && visitDate === today;
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+
+      const response = await documentService.getDocuments({
+        document_type: 'daily_report',
+        page_size: 500,
       });
-      
-      // Get completed visits
-      const completedVisits = todayVisits.filter(v => v.status === 'completed');
-      
-      // Fetch store details for completed visits
-      const storesData = [];
-      for (const visit of completedVisits) {
-        if (visit.store) {
-          try {
-            const store = await storeService.getStore(visit.store);
-            
-            // Calculate time spent in store
-            let timeSpent = 'N/A';
-            if (visit.check_in_time && visit.check_out_time) {
-              const checkIn = new Date(visit.check_in_time);
-              const checkOut = new Date(visit.check_out_time);
-              const diff = Math.floor((checkOut - checkIn) / 1000);
-              const hours = Math.floor(diff / 3600);
-              const minutes = Math.floor((diff % 3600) / 60);
-              timeSpent = `${hours}h ${minutes}m`;
-            }
-            
-            // Extract break information
-            const breakData = {
-              breakStartTime: visit.break_start_time ? new Date(visit.break_start_time).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : null,
-              breakEndTime: visit.break_end_time ? new Date(visit.break_end_time).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : null,
-              allowedDuration: visit.break_duration || 30,
-              actualDuration: visit.break_took || null,
-              overtime: visit.break_took && visit.break_duration && visit.break_took > visit.break_duration ? visit.break_took - visit.break_duration : 0,
-              missed: !visit.break_start_time && visit.break_duration ? true : false,
-            };
-            
-            storesData.push({
-              name: store.name,
-              address: store.address,
-              checkInTime: visit.check_in_time || visit.checked_in_at,
-              checkOutTime: visit.check_out_time,
-              timeSpent,
-              notes: visit.notes || 'Aucune note',
-              // Note: photos and stock data would come from visit object if available
-              // For now using placeholder values
-              photosCount: 4, // Assumed completed visits have 4 photos
-              stockUpdated: true,
-              break: breakData,
-            });
-          } catch (error) {
-            console.error('Error fetching store:', error);
-          }
-        }
-      }
-      
-      // Calculate hours worked
-      let hoursWorked = '0h 0m';
-      if (dayStarted === 'true' && dayStartTime) {
-        const startTime = parseInt(dayStartTime);
-        const now = Date.now();
-        const elapsed = now - startTime;
-        const hours = Math.floor(elapsed / (1000 * 60 * 60));
-        const minutes = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
-        hoursWorked = `${hours}h ${minutes}m`;
-      }
-      
-      setTodayData({
-        date: new Date().toLocaleDateString('fr-FR', { 
-          weekday: 'long', 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
-        }),
-        storesVisited: completedVisits.length,
-        hoursWorked,
-        stores: storesData,
-        dayStartTime: dayStartTime ? new Date(parseInt(dayStartTime)).toLocaleTimeString('fr-FR') : null,
-        reportStatus: isDayInProgress ? 'En cours' : 'Closed',
-        reportStatusIcon: isDayInProgress ? 'clock-outline' : 'check-circle',
-        reportStatusTextColor: isDayInProgress ? '#f59e0b' : '#10b981',
-        reportStatusBgColor: isDayInProgress ? '#fef3c7' : '#d1fae5',
+
+      const docs = (response.results || response || []).filter((doc) =>
+        doc.merchandiser === user?.id ||
+        doc.uploaded_by === user?.id ||
+        doc.user === user?.id ||
+        doc.merchandiser_id === user?.id
+      );
+
+      docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      // Build marked dates map for the calendar (dots on days that have a report)
+      const marks = {};
+      docs.forEach((d) => {
+        const dk = toDateKey(d.created_at);
+        if (dk) marks[dk] = { marked: true, dotColor: '#6366f1' };
       });
-      
-    } catch (error) {
-      console.error('Error fetching today data:', error);
-      Alert.alert('Erreur', 'Impossible de charger les données');
+
+      setReports(docs);
+      setMarkedDates(marks);
+    } catch (err) {
+      console.error('ReportsScreen loadReports:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  }, [user]);
+
+  useFocusEffect(useCallback(() => { loadReports(); }, [loadReports]));
+
+  const handleOpen = async (doc) => {
+    const url = doc.file || doc.file_url;
+    if (!url) { Alert.alert('Unavailable', 'The file is not available yet.'); return; }
+    try { await Linking.openURL(url); } catch { Alert.alert('Error', 'Unable to open the file.'); }
   };
 
-  // Removed generatePDF logic. Only end-of-day report is kept.
+  const handleDelete = (doc) => {
+    Alert.alert('Delete', `Delete "${doc.title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          try {
+            await documentService.deleteDocument(doc.id);
+            const remaining = reports.filter((r) => r.id !== doc.id);
+            setReports(remaining);
+            const marks = {};
+            remaining.forEach((d) => {
+              const dk = toDateKey(d.created_at);
+              if (dk) marks[dk] = { marked: true, dotColor: '#6366f1' };
+            });
+            setMarkedDates(marks);
+          } catch { Alert.alert('Error', 'Unable to delete the report.'); }
+        },
+      },
+    ]);
+  };
+
+  const handleDayPress = (day) => {
+    const key = day.dateString; // YYYY-MM-DD
+    setSelectedDate((prev) => (prev === key ? null : key)); // tap again to clear
+    setCalendarVisible(false);
+  };
+
+  const clearFilter = () => setSelectedDate(null);
+
+  const getReportFileUrl = (doc) => doc.file || doc.file_url;
+
+  const getReportExtension = (doc) => {
+    const fileUrl = getReportFileUrl(doc) || '';
+    if (fileUrl.toLowerCase().includes('.pdf')) {
+      return 'PDF';
+    }
+
+    return 'DOC';
+  };
+
+  const filtered = selectedDate
+    ? reports.filter((r) => toDateKey(r.created_at) === selectedDate)
+    : reports;
+
+  const renderItem = ({ item, index }) => (
+    <View style={[styles.row, index === filtered.length - 1 && styles.rowLast]}>
+      <View style={styles.iconWrap}>
+        <MaterialCommunityIcons name="file-document-outline" size={22} color="#6366f1" />
+      </View>
+      <View style={styles.info}>
+        <View style={styles.rowTop}>
+          <Text style={styles.rowTitle} numberOfLines={1}>{item.title || 'Daily Report'}</Text>
+          <View style={styles.fileBadge}>
+            <MaterialCommunityIcons name="file-pdf-box" size={14} color="#b91c1c" />
+            <Text style={styles.fileBadgeText}>{getReportExtension(item)}</Text>
+          </View>
+        </View>
+        <View style={styles.meta}>
+          <MaterialCommunityIcons name="calendar-outline" size={12} color="#94a3b8" />
+          <Text style={styles.metaText}>{formatDate(item.created_at)}</Text>
+          {(item.merchandiser_name || item.uploaded_by_name) ? (
+            <>
+              <MaterialCommunityIcons name="account-outline" size={12} color="#94a3b8" style={{ marginLeft: 6 }} />
+              <Text style={styles.metaText}>{item.merchandiser_name || item.uploaded_by_name}</Text>
+            </>
+          ) : null}
+        </View>
+        <TouchableOpacity style={styles.primaryActionChip} activeOpacity={0.8} onPress={() => handleOpen(item)}>
+          <MaterialCommunityIcons name="open-in-new" size={14} color="#4f46e5" />
+          <Text style={styles.primaryActionText}>Open PDF</Text>
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity
+        style={styles.dotsBtn}
+        activeOpacity={0.7}
+        onPress={(e) => {
+          e.target.measure((fx, fy, width, height, px, py) => {
+            setMenuPos({ top: py + height + 4, right: 16 });
+            setMenuDoc(item);
+          });
+        }}
+      >
+        <MaterialCommunityIcons name="dots-vertical" size={20} color="#64748b" />
+      </TouchableOpacity>
+    </View>
+  );
+
+  // ── Action-sheet modal ─────────────────────────────────────────────────────
+  const ActionMenu = () => (
+    <Modal
+      visible={!!menuDoc}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setMenuDoc(null)}
+    >
+      <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuDoc(null)}>
+        <View style={[styles.menuCard, { position: 'absolute', top: menuPos.top, right: menuPos.right }]}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={() => { setMenuDoc(null); handleOpen(menuDoc); }}
+          >
+            <MaterialCommunityIcons name="open-in-new" size={19} color="#6366f1" />
+            <Text style={styles.menuItemText}>Open PDF</Text>
+          </TouchableOpacity>
+          <View style={styles.menuDivider} />
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={() => { const doc = menuDoc; setMenuDoc(null); handleDelete(doc); }}
+          >
+            <MaterialCommunityIcons name="trash-can-outline" size={19} color="#ef4444" />
+            <Text style={[styles.menuItemText, styles.menuItemDanger]}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // Build marked dates with selection highlight
+  const calendarMarks = { ...markedDates };
+  if (selectedDate) {
+    calendarMarks[selectedDate] = {
+      ...(calendarMarks[selectedDate] || {}),
+      selected: true,
+      selectedColor: '#6366f1',
+      dotColor: '#fff',
+    };
+  }
+
+  const todayStr = new Date().toISOString().split('T')[0];
 
   return (
     <SafeAreaView style={styles.container}>
+      <ActionMenu />
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Reports</Text>
-        <MaterialCommunityIcons name="clipboard-text" size={28} color="#6366f1" />
+        <View style={styles.headerRight}>
+          {selectedDate && (
+            <TouchableOpacity style={styles.clearBtn} onPress={clearFilter} activeOpacity={0.7}>
+              <MaterialCommunityIcons name="close-circle" size={16} color="#6366f1" />
+              <Text style={styles.clearBtnText}>{selectedDate}</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={styles.calIconBtn} onPress={() => setCalendarVisible(true)} activeOpacity={0.7}>
+            <MaterialCommunityIcons name="calendar-month-outline" size={24} color="#6366f1" />
+          </TouchableOpacity>
+        </View>
       </View>
 
+      {/* Calendar Modal */}
+      <Modal
+        visible={calendarVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCalendarVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCalendarVisible(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.calendarCard}>
+            <View style={styles.calendarHeader}>
+              <Text style={styles.calendarTitle}>Sélectionner une date</Text>
+              <Text style={styles.calendarTitle}>Select a date</Text>
+              <TouchableOpacity onPress={() => setCalendarVisible(false)}>
+                <MaterialCommunityIcons name="close" size={22} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            <Calendar
+              current={selectedDate || todayStr}
+              onDayPress={handleDayPress}
+              markedDates={calendarMarks}
+              maxDate={todayStr}
+              theme={{
+                selectedDayBackgroundColor: '#6366f1',
+                selectedDayTextColor: '#fff',
+                todayTextColor: '#6366f1',
+                dotColor: '#6366f1',
+                arrowColor: '#6366f1',
+                textDayFontWeight: '600',
+                textMonthFontWeight: '700',
+                calendarBackground: '#fff',
+                textSectionTitleColor: '#94a3b8',
+              }}
+            />
+            {selectedDate && (
+              <TouchableOpacity style={styles.clearAllBtn} onPress={clearFilter}>
+                <Text style={styles.clearAllText}>Clear filter</Text>
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {loading ? (
-        <View style={styles.loadingContainer}>
+        <View style={styles.center}>
           <ActivityIndicator size="large" color="#6366f1" />
         </View>
+      ) : reports.length === 0 ? (
+        <View style={styles.center}>
+          <MaterialCommunityIcons name="file-document-outline" size={64} color="#cbd5e1" />
+          <Text style={styles.emptyTitle}>No reports</Text>
+          <Text style={styles.emptySubtitle}>End-of-day generated reports will appear here.</Text>
+        </View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.center}>
+          <MaterialCommunityIcons name="calendar-blank-outline" size={48} color="#cbd5e1" />
+          <Text style={styles.emptyTitle}>No reports</Text>
+          <Text style={styles.emptySubtitle}>No reports for {selectedDate}.</Text>
+          <TouchableOpacity style={styles.clearAllBtn} onPress={clearFilter}>
+            <Text style={styles.clearAllText}>View all reports</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
-        <ScrollView 
-          style={styles.scrollView} 
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <Text style={styles.sectionTitle}>AUJOURD'HUI</Text>
-          
-          {todayData ? (
-            <TouchableOpacity 
-              style={styles.reportCard}
-              activeOpacity={0.7}
-              onPress={() => setShowDetailsModal(true)}
-            >
-              <View style={styles.reportHeader}>
-                <Text style={styles.dateText}>{todayData.date}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: todayData.reportStatusBgColor || '#d1fae5' }]}>
-                  <MaterialCommunityIcons
-                    name={todayData.reportStatusIcon || 'check-circle'}
-                    size={14}
-                    color={todayData.reportStatusTextColor || '#10b981'}
-                  />
-                  <Text style={[styles.statusText, { color: todayData.reportStatusTextColor || '#10b981' }]}> 
-                    {todayData.reportStatus || 'Closed'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.statsContainer}>
-                <View style={styles.statItem}>
-                  <MaterialCommunityIcons name="store" size={24} color="#6366f1" />
-                  <Text style={styles.statNumber}>{todayData.storesVisited}</Text>
-                  <Text style={styles.statLabel}>MAGASINS VISITÉS</Text>
-                </View>
-
-                <View style={styles.statItem}>
-                  <MaterialCommunityIcons name="clock-outline" size={24} color="#f59e0b" />
-                  <Text style={styles.statNumber}>{todayData.hoursWorked}</Text>
-                  <Text style={styles.statLabel}>HEURES TRAVAILLÉES</Text>
-                </View>
-              </View>
-              
-              {/* PDF generation button removed. Only end-of-day report is available. */}
-              
-              <View style={styles.viewDetailsHint}>
-                <MaterialCommunityIcons name="gesture-tap" size={16} color="#6366f1" />
-                <Text style={styles.viewDetailsText}>Appuyez pour voir les détails</Text>
-              </View>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.emptyState}>
-              <MaterialCommunityIcons name="file-document-outline" size={64} color="#cbd5e1" />
-              <Text style={styles.emptyStateText}>Aucune donnée disponible</Text>
-            </View>
-          )}
-        </ScrollView>
+          onRefresh={() => loadReports(true)}
+          refreshing={refreshing}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListHeaderComponent={
+            <Text style={styles.countLabel}>
+              {filtered.length} report{filtered.length > 1 ? 's' : ''}
+              {selectedDate ? ` · ${selectedDate}` : ''}
+            </Text>
+          }
+        />
       )}
-      
-      {/* Details Modal */}
-      <Modal
-        visible={showDetailsModal}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowDetailsModal(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowDetailsModal(false)}>
-              <MaterialCommunityIcons name="close" size={28} color="#111" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Détails du Rapport</Text>
-            <View style={{ width: 28 }} />
-          </View>
-
-          <ScrollView style={styles.modalContent}>
-            {todayData && (
-              <>
-                {/* Summary Section */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Résumé de la Journée</Text>
-                  <View style={styles.modalSummaryCard}>
-                    <View style={styles.modalSummaryRow}>
-                      <Text style={styles.modalSummaryLabel}>Date:</Text>
-                      <Text style={styles.modalSummaryValue}>{todayData.date}</Text>
-                    </View>
-                    {todayData.dayStartTime && (
-                      <View style={styles.modalSummaryRow}>
-                        <Text style={styles.modalSummaryLabel}>Début de journée:</Text>
-                        <Text style={styles.modalSummaryValue}>{todayData.dayStartTime}</Text>
-                      </View>
-                    )}
-                    <View style={styles.modalSummaryRow}>
-                      <Text style={styles.modalSummaryLabel}>Statut:</Text>
-                      <Text style={[styles.modalSummaryValue, { color: todayData.reportStatusTextColor || '#10b981' }]}>
-                        {todayData.reportStatus || 'Closed'}
-                      </Text>
-                    </View>
-                    <View style={styles.modalSummaryRow}>
-                      <Text style={styles.modalSummaryLabel}>Heures travaillées:</Text>
-                      <Text style={[styles.modalSummaryValue, { color: '#f59e0b' }]}>{todayData.hoursWorked}</Text>
-                    </View>
-                    <View style={styles.modalSummaryRow}>
-                      <Text style={styles.modalSummaryLabel}>Magasins visités:</Text>
-                      <Text style={[styles.modalSummaryValue, { color: '#6366f1' }]}>{todayData.storesVisited}</Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Stores Details Section */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Détails des Visites</Text>
-                  {todayData.stores.length > 0 ? (
-                    todayData.stores.map((store, index) => (
-                      <View key={index} style={styles.detailStoreCard}>
-                        <View style={styles.detailStoreHeader}>
-                          <View style={styles.detailStoreNumber}>
-                            <Text style={styles.detailStoreNumberText}>{index + 1}</Text>
-                          </View>
-                          <View style={styles.detailStoreHeaderContent}>
-                            <Text style={styles.detailStoreName}>{store.name}</Text>
-                            <Text style={styles.detailStoreAddress}>{store.address}</Text>
-                          </View>
-                        </View>
-
-                        <View style={styles.detailStoreInfo}>
-                          <View style={styles.detailInfoRow}>
-                            <MaterialCommunityIcons name="login" size={16} color="#10b981" />
-                            <Text style={styles.detailInfoLabel}>Arrivée:</Text>
-                            <Text style={styles.detailInfoValue}>
-                              {store.checkInTime ? new Date(store.checkInTime).toLocaleTimeString('fr-FR') : 'N/A'}
-                            </Text>
-                          </View>
-                          
-                          <View style={styles.detailInfoRow}>
-                            <MaterialCommunityIcons name="logout" size={16} color="#ef4444" />
-                            <Text style={styles.detailInfoLabel}>Départ:</Text>
-                            <Text style={styles.detailInfoValue}>
-                              {store.checkOutTime ? new Date(store.checkOutTime).toLocaleTimeString('fr-FR') : 'N/A'}
-                            </Text>
-                          </View>
-                          
-                          <View style={styles.detailInfoRow}>
-                            <MaterialCommunityIcons name="clock-outline" size={16} color="#f59e0b" />
-                            <Text style={styles.detailInfoLabel}>Temps passé:</Text>
-                            <Text style={[styles.detailInfoValue, { fontWeight: '700', color: '#f59e0b' }]}>
-                              {store.timeSpent}
-                            </Text>
-                          </View>
-                        </View>
-
-                        <View style={styles.detailStoreActions}>
-                          <View style={styles.detailActionChip}>
-                            <MaterialCommunityIcons name="camera" size={14} color="#10b981" />
-                            <Text style={styles.detailActionText}>{store.photosCount} Photos</Text>
-                          </View>
-                          
-                          <View style={styles.detailActionChip}>
-                            <MaterialCommunityIcons name="package-variant" size={14} color="#6366f1" />
-                            <Text style={styles.detailActionText}>
-                              {store.stockUpdated ? 'Stock Mis à Jour' : 'Stock Non Mis à Jour'}
-                            </Text>
-                          </View>
-                        </View>
-
-                        {store.notes && (
-                          <View style={styles.detailStoreNotes}>
-                            <Text style={styles.detailNotesLabel}>Notes:</Text>
-                            <Text style={styles.detailNotesText}>{store.notes}</Text>
-                          </View>
-                        )}
-                      </View>
-                    ))
-                  ) : (
-                    <View style={styles.emptyState}>
-                      <Text style={styles.emptyStateText}>Aucune visite complétée</Text>
-                    </View>
-                  )}
-                </View>
-              </>
-            )}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-    paddingTop: Platform.OS === 'android' ? 40 : 0
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 24,
-    marginTop: 10
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1e293b'
-  },
-  scrollView: {
-    flex: 1
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#94a3b8',
-    letterSpacing: 0.5,
-    marginBottom: 12
-  },
-  reportCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3
-  },
-  reportHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20
-  },
-  dateText: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#1e293b'
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#d1fae5',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14
-  },
-  statusText: {
-    fontSize: 12,
-    color: '#10b981',
-    fontWeight: '700'
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 18,
-    paddingVertical: 8
-  },
-  statItem: {
-    alignItems: 'center',
-    flex: 1
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1e293b',
-    marginTop: 8,
-    marginBottom: 4
-  },
-  statLabel: {
-    fontSize: 10,
-    color: '#94a3b8',
-    fontWeight: '700',
-    marginTop: 4,
-    textAlign: 'center',
-    letterSpacing: 0.3
-  },
-  downloadButton: {
-    backgroundColor: '#6366f1',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 10,
-    gap: 10
-  },
-  downloadButtonDisabled: {
-    backgroundColor: '#94a3b8',
-  },
-  downloadButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 15
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: '#94a3b8',
-    marginTop: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  viewDetailsHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-  },
-  viewDetailsText: {
-    fontSize: 13,
-    color: '#6366f1',
-    fontWeight: '600',
-  },
-  // Modal Styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111',
-  },
-  modalContent: {
-    flex: 1,
-    padding: 16,
-  },
-  modalSection: {
-    marginBottom: 24,
-  },
-  modalSectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 12,
-  },
-  modalSummaryCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  modalSummaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  modalSummaryLabel: {
-    fontSize: 14,
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  modalSummaryValue: {
-    fontSize: 14,
-    color: '#1e293b',
-    fontWeight: '700',
-  },
-  detailStoreCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  detailStoreHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  detailStoreNumber: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#6366f1',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  detailStoreNumberText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  detailStoreHeaderContent: {
-    flex: 1,
-  },
-  detailStoreName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 4,
-  },
-  detailStoreAddress: {
-    fontSize: 13,
-    color: '#64748b',
-    lineHeight: 18,
-  },
-  detailStoreInfo: {
-    marginBottom: 12,
-  },
-  detailInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    gap: 8,
-  },
-  detailInfoLabel: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  detailInfoValue: {
-    fontSize: 13,
-    color: '#1e293b',
-    fontWeight: '600',
-    flex: 1,
-    textAlign: 'right',
-  },
-  detailStoreActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  detailActionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#f1f5f9',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  detailActionText: {
-    fontSize: 11,
-    color: '#1e293b',
-    fontWeight: '600',
-  },
-  detailStoreNotes: {
-    backgroundColor: '#fef3c7',
-    borderRadius: 8,
-    padding: 12,
-    borderLeftWidth: 3,
-    borderLeftColor: '#f59e0b',
-  },
-  detailNotesLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#92400e',
-    marginBottom: 4,
-  },
-  detailNotesText: {
-    fontSize: 13,
-    color: '#78350f',
-    lineHeight: 18,
-  },
+  container: { flex: 1, backgroundColor: '#f8fafc', paddingTop: Platform.OS === 'android' ? 40 : 0 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 16 },
+  title: { fontSize: 28, fontWeight: '800', color: '#1e293b' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  calIconBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#ede9fe', alignItems: 'center', justifyContent: 'center' },
+  clearBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ede9fe', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  clearBtnText: { fontSize: 12, fontWeight: '600', color: '#6366f1' },
+  // Calendar modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  calendarCard: { backgroundColor: '#fff', borderRadius: 20, overflow: 'hidden', width: '100%', maxWidth: 380, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 24, elevation: 12 },
+  calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
+  calendarTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b' },
+  clearAllBtn: { margin: 12, marginTop: 4, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center' },
+  clearAllText: { fontSize: 14, fontWeight: '600', color: '#6366f1' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#64748b', marginTop: 16 },
+  emptySubtitle: { fontSize: 14, color: '#94a3b8', marginTop: 6, textAlign: 'center', lineHeight: 20 },
+  listContent: { paddingHorizontal: 16, paddingBottom: 24 },
+  countLabel: { fontSize: 12, fontWeight: '600', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10, marginTop: 4 },
+  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingVertical: 16, paddingHorizontal: 14, borderTopLeftRadius: 18, borderTopRightRadius: 18, borderWidth: 1, borderColor: '#eef2ff' },
+  rowLast: { borderBottomLeftRadius: 12, borderBottomRightRadius: 12 },
+  separator: { height: 10, backgroundColor: 'transparent' },
+  iconWrap: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#ede9fe', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  info: { flex: 1, marginRight: 8 },
+  rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 },
+  rowTitle: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginBottom: 4 },
+  fileBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
+  fileBadgeText: { fontSize: 10, fontWeight: '800', color: '#b91c1c', letterSpacing: 0.4 },
+  meta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 },
+  metaText: { fontSize: 11, color: '#94a3b8' },
+  primaryActionChip: { marginTop: 10, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#eef2ff', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
+  primaryActionText: { fontSize: 12, fontWeight: '700', color: '#4f46e5' },
+  dotsBtn: { width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  // Action-sheet menu
+  menuOverlay: { flex: 1, backgroundColor: 'transparent' },
+  menuCard: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', width: 170, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.14, shadowRadius: 12, elevation: 10 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 15 },
+  menuItemText: { fontSize: 15, fontWeight: '600', color: '#1e293b' },
+  menuItemDanger: { color: '#ef4444' },
+  menuDivider: { height: 1, backgroundColor: '#f1f5f9', marginHorizontal: 12 },
 });
-
-export default ReportsScreen;

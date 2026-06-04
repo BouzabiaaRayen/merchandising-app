@@ -12,8 +12,19 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import MapView, { Marker, Callout } from 'react-native-maps';
 import { gpsService, userService, storeService } from '../../services/apiService';
+import { useAuth } from '../../contexts/AuthContext';
+
+function isTeamMember(m, currentId) {
+  if (!currentId) return true;
+  if (m.supervisor == null && m.supervisor_id == null) return true;
+  const resolved = typeof m.supervisor === 'object' ? m.supervisor?.id : m.supervisor;
+  if (resolved != null && String(resolved) === currentId) return true;
+  if (m.supervisor_id != null && String(m.supervisor_id) === currentId) return true;
+  return false;
+}
 
 export default function SupervisorMapScreen() {
+  const { user: currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stores, setStores] = useState([]);
@@ -28,10 +39,16 @@ export default function SupervisorMapScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const supervisorId = currentUser?.id;
+      if (!supervisorId) {
+        setUserMap({});
+        setAgentLocations([]);
+        return;
+      }
+
       const [storesResp, userResp] = await Promise.allSettled([
         storeService.getStores({ page_size: 500 }),
-        userService.getUsers({ role: 'merchandiser', page_size: 200 }),
+        userService.getTeamSummary({ supervisor: supervisorId }),
       ]);
 
       // Stores
@@ -65,8 +82,21 @@ export default function SupervisorMapScreen() {
       let uMap = {};
       let activeMembers = [];
       if (userResp.status === 'fulfilled') {
-        const raw = userResp.value;
-        const users = Array.isArray(raw) ? raw : (raw.results ?? []);
+        const users = Array.isArray(userResp.value?.team_members) ? userResp.value.team_members : [];
+        users.forEach((u) => { uMap[u.id] = u; uMap[String(u.id)] = u; });
+        setUserMap(uMap);
+        activeMembers = users.filter((u) => u.is_active);
+      }
+
+      if (activeMembers.length === 0) {
+        const fallback = await userService.getUsers({
+          role: 'merchandiser',
+          page_size: 200,
+          supervisor: supervisorId,
+          supervisor_id: supervisorId,
+        }).catch(() => ({ results: [] }));
+        const allUsers = Array.isArray(fallback) ? fallback : (fallback.results ?? []);
+        const users = allUsers.filter((m) => isTeamMember(m, String(supervisorId)));
         users.forEach((u) => { uMap[u.id] = u; uMap[String(u.id)] = u; });
         setUserMap(uMap);
         activeMembers = users.filter((u) => u.is_active);
@@ -91,7 +121,7 @@ export default function SupervisorMapScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

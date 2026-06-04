@@ -22,6 +22,7 @@ export default function ProfileScreen() {
   const { user, logout, refreshUser } = useAuth();
   const [avatarUri, setAvatarUri] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const isSupervisor = String(user?.role ?? '').toLowerCase() === 'supervisor';
 
   useEffect(() => {
     // Load avatar from the 'avatars' storage bucket
@@ -248,20 +249,6 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>WORK</Text>
           <View style={styles.menuGroup}>
-            <MenuItem
-              icon="map-marker-path"
-              title="My Routes"
-              subtitle="View your assigned routes"
-              iconColor="#f59e0b"
-              onPress={() => navigation.navigate('Routes')}
-            />
-            <MenuItem
-              icon="chart-box-outline"
-              title="Performance"
-              subtitle="View your work statistics"
-              iconColor="#10b981"
-              onPress={() => navigation.navigate('Performance')}
-            />
             <MenuItem
               icon="calendar-month-outline"
               title="Leave Requests"

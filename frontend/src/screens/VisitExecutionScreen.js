@@ -36,6 +36,80 @@ const MIN_STACK_DEPTH = 1;
 const MAX_STACK_DEPTH = 20;
 const MAX_CHECK_IN_DISTANCE_METERS = 60;
 const CATALOG_SWATCHES = ['#f4d48e', '#efbc71', '#e2c68c', '#f6e3bb', '#f2d69a', '#f0cc84', '#ebc47a', '#f7dfad'];
+const DEMO_CANNELLONI_PRODUCTS = [
+  {
+    id: 'demo-cannelloni-bechamel',
+    name: 'Cannelloni Bechamel',
+    brand_name: 'Demo Pasta',
+    category_name: 'Cannelloni',
+    sku: 'CAN-BECH-001',
+    price: 8.9,
+    recommended_facing: 3,
+    stock_status: 'IN STOCK',
+    stock_quantity: 18,
+    isDemoCatalogProduct: true,
+  },
+  {
+    id: 'demo-cannelloni-spinach',
+    name: 'Cannelloni Spinach',
+    brand_name: 'Demo Pasta',
+    category_name: 'Cannelloni',
+    sku: 'CAN-SPIN-002',
+    price: 9.4,
+    recommended_facing: 2,
+    stock_status: 'IN STOCK',
+    stock_quantity: 9,
+    isDemoCatalogProduct: true,
+  },
+  {
+    id: 'demo-cannelloni-ricotta',
+    name: 'Cannelloni Ricotta',
+    brand_name: 'Demo Pasta',
+    category_name: 'Cannelloni',
+    sku: 'CAN-RICO-003',
+    price: 9.9,
+    recommended_facing: 2,
+    stock_status: 'OUT OF STOCK',
+    stock_quantity: 0,
+    isDemoCatalogProduct: true,
+  },
+  {
+    id: 'demo-cannelloni-bolognese',
+    name: 'Cannelloni Bolognese',
+    brand_name: 'Demo Pasta',
+    category_name: 'Cannelloni',
+    sku: 'CAN-BOLO-004',
+    price: 10.2,
+    recommended_facing: 1,
+    stock_status: 'OUT OF STOCK',
+    stock_quantity: 0,
+    isDemoCatalogProduct: true,
+  },
+  {
+    id: 'demo-lasagne-classic',
+    name: 'Lasagne Classic',
+    brand_name: 'Demo Pasta',
+    category_name: 'Lasagne',
+    sku: 'LAS-CLAS-005',
+    price: 7.8,
+    recommended_facing: 3,
+    stock_status: 'IN STOCK',
+    stock_quantity: 14,
+    isDemoCatalogProduct: true,
+  },
+  {
+    id: 'demo-ravioli-cheese',
+    name: 'Ravioli Cheese',
+    brand_name: 'Demo Pasta',
+    category_name: 'Ravioli',
+    sku: 'RAV-CHEE-006',
+    price: 6.7,
+    recommended_facing: 2,
+    stock_status: 'OUT OF STOCK',
+    stock_quantity: 0,
+    isDemoCatalogProduct: true,
+  },
+];
 
 const buildCatalogProductMeta = (product) =>
   [product.brand_name, product.category_name, product.sku].filter(Boolean).join(' • ');
@@ -51,8 +125,21 @@ const mapCatalogProductToArticle = (product, index) => ({
   icon: 'package-variant-closed',
   imageUrl: product.image_url || '',
   recommendedFacing: Number(product.recommended_facing || 0),
+  stockStatus: String(product.stock_status || (Number(product.stock_quantity || 0) > 0 ? 'IN STOCK' : 'OUT OF STOCK')).toUpperCase(),
+  stockQuantity: Number(product.stock_quantity || 0),
+  isDemoCatalogProduct: Boolean(product.isDemoCatalogProduct),
   isRupture: false,
 });
+
+const mergeCatalogWithDemoProducts = (products) => {
+  const catalogList = Array.isArray(products) ? products : [];
+  const normalizedNames = new Set(catalogList.map((product) => String(product?.name || '').trim().toLowerCase()).filter(Boolean));
+  const missingDemoProducts = DEMO_CANNELLONI_PRODUCTS.filter(
+    (product) => !normalizedNames.has(String(product.name).trim().toLowerCase())
+  );
+
+  return [...missingDemoProducts, ...catalogList];
+};
 
 const buildPriceComparisonItems = (products) =>
   products.slice(0, 8).map((product) => ({
@@ -104,7 +191,7 @@ const loadVisitProgress = async (visitId) => {
 };
 
 export default function VisitExecutionScreen({ route, navigation }) {
-  const { visitId } = route.params;
+  const { visitId, autoCheckIn, resumeStep } = route.params || {};
   const { user } = useAuth();
 
   // Core state
@@ -118,7 +205,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const [checkInTime, setCheckInTime] = useState(null);
   const [checkOutTime, setCheckOutTime] = useState(null);
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
-  const [activeTab, setActiveTab] = useState('events');
+  const [currentStep, setCurrentStep] = useState(0);
   // Photos state
   const [photos, setPhotos] = useState({ before: [], after: [] });
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -162,6 +249,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const [showStockModal, setShowStockModal] = useState(false);
   const [showSlotAssignModal, setShowSlotAssignModal] = useState(false);
   const [simpleFacingCounts, setSimpleFacingCounts] = useState({});
+  const [facingMatrix, setFacingMatrix] = useState({});
 
   // AI shelf analysis state
   const [aiPendingImage, setAiPendingImage] = useState(null);
@@ -170,7 +258,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
   const [aiAnalysisError, setAiAnalysisError] = useState('');
   const [aiHealthState, setAiHealthState] = useState('checking');
-  const [aiShowAdvancedSettings, setAiShowAdvancedSettings] = useState(false);
   const [aiShowOverlay, setAiShowOverlay] = useState(true);
   const [aiSettings, setAiSettings] = useState({ confidence: '', imgsz: '' });
 
@@ -194,7 +281,30 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const [alertDescription, setAlertDescription] = useState('');
   const [alertPhoto, setAlertPhoto] = useState(null);
   const [alertSubmitting, setAlertSubmitting] = useState(false);
+
+  // Inline anomaly form state
+  const [anomalyProductId, setAnomalyProductId] = useState('');
+  const [anomalyCategory, setAnomalyCategory] = useState('');
+  const [anomalyDescription, setAnomalyDescription] = useState('');
+  const [anomalyPhoto, setAnomalyPhoto] = useState(null);
+  const [anomalySubmitting, setAnomalySubmitting] = useState(false);
+  const [anomalySubmitted, setAnomalySubmitted] = useState(false);
+  const [showAnomalyProductDropdown, setShowAnomalyProductDropdown] = useState(false);
+  const [showAnomalyCategoryDropdown, setShowAnomalyCategoryDropdown] = useState(false);
+
+  // Step 5 — Stock audit mode state
+  const [stockAuditMode, setStockAuditMode] = useState(null); // null | 'ai' | 'manual'
+  const [manualOosProducts, setManualOosProducts] = useState({}); // { [productId]: boolean }
+
   const locationSubscriptionRef = useRef(null);
+
+  const getPersistedFacingData = () => {
+    if (!visit?.facing_data || Array.isArray(visit.facing_data)) {
+      return {};
+    }
+
+    return visit.facing_data;
+  };
 
   // ─── Effects ────────────────────────────────────────────────────────────────
 
@@ -214,6 +324,21 @@ export default function VisitExecutionScreen({ route, navigation }) {
   useEffect(() => {
     checkAiServiceHealth();
   }, []);
+
+  // Save currentStep to AsyncStorage whenever it changes
+  useEffect(() => {
+    if (currentStep > 0 && visitId) {
+      saveVisitProgress(visitId, { currentStep });
+    }
+  }, [currentStep]);
+
+  // Auto-trigger check-in if navigated with autoCheckIn flag
+  useEffect(() => {
+    if (!loading && autoCheckIn && currentStep === 0) {
+      handleCheckIn();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   // Visit timer
   useEffect(() => {
@@ -330,7 +455,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
         brandService.getBrands({ page_size: 1000, is_active: true, type: 'COMPETITOR' }),
       ]);
 
-      const catalogProducts = (productsResponse.results || productsResponse)
+      const catalogProducts = mergeCatalogWithDemoProducts(productsResponse.results || productsResponse)
         .map(mapCatalogProductToArticle)
         .filter((product) => product.name);
       const competitorCatalogBrands = (brandsResponse.results || brandsResponse)
@@ -343,7 +468,12 @@ export default function VisitExecutionScreen({ route, navigation }) {
       setCompetitorName((current) => current || competitorCatalogBrands[0] || '');
     } catch (error) {
       console.error('Error fetching centralized catalog:', error);
-      Alert.alert('Catalog unavailable', 'Product catalog data could not be loaded for this visit.');
+      const demoCatalogProducts = mergeCatalogWithDemoProducts([])
+        .map(mapCatalogProductToArticle)
+        .filter((product) => product.name);
+      setArticles(demoCatalogProducts);
+      setPriceComparisons(buildPriceComparisonItems(demoCatalogProducts));
+      Alert.alert('Catalog unavailable', 'The live catalog could not be loaded. Demo Cannelloni products were added for this visit.');
     }
   };
 
@@ -394,6 +524,33 @@ export default function VisitExecutionScreen({ route, navigation }) {
         if (savedProgress.aiAnalyzedImage) setAiAnalyzedImage(savedProgress.aiAnalyzedImage);
         if (savedProgress.aiAnalysisResult) setAiAnalysisResult(savedProgress.aiAnalysisResult);
         if (savedProgress.aiAnalysisSettings) setAiSettings(savedProgress.aiAnalysisSettings);
+      }
+
+      if (!savedProgress?.aiAnalysisResult && visitData.facing_data && !Array.isArray(visitData.facing_data)) {
+        const persistedAiAnalysis = visitData.facing_data.aiAnalysis;
+        if (persistedAiAnalysis?.summary || persistedAiAnalysis?.products?.length || persistedAiAnalysis?.detections?.length) {
+          setAiAnalysisResult({
+            summary: persistedAiAnalysis.summary || {},
+            products: persistedAiAnalysis.products || [],
+            detections: persistedAiAnalysis.detections || [],
+            raw: persistedAiAnalysis.raw || null,
+          });
+
+          if (persistedAiAnalysis.imageUri) {
+            setAiAnalyzedImage({ uri: persistedAiAnalysis.imageUri });
+          }
+        }
+      }
+
+      // Restore step for in-progress/completed visits
+      if (visitData.status === 'in_progress' || visitData.status === 'completed') {
+        if (resumeStep) {
+          setCurrentStep(resumeStep);
+        } else if (savedProgress?.currentStep > 0) {
+          setCurrentStep(savedProgress.currentStep);
+        } else if (visitData.check_in_time || visitData.checked_in_at) {
+          setCurrentStep(1);
+        }
       }
 
       try {
@@ -514,18 +671,12 @@ export default function VisitExecutionScreen({ route, navigation }) {
     }
   };
 
-  const handleAiSettingsChange = (key, value) => {
-    const nextSettings = { ...aiSettings, [key]: value };
-    setAiSettings(nextSettings);
-    persistAiProgress({ aiAnalysisSettings: nextSettings });
-  };
-
   const handlePickAiImage = async () => {
     try {
       if (Platform.OS !== 'web') {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert('Permission requise', "Autorisez l'acces a la galerie pour importer une photo.");
+          Alert.alert('Permission required', 'Please allow gallery access to upload a photo.');
           return;
         }
       }
@@ -544,7 +695,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
       }
     } catch (error) {
       console.error('AI gallery pick error:', error);
-      Alert.alert('Erreur', "Impossible d'importer la photo du rayon.");
+      Alert.alert('Error', 'Unable to upload the shelf photo.');
     }
   };
 
@@ -552,7 +703,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Permission requise', "Autorisez l'acces a la camera pour capturer le rayon.");
+        Alert.alert('Permission required', 'Please allow camera access to capture the shelf.');
         return;
       }
 
@@ -570,7 +721,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
       }
     } catch (error) {
       console.error('AI camera capture error:', error);
-      Alert.alert('Erreur', 'Impossible de capturer la photo du rayon.');
+      Alert.alert('Error', 'Unable to capture the shelf photo.');
     }
   };
 
@@ -578,7 +729,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
     const imageToAnalyze = aiPendingImage || aiAnalyzedImage;
 
     if (!imageToAnalyze) {
-      Alert.alert('Image requise', 'Ajoutez une photo du rayon avant de lancer l analyse.');
+      Alert.alert('Image required', 'Add a shelf photo before starting the analysis.');
       return;
     }
 
@@ -593,10 +744,30 @@ export default function VisitExecutionScreen({ route, navigation }) {
       });
 
       const normalizedResult = normalizeAiDetectionResponse(response);
+      const persistedAiAnalysis = {
+        analyzedAt: new Date().toISOString(),
+        imageUri: imageToAnalyze.uri,
+        summary: normalizedResult.summary,
+        products: normalizedResult.products,
+        detections: normalizedResult.detections,
+        raw: normalizedResult.raw || null,
+      };
+
       setAiAnalysisResult(normalizedResult);
       setAiAnalyzedImage(imageToAnalyze);
       setAiPendingImage(null);
       setAiHealthState('healthy');
+
+      try {
+        const nextFacingData = {
+          ...getPersistedFacingData(),
+          aiAnalysis: persistedAiAnalysis,
+        };
+        const updatedVisit = await visitService.patchVisit(visitId, { facing_data: nextFacingData });
+        setVisit(updatedVisit);
+      } catch (persistError) {
+        console.error('Failed to persist AI analysis on visit:', persistError);
+      }
 
       await persistAiProgress({
         aiPendingImage: null,
@@ -608,7 +779,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
       console.error('AI shelf analysis failed:', error);
       setAiHealthState('error');
       const detail = error.response?.data?.detail || error.response?.data?.message;
-      setAiAnalysisError(detail || 'Le service IA n a pas pu analyser cette image. Reessayez avec une photo plus nette.');
+      setAiAnalysisError(detail || 'The AI service could not analyze this image. Try again with a clearer photo.');
     } finally {
       setAiAnalysisLoading(false);
     }
@@ -646,6 +817,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
       }
       await visitService.checkIn(visitId);
       setCheckInTime(new Date().toISOString());
+      setCurrentStep(1);
       await fetchVisitData();
       Alert.alert('Success', 'Checked in successfully!');
     } catch (error) {
@@ -668,6 +840,38 @@ export default function VisitExecutionScreen({ route, navigation }) {
     } catch (error) {
       console.error('Check-out error:', error);
       Alert.alert('Error', 'Failed to check out');
+    }
+  };
+
+  const handleSubmitAndCheckout = async () => {
+    try {
+      // Sync AI stock ruptures (Step 5 AI mode)
+      try {
+        const ruptureData = getStockRupturesFromAiResult(aiAnalysisResult);
+        if (ruptureData.length > 0) await visitService.patchVisit(visitId, { stock_ruptures: ruptureData });
+      } catch (e) { console.error('Rupture sync error:', e); }
+      // Sync manual OOS (Step 5 manual mode)
+      try {
+        const oosIds = Object.entries(manualOosProducts)
+          .filter(([, checked]) => checked)
+          .map(([id]) => id);
+        if (stockAuditMode === 'manual' && oosIds.length > 0) {
+          await visitService.patchVisit(visitId, { manual_oos_product_ids: oosIds });
+        }
+      } catch (e) { console.error('Manual OOS sync error:', e); }
+      // Save notes
+      if (notes !== visit?.notes) {
+        try { await visitService.patchVisit(visitId, { notes }); } catch (e) { console.error('Notes save error:', e); }
+      }
+      // Checkout
+      const checkoutTimestamp = new Date().toISOString();
+      setCheckOutTime(checkoutTimestamp);
+      await visitService.checkOut(visitId, notes);
+      try { await AsyncStorage.removeItem(VISIT_PROGRESS_KEY(visitId)); } catch (_) {}
+      navigation.goBack();
+    } catch (error) {
+      console.error('Submit & checkout error:', error);
+      Alert.alert('Error', 'Failed to submit visit. Please try again.');
     }
   };
 
@@ -994,6 +1198,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
         text: 'Save',
         onPress: async () => {
           const facingPayload = {
+            ...getPersistedFacingData(),
             mode: 'simple',
             rows: Number(facingGridRows || 0),
             columns: Number(facingGridColumns || 0),
@@ -1015,6 +1220,84 @@ export default function VisitExecutionScreen({ route, navigation }) {
     ]);
   };
 
+  // ─── Inline facing matrix handlers ────────────────────────────────────────
+  const handleFacingMatrixChange = (productId, field, value) => {
+    const cleaned = value.replace(/[^\d]/g, '');
+    setFacingMatrix((prev) => ({
+      ...prev,
+      [productId]: { ...(prev[productId] || { rows: '', cols: '' }), [field]: cleaned },
+    }));
+  };
+
+  const getFacingMatrixTotal = (productId) => {
+    const entry = facingMatrix[productId] || { rows: '0', cols: '0' };
+    return Math.max(0, Number(entry.rows || 0) * Number(entry.cols || 0));
+  };
+
+  const getFacingGrandTotal = () =>
+    facingProducts.reduce((sum, p) => sum + getFacingMatrixTotal(p.id), 0);
+
+  const saveFacingMatrix = async () => {
+    // Array of { product_id, rows, columns } for Supabase
+    const facingPayload = {
+      ...getPersistedFacingData(),
+      mode: 'matrix',
+      grid: facingProducts.map((p) => {
+        const entry = facingMatrix[p.id] || { rows: '0', cols: '0' };
+        return {
+          product_id: p.id,
+          rows: Number(entry.rows || 0),
+          columns: Number(entry.cols || 0),
+        };
+      }),
+    };
+    try { await visitService.patchVisit(visitId, { facing_data: facingPayload }); } catch (e) { console.error('Failed to save facing_data:', e); }
+    setStockUpdateCompleted(true);
+    await saveVisitProgress(visitId, { stockUpdateCompleted: true });
+  };
+
+  // ─── Inline anomaly handlers ───────────────────────────────────────────────
+  const ANOMALY_CATEGORIES_INLINE = [
+    { key: 'Wrong Placement', icon: 'arrow-decision' },
+    { key: 'Low Facing', icon: 'format-horizontal-align-bottom' },
+    { key: 'Disorganized Shelf', icon: 'view-grid-plus-outline' },
+    { key: 'Damaged Product', icon: 'alert-octagon-outline' },
+    { key: 'Pricing Issue', icon: 'cash-remove' },
+    { key: 'Other', icon: 'dots-horizontal' },
+  ];
+
+  const handleSubmitAnomaly = async () => {
+    if (!anomalyCategory || !anomalyDescription.trim()) {
+      Alert.alert('Required Fields', 'Please select a category and add a description.');
+      return;
+    }
+    setAnomalySubmitting(true);
+    try {
+      const selectedProd = articles.find((p) => String(p.id) === String(anomalyProductId));
+      const payload = {
+        visit_id: visitId,
+        event_type: 'anomaly',
+        category: anomalyCategory,
+        product_id: selectedProd?.id || null,
+        product_name: selectedProd?.name || '',
+        photo_uri: anomalyPhoto?.uri || null,
+        description: anomalyDescription.trim(),
+        created_at: new Date().toISOString(),
+      };
+      await visitService.patchVisit(visitId, { anomaly_event: payload });
+      setAnomalySubmitted(true);
+      setAnomalyProductId('');
+      setAnomalyCategory('');
+      setAnomalyDescription('');
+      setAnomalyPhoto(null);
+    } catch (err) {
+      console.error('Anomaly submit error:', err);
+      Alert.alert('Error', 'Failed to submit anomaly. Please try again.');
+    } finally {
+      setAnomalySubmitting(false);
+    }
+  };
+
   // Price comparison handlers
   const handleCompetitorPriceChange = (itemId, value) => {
     const normalizedValue = value.replace(',', '.').replace(/[^\d.]/g, '');
@@ -1033,10 +1316,10 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const handlePriceComparisonPhoto = async (itemId) => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') { Alert.alert('Permission refusée', "L'accès à la caméra est requis"); return; }
-      Alert.alert('Ajouter une photo', 'Choisissez la source', [
+      if (status !== 'granted') { Alert.alert('Permission denied', 'Camera access is required'); return; }
+      Alert.alert('Add a photo', 'Choose the source', [
         {
-          text: 'Caméra',
+          text: 'Camera',
           onPress: async () => {
             const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.8 });
             if (!result.canceled && result.assets[0]) {
@@ -1045,7 +1328,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
           },
         },
         {
-          text: 'Galerie',
+          text: 'Gallery',
           onPress: async () => {
             const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.8 });
             if (!result.canceled && result.assets[0]) {
@@ -1053,7 +1336,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
             }
           },
         },
-        { text: 'Annuler', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
       ]);
     } catch (error) {
       console.error('Photo error:', error);
@@ -1081,9 +1364,9 @@ export default function VisitExecutionScreen({ route, navigation }) {
   // Alert handlers
   const ALERT_TYPES = [
     { value: 'promotion', label: 'Promotion' },
-    { value: 'price_change', label: 'Changement de prix' },
-    { value: 'new_product', label: 'Nouveau produit' },
-    { value: 'competitor_activity', label: 'Activité concurrent' },
+    { value: 'price_change', label: 'Price Change' },
+    { value: 'new_product', label: 'New Product' },
+    { value: 'competitor_activity', label: 'Competitor Activity' },
   ];
 
   const handleOpenAlertModal = () => {
@@ -1099,18 +1382,19 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const handleAlertTakePhoto = async () => {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) { Alert.alert('Permission requise', "Autorisez l'accès à la caméra."); return; }
+      if (!permission.granted) { Alert.alert('Permission required', 'Please allow camera access.'); return; }
       const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.7 });
       if (!result.canceled && result.assets?.[0]) setAlertPhoto(result.assets[0]);
     } catch (err) { console.error('Camera error:', err); }
   };
 
   const handleSubmitAlert = async () => {
-    if (!alertBrand.trim()) { Alert.alert('Requis', 'Sélectionnez la marque concurrente.'); return; }
-    if (!alertType) { Alert.alert('Requis', "Sélectionnez un type d'alerte."); return; }
-    if (!alertDescription.trim()) { Alert.alert('Requis', 'Décrivez la situation.'); return; }
-    if (!alertPhoto) { Alert.alert('Requis', 'Ajoutez une photo comme preuve.'); return; }
+    if (!alertBrand.trim()) { Alert.alert('Required', 'Select a competitor brand.'); return; }
+    if (!alertType) { Alert.alert('Required', 'Select an alert type.'); return; }
+    if (!alertDescription.trim()) { Alert.alert('Required', 'Describe the situation.'); return; }
+    if (!alertPhoto) { Alert.alert('Required', 'Add a photo as proof.'); return; }
     try {
+      setAlertSubmitting(true);
       const formData = new FormData();
       formData.append('alert_type', alertType);
       formData.append('competitor_brand', alertBrand.trim());
@@ -1121,11 +1405,18 @@ export default function VisitExecutionScreen({ route, navigation }) {
       await api.post('/merchandising/competitor-alerts/', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       setAlertCompleted(true);
       await saveVisitProgress(visitId, { alertCompleted: true });
-      setShowAlertModal(false);
-      Alert.alert('Succès', 'Alerte concurrent envoyée avec succès.');
+      // Reset form for potential next submission
+      setAlertBrand('');
+      setAlertType('');
+      setAlertDescription('');
+      setAlertPhoto(null);
+      setShowAlertBrandDropdown(false);
+      setShowAlertTypeDropdown(false);
     } catch (err) {
       console.error('Alert submit error:', err);
-      Alert.alert('Erreur', err.response?.data?.detail || "Échec de l'envoi.");
+      Alert.alert('Error', err.response?.data?.detail || 'Failed to submit alert.');
+    } finally {
+      setAlertSubmitting(false);
     }
   };
 
@@ -1150,21 +1441,21 @@ export default function VisitExecutionScreen({ route, navigation }) {
     !!store?.latitude &&
     !!store?.longitude &&
     distance !== null &&
-    distance !== undefined &&
-    distance <= MAX_CHECK_IN_DISTANCE_METERS;
+    distance !== undefined;
+    // TODO: re-enable: && distance <= MAX_CHECK_IN_DISTANCE_METERS
   const canCheckOut = isCheckedIn && !isVisitCompleted;
   const scheduleLabel = visit?.scheduled_date ? formatTime(visit.scheduled_date) : 'Not scheduled';
 
   const visitStatusConfig = isVisitCompleted
-    ? { label: 'VISITE TERMINEE', color: '#16a34a', bg: '#dcfce7' }
+    ? { label: 'COMPLETED', color: '#16a34a', bg: '#dcfce7' }
     : isCheckedIn
-      ? { label: 'VISITE ACTIVE', color: '#ffffff', bg: '#2563eb' }
-      : { label: 'VISITE PLANIFIEE', color: '#1d4ed8', bg: '#dbeafe' };
+      ? { label: 'ACTIVE', color: '#ffffff', bg: '#2563eb' }
+      : { label: 'PLANNED', color: '#1d4ed8', bg: '#dbeafe' };
 
   const quickActions = [
     {
       key: 'anomaly',
-      title: 'Anomalie',
+      title: 'Anomaly',
       icon: 'alert-octagon-outline',
       accent: '#2563eb', // Red accent
       background: '#dbeafe', // Light red background
@@ -1174,7 +1465,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
     },
     {
       key: 'facing',
-      title: 'Saisi Facing',
+      title: 'Facing Entry',
       icon: 'view-grid-plus-outline',
       accent: '#2563eb',
       background: '#dbeafe',
@@ -1194,7 +1485,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
     },
     {
       key: 'alert',
-      title: 'Alerte Concurrent',
+      title: 'Competitor Alert',
       icon: 'bell-alert-outline',
       accent: '#2563eb',
       background: '#dbeafe',
@@ -1207,32 +1498,32 @@ export default function VisitExecutionScreen({ route, navigation }) {
   const recentActivities = [
     isCheckedIn && {
       key: 'checkin',
-      title: 'Visite demarree',
-      subtitle: `${store?.name || visit?.store_name || 'Magasin'} • ${formatTime(checkInTime)}`,
+      title: 'Visit started',
+      subtitle: `${store?.name || visit?.store_name || 'Store'} • ${formatTime(checkInTime)}`,
       icon: 'play-circle-outline',
       iconColor: '#10b981',
       iconBackground: '#e8fbf2',
     },
     stockUpdateCompleted && {
       key: 'facing',
-      title: 'Facing valide',
-      subtitle: `Grille ${facingGridRows || 0} x ${facingGridColumns || 0} • ${facingGridCells.filter(Boolean).length}/${facingGridCells.length} visibles`,
+      title: 'Facing saved',
+      subtitle: `Grid ${facingGridRows || 0} x ${facingGridColumns || 0} • ${facingGridCells.filter(Boolean).length}/${facingGridCells.length} visible`,
       icon: 'check-circle-outline',
       iconColor: '#10b981',
       iconBackground: '#e8fbf2',
     },
     aiAnalysisResult && {
       key: 'ai-analysis',
-      title: 'Analyse IA rayon',
-      subtitle: `${aiAnalysisResult.summary.totalProducts} produits • ${aiAnalysisResult.summary.urgentCount} urgents`,
+      title: 'AI shelf analysis',
+      subtitle: `${aiAnalysisResult.summary.totalProducts} products • ${aiAnalysisResult.summary.urgentCount} urgent`,
       icon: 'radar',
       iconColor: aiAnalysisResult.summary.urgentCount > 0 ? '#ea580c' : '#2563eb',
       iconBackground: aiAnalysisResult.summary.urgentCount > 0 ? '#ffedd5' : '#dbeafe',
     },
     notes?.trim() && {
       key: 'notes',
-      title: 'Infos magasin',
-      subtitle: 'Notes de visite mises a jour',
+      title: 'Store info',
+      subtitle: 'Visit notes updated',
       icon: 'text-box-outline',
       iconColor: '#f59e0b',
       iconBackground: '#fff8e8',
@@ -1241,10 +1532,10 @@ export default function VisitExecutionScreen({ route, navigation }) {
 
   // FIX: use areRequiredEventsCompleted in footer disabled logic
   const footerButtonLabel = isVisitCompleted
-    ? 'VISITE CLOTUREE'
+    ? 'VISIT CLOSED'
     : isCheckedIn
-      ? 'CLOTURER LA VISITE'
-      : 'DEMARRER LA VISITE';
+      ? 'CHECK OUT'
+      : 'START VISIT';
 
   const footerButtonDisabled = isCheckedIn ? isVisitCompleted : isVisitCompleted || !canCheckIn;
 
@@ -1277,10 +1568,10 @@ export default function VisitExecutionScreen({ route, navigation }) {
       </View>
 
       <View style={styles.activitySection}>
-        <Text style={styles.sectionEyebrow}>ACTIVITES RECENTES</Text>
+        <Text style={styles.sectionEyebrow}>RECENT ACTIVITY</Text>
         {recentActivities.length === 0 ? (
           <View style={styles.emptyActivityCard}>
-            <Text style={styles.emptyActivityText}>Aucune activite enregistree pour le moment.</Text>
+            <Text style={styles.emptyActivityText}>No activity recorded yet.</Text>
           </View>
         ) : (
           recentActivities.map((activity) => (
@@ -1305,13 +1596,12 @@ export default function VisitExecutionScreen({ route, navigation }) {
         pendingImage={aiPendingImage}
         analyzedImage={aiAnalyzedImage}
         result={aiAnalysisResult}
+        catalogProducts={articles}
         loading={aiAnalysisLoading}
         error={aiAnalysisError}
         healthState={aiHealthState}
         disabled={!isCheckedIn || isVisitCompleted}
         canUseCamera={Platform.OS !== 'web'}
-        showAdvancedSettings={aiShowAdvancedSettings}
-        settings={aiSettings}
         showOverlay={aiShowOverlay}
         hasStoreContext={Boolean(visit?.store || store?.id)}
         isAdminMode={user?.role === 'admin' || user?.role === 'ADMIN'}
@@ -1320,8 +1610,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
         onAnalyze={handleAnalyzeAiShelf}
         onRetry={handleAnalyzeAiShelf}
         onToggleOverlay={() => setAiShowOverlay((current) => !current)}
-        onToggleAdvanced={() => setAiShowAdvancedSettings((current) => !current)}
-        onSettingsChange={handleAiSettingsChange}
       />
     </View>
   );
@@ -1330,7 +1618,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
     <View style={styles.tabPanel}>
       <View style={styles.infoCard}>
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Heure prevue</Text>
+          <Text style={styles.infoLabel}>Scheduled Time</Text>
           <Text style={styles.infoValue}>{scheduleLabel}</Text>
         </View>
         <View style={styles.infoRow}>
@@ -1338,17 +1626,17 @@ export default function VisitExecutionScreen({ route, navigation }) {
           <Text style={[styles.infoValue, { color: gpsStatus.color }]}>{gpsStatus.text}</Text>
         </View>
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Progression</Text>
+          <Text style={styles.infoLabel}>Progress</Text>
           <Text style={styles.infoValue}>{completionPercentage}%</Text>
         </View>
       </View>
 
-      <Text style={styles.sectionEyebrow}>INFOS MAGASIN</Text>
+      <Text style={styles.sectionEyebrow}>STORE INFO</Text>
       <TextInput
         style={styles.notesInput}
         value={notes}
         onChangeText={setNotes}
-        placeholder="Ajouter des observations sur le magasin..."
+        placeholder="Add store observations..."
         placeholderTextColor="#9ca3af"
         multiline
         numberOfLines={6}
@@ -1363,7 +1651,7 @@ export default function VisitExecutionScreen({ route, navigation }) {
       >
         <MaterialCommunityIcons name="content-save-outline" size={18} color={isVisitCompleted ? '#94a3b8' : '#111827'} />
         <Text style={[styles.secondaryButtonText, isVisitCompleted && styles.secondaryButtonTextDisabled]}>
-          Enregistrer les notes
+          Save Notes
         </Text>
       </TouchableOpacity>
     </View>
@@ -1375,110 +1663,651 @@ export default function VisitExecutionScreen({ route, navigation }) {
     return renderEventsTab();
   };
 
+  // ─── Workflow steps ──────────────────────────────────────────────────────────
+
+  const STEPS = [
+    { id: 1, label: 'Before Photo', icon: 'camera-outline' },
+    { id: 2, label: 'Facing', icon: 'view-grid-outline' },
+    { id: 3, label: 'Anomalies', icon: 'alert-circle-outline' },
+    { id: 4, label: 'After Photo', icon: 'camera-check-outline' },
+    { id: 5, label: 'Out of Stock', icon: 'radar' },
+    { id: 6, label: 'Competitor Alerts', icon: 'bell-alert-outline' },
+  ];
+
+  const isNextDisabled =
+    (currentStep === 1 && photos.before.length === 0) ||
+    (currentStep === 4 && photos.after.length === 0);
+
+  const handleStepNext = async () => {
+    if (currentStep === 2) await saveFacingMatrix();
+    if (currentStep === 5) {
+      // Save manual OOS selections if in manual mode
+      const oosIds = Object.entries(manualOosProducts)
+        .filter(([, checked]) => checked)
+        .map(([id]) => id);
+      if (stockAuditMode === 'manual' && oosIds.length > 0) {
+        try {
+          await visitService.patchVisit(visitId, { manual_oos_product_ids: oosIds });
+        } catch (e) { console.error('Failed to save manual OOS:', e); }
+      }
+      setCurrentStep(6);
+      return;
+    }
+    if (currentStep < 6) setCurrentStep((s) => s + 1);
+    else handleCheckOut();
+  };
+
+  const handleStepSkip = () => {
+    if (currentStep < 6) setCurrentStep((s) => s + 1);
+  };
+
+  const handleStepBack = () => {
+    if (currentStep > 1) setCurrentStep((s) => s - 1);
+  };
+
+  const renderBeforePhotoStep = () => (
+    <View style={styles.stepCard}>
+      <Text style={styles.stepCardDesc}>Capture shelf arrival state.</Text>
+      {photos.before.length === 0 ? (
+        <TouchableOpacity
+          style={styles.stepCaptureBtn}
+          onPress={() => { setPhotoCaptureType('before'); handleTakePhoto(); }}
+        >
+          <MaterialCommunityIcons name="camera-plus-outline" size={36} color="#2563eb" />
+          <Text style={styles.stepCaptureBtnText}>Take Before Photo</Text>
+        </TouchableOpacity>
+      ) : (
+        <View>
+          <View style={styles.photoGrid}>
+            {photos.before.map((photo, index) => (
+              <View key={`before-${index}`} style={styles.photoCard}>
+                <Image source={{ uri: photo.uri }} style={styles.photoImage} />
+                <TouchableOpacity style={styles.deletePhotoButton} onPress={() => handleDeletePhoto('before', index)}>
+                  <MaterialCommunityIcons name="delete" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity
+            style={styles.stepAddMoreBtn}
+            onPress={() => { setPhotoCaptureType('before'); handleTakePhoto(); }}
+          >
+            <MaterialCommunityIcons name="camera-plus-outline" size={16} color="#2563eb" />
+            <Text style={styles.stepAddMoreText}>Add Another</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderFacingStep = () => {
+    const grandTotal = getFacingGrandTotal();
+    const productList = facingProducts.length > 0 ? facingProducts : [];
+    if (productList.length === 0) {
+      return (
+        <View style={styles.stepCard}>
+          <ActivityIndicator size="small" color="#2563eb" style={{ marginVertical: 24 }} />
+          <Text style={[styles.stepCardDesc, { textAlign: 'center' }]}>Loading products...</Text>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.stepCard}>
+        <Text style={styles.stepCardDesc}>Enter shelf facings (rows × columns) for each product.</Text>
+        <View style={styles.facingMatrixList}>
+          {productList.map((product) => {
+            const entry = facingMatrix[product.id] || { rows: '', cols: '' };
+            const total = getFacingMatrixTotal(product.id);
+            return (
+              <View key={`matrix-${product.id}`} style={styles.facingMatrixCard}>
+                <View style={styles.facingMatrixHeader}>
+                  <View style={[styles.productQtySwatch, { backgroundColor: product.color || '#2563eb' }]} />
+                  <Text style={styles.facingMatrixName} numberOfLines={1}>{product.name}</Text>
+                </View>
+                <View style={styles.facingMatrixInputRow}>
+                  <View style={styles.facingMatrixInputGroup}>
+                    <Text style={styles.facingMatrixInputLabel}>Rows</Text>
+                    <TextInput
+                      style={styles.facingMatrixInput}
+                      value={entry.rows}
+                      onChangeText={(v) => handleFacingMatrixChange(product.id, 'rows', v)}
+                      keyboardType="number-pad"
+                      placeholder="0"
+                      placeholderTextColor="#94a3b8"
+                    />
+                  </View>
+                  <Text style={styles.facingMatrixMultiply}>×</Text>
+                  <View style={styles.facingMatrixInputGroup}>
+                    <Text style={styles.facingMatrixInputLabel}>Columns</Text>
+                    <TextInput
+                      style={styles.facingMatrixInput}
+                      value={entry.cols}
+                      onChangeText={(v) => handleFacingMatrixChange(product.id, 'cols', v)}
+                      keyboardType="number-pad"
+                      placeholder="0"
+                      placeholderTextColor="#94a3b8"
+                    />
+                  </View>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  const renderAnomaliesStep = () => {
+    const productOptions = articles.slice(0, 50);
+    const selectedProductName = anomalyProductId
+      ? (articles.find((p) => String(p.id) === String(anomalyProductId))?.name || 'Select product')
+      : 'Select product (optional)';
+    return (
+      <View style={styles.stepCard}>
+        <Text style={styles.stepCardDesc}>Log any shelf issues found during the visit. Photo is optional.</Text>
+
+        {anomalySubmitted && (
+          <View style={styles.anomalySuccessBanner}>
+            <MaterialCommunityIcons name="check-circle-outline" size={20} color="#10b981" />
+            <Text style={styles.anomalySuccessText}>Anomaly submitted! Add another or press Next.</Text>
+          </View>
+        )}
+
+        {/* Affected Product */}
+        <Text style={styles.anomalyFieldLabel}>Affected Product</Text>
+        <TouchableOpacity
+          style={styles.anomalyDropdownBtn}
+          onPress={() => { setShowAnomalyProductDropdown((c) => !c); setShowAnomalyCategoryDropdown(false); }}
+        >
+          <Text style={anomalyProductId ? styles.anomalyDropdownBtnText : styles.anomalyDropdownBtnPlaceholder}>
+            {selectedProductName}
+          </Text>
+          <MaterialCommunityIcons name={showAnomalyProductDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#6b7280" />
+        </TouchableOpacity>
+        {showAnomalyProductDropdown && (
+          <View style={styles.anomalyDropdownList}>
+            <TouchableOpacity
+              style={styles.anomalyDropdownItem}
+              onPress={() => { setAnomalyProductId(''); setShowAnomalyProductDropdown(false); }}
+            >
+              <Text style={styles.anomalyDropdownItemText}>— None —</Text>
+            </TouchableOpacity>
+            {productOptions.map((p) => (
+              <TouchableOpacity
+                key={p.id}
+                style={[styles.anomalyDropdownItem, String(anomalyProductId) === String(p.id) && styles.anomalyDropdownItemActive]}
+                onPress={() => { setAnomalyProductId(String(p.id)); setShowAnomalyProductDropdown(false); }}
+              >
+                <Text style={[styles.anomalyDropdownItemText, String(anomalyProductId) === String(p.id) && { color: '#2563eb', fontWeight: '600' }]}>{p.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Category */}
+        <Text style={[styles.anomalyFieldLabel, { marginTop: 12 }]}>Category</Text>
+        <TouchableOpacity
+          style={styles.anomalyDropdownBtn}
+          onPress={() => { setShowAnomalyCategoryDropdown((c) => !c); setShowAnomalyProductDropdown(false); }}
+        >
+          <Text style={anomalyCategory ? styles.anomalyDropdownBtnText : styles.anomalyDropdownBtnPlaceholder}>
+            {anomalyCategory || 'Select category'}
+          </Text>
+          <MaterialCommunityIcons name={showAnomalyCategoryDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#6b7280" />
+        </TouchableOpacity>
+        {showAnomalyCategoryDropdown && (
+          <View style={styles.anomalyDropdownList}>
+            {ANOMALY_CATEGORIES_INLINE.map((cat) => (
+              <TouchableOpacity
+                key={cat.key}
+                style={[styles.anomalyDropdownItem, anomalyCategory === cat.key && styles.anomalyDropdownItemActive]}
+                onPress={() => { setAnomalyCategory(cat.key); setShowAnomalyCategoryDropdown(false); }}
+              >
+                <MaterialCommunityIcons name={cat.icon} size={16} color={anomalyCategory === cat.key ? '#2563eb' : '#6b7280'} />
+                <Text style={[styles.anomalyDropdownItemText, { marginLeft: 8 }, anomalyCategory === cat.key && { color: '#2563eb', fontWeight: '600' }]}>{cat.key}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Description */}
+        <Text style={[styles.anomalyFieldLabel, { marginTop: 12 }]}>Description</Text>
+        <TextInput
+          style={styles.anomalyDescriptionInput}
+          value={anomalyDescription}
+          onChangeText={setAnomalyDescription}
+          placeholder="Describe the issue..."
+          placeholderTextColor="#9ca3af"
+          multiline
+          numberOfLines={3}
+        />
+
+        {/* Photo — optional */}
+        <Text style={[styles.anomalyFieldLabel, { marginTop: 12 }]}>Photo</Text>
+        {anomalyPhoto ? (
+          <View style={styles.anomalyPhotoWrap}>
+            <Image source={{ uri: anomalyPhoto.uri }} style={styles.anomalyPhotoPreview} />
+            <TouchableOpacity style={styles.anomalyPhotoRemove} onPress={() => setAnomalyPhoto(null)}>
+              <MaterialCommunityIcons name="close-circle" size={22} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.anomalyPhotoBtn}
+            onPress={async () => {
+              const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.7 });
+              if (!result.canceled && result.assets?.length > 0) setAnomalyPhoto(result.assets[0]);
+            }}
+          >
+            <MaterialCommunityIcons name="camera-outline" size={20} color="#2563eb" />
+            <Text style={styles.anomalyPhotoBtnText}>Add Photo (optional)</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Submit */}
+        <TouchableOpacity
+          style={[styles.anomalySubmitBtn, anomalySubmitting && { opacity: 0.6 }]}
+          onPress={handleSubmitAnomaly}
+          disabled={anomalySubmitting}
+        >
+          <MaterialCommunityIcons name="send-outline" size={18} color="#fff" />
+          <Text style={styles.anomalySubmitBtnText}>{anomalySubmitting ? 'Submitting...' : 'Submit Anomaly'}</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.stepOptionalHint}>Press Next below to continue even without submitting.</Text>
+      </View>
+    );
+  };
+
+  const renderAfterPhotoStep = () => (
+    <View style={styles.stepCard}>
+      <Text style={styles.stepCardDesc}>Capture shelf final state.</Text>
+      {photos.after.length === 0 ? (
+        <TouchableOpacity
+          style={styles.stepCaptureBtn}
+          onPress={() => { setPhotoCaptureType('after'); handleTakePhoto(); }}
+        >
+          <MaterialCommunityIcons name="camera-iris" size={42} color="#2563eb" />
+          <Text style={styles.stepCaptureBtnText}>Take After Photo</Text>
+        </TouchableOpacity>
+      ) : (
+        <View>
+          <View style={styles.photoGrid}>
+            {photos.after.map((photo, index) => (
+              <View key={`after-${index}`} style={styles.photoCard}>
+                <Image source={{ uri: photo.uri }} style={styles.photoImage} />
+                <TouchableOpacity style={styles.deletePhotoButton} onPress={() => handleDeletePhoto('after', index)}>
+                  <MaterialCommunityIcons name="delete" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity
+            style={styles.stepAddMoreBtn}
+            onPress={() => { setPhotoCaptureType('after'); handleTakePhoto(); }}
+          >
+            <MaterialCommunityIcons name="camera-plus-outline" size={16} color="#2563eb" />
+            <Text style={styles.stepAddMoreText}>Add Another</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderOutOfStockStep = () => {
+    // Choice cards — select audit mode
+    if (!stockAuditMode) {
+      return (
+        <View style={styles.stepCard}>
+          <Text style={styles.stepCardDesc}>How would you like to audit out-of-stock products?</Text>
+          <View style={styles.auditChoiceRow}>
+            <TouchableOpacity style={styles.auditChoiceCard} onPress={() => setStockAuditMode('ai')}>
+              <MaterialCommunityIcons name="robot-outline" size={38} color="#2563eb" />
+              <Text style={styles.auditChoiceTitle}>AI Detection</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.auditChoiceCard} onPress={() => setStockAuditMode('manual')}>
+              <MaterialCommunityIcons name="format-list-checks" size={38} color="#7c3aed" />
+              <Text style={styles.auditChoiceTitle}>Manual Entry</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.stepOptionalHint}>Press Next to skip this step.</Text>
+        </View>
+      );
+    }
+
+    // AI detection mode
+    if (stockAuditMode === 'ai') {
+      return (
+        <View style={styles.stepCard}>
+          <TouchableOpacity style={styles.auditBackBtn} onPress={() => setStockAuditMode(null)}>
+            <MaterialCommunityIcons name="chevron-left" size={18} color="#2563eb" />
+            <Text style={styles.auditBackText}>Change Method</Text>
+          </TouchableOpacity>
+          <AIShelfAnalysisSection
+            pendingImage={aiPendingImage}
+            analyzedImage={aiAnalyzedImage}
+            result={aiAnalysisResult}
+            catalogProducts={articles}
+            loading={aiAnalysisLoading}
+            error={aiAnalysisError}
+            healthState={aiHealthState}
+            disabled={isVisitCompleted}
+            canUseCamera={Platform.OS !== 'web'}
+            showOverlay={aiShowOverlay}
+            hasStoreContext={Boolean(visit?.store || store?.id)}
+            isAdminMode={user?.role === 'admin' || user?.role === 'ADMIN'}
+            onPickImage={handlePickAiImage}
+            onCaptureImage={handleCaptureAiImage}
+            onAnalyze={handleAnalyzeAiShelf}
+            onRetry={handleAnalyzeAiShelf}
+            onToggleOverlay={() => setAiShowOverlay((c) => !c)}
+          />
+        </View>
+      );
+    }
+
+    // Manual entry mode
+    const productList = facingProducts.length > 0 ? facingProducts : articles.slice(0, 20);
+    return (
+      <View style={styles.stepCard}>
+        <TouchableOpacity style={styles.auditBackBtn} onPress={() => setStockAuditMode(null)}>
+          <MaterialCommunityIcons name="chevron-left" size={18} color="#2563eb" />
+          <Text style={styles.auditBackText}>Change Method</Text>
+        </TouchableOpacity>
+        <Text style={styles.stepCardDesc}>Check any product that is out of stock or missing.</Text>
+        <View style={styles.manualOosList}>
+          {productList.map((product) => {
+            const isChecked = Boolean(manualOosProducts[product.id]);
+            return (
+              <TouchableOpacity
+                key={`oos-${product.id}`}
+                style={[styles.manualOosItem, isChecked && styles.manualOosItemChecked]}
+                onPress={() => setManualOosProducts((prev) => ({ ...prev, [product.id]: !prev[product.id] }))}
+              >
+                <View style={[styles.productQtySwatch, { backgroundColor: product.color || '#e5e7eb' }]} />
+                <Text style={[styles.manualOosItemName, isChecked && styles.manualOosItemNameChecked]} numberOfLines={1}>
+                  {product.name}
+                </Text>
+                <MaterialCommunityIcons
+                  name={isChecked ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                  size={22}
+                  color={isChecked ? '#ef4444' : '#9ca3af'}
+                />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        {Object.values(manualOosProducts).filter(Boolean).length > 0 && (
+          <View style={styles.manualOosSummary}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#ef4444" />
+            <Text style={styles.manualOosSummaryText}>
+              {Object.values(manualOosProducts).filter(Boolean).length} product(s) marked out of stock
+            </Text>
+          </View>
+        )}
+        <Text style={styles.stepOptionalHint}>Press Next to save and continue.</Text>
+      </View>
+    );
+  };
+
+  const renderCompetitorAlertsStep = () => (
+    <View style={styles.stepCard}>
+      <Text style={styles.stepCardDesc}>Log any competitor promotions, price changes, or unusual shelf activity.</Text>
+
+      {alertCompleted && (
+        <View style={styles.alertSuccessBanner}>
+          <MaterialCommunityIcons name="check-circle-outline" size={16} color="#16a34a" />
+          <Text style={styles.alertSuccessText}>Alert submitted. Fill the form below to add another.</Text>
+        </View>
+      )}
+
+      <Text style={styles.alertSectionLabel}>Competitor Brand *</Text>
+      <TouchableOpacity
+        style={[styles.alertDropdown, !competitorBrands.length && styles.alertDropdownDisabled]}
+        onPress={() => competitorBrands.length && setShowAlertBrandDropdown(!showAlertBrandDropdown)}
+        disabled={!competitorBrands.length}
+      >
+        <Text style={alertBrand ? styles.alertDropdownText : styles.alertDropdownPlaceholder}>
+          {alertBrand || (competitorBrands.length ? 'Select brand...' : 'No competitor brands available')}
+        </Text>
+        <MaterialCommunityIcons name={showAlertBrandDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#6b7280" />
+      </TouchableOpacity>
+      {showAlertBrandDropdown && (
+        <View style={styles.alertDropdownList}>
+          {competitorBrands.map((brand) => (
+            <TouchableOpacity
+              key={brand}
+              style={[styles.alertDropdownItem, alertBrand === brand && styles.alertDropdownItemActive]}
+              onPress={() => { setAlertBrand(brand); setShowAlertBrandDropdown(false); }}
+            >
+              <Text style={[styles.alertDropdownItemText, alertBrand === brand && styles.alertDropdownItemTextActive]}>{brand}</Text>
+              {alertBrand === brand && <MaterialCommunityIcons name="check" size={16} color="#2563eb" />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      <Text style={styles.alertSectionLabel}>Alert Type *</Text>
+      <TouchableOpacity style={styles.alertDropdown} onPress={() => setShowAlertTypeDropdown(!showAlertTypeDropdown)}>
+        <Text style={alertType ? styles.alertDropdownText : styles.alertDropdownPlaceholder}>
+          {alertType ? ALERT_TYPES.find((t) => t.value === alertType)?.label : 'Select type...'}
+        </Text>
+        <MaterialCommunityIcons name={showAlertTypeDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#6b7280" />
+      </TouchableOpacity>
+      {showAlertTypeDropdown && (
+        <View style={styles.alertDropdownList}>
+          {ALERT_TYPES.map((type) => (
+            <TouchableOpacity
+              key={type.value}
+              style={[styles.alertDropdownItem, alertType === type.value && styles.alertDropdownItemActive]}
+              onPress={() => { setAlertType(type.value); setShowAlertTypeDropdown(false); }}
+            >
+              <Text style={[styles.alertDropdownItemText, alertType === type.value && styles.alertDropdownItemTextActive]}>{type.label}</Text>
+              {alertType === type.value && <MaterialCommunityIcons name="check" size={16} color="#2563eb" />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      <Text style={styles.alertSectionLabel}>Description *</Text>
+      <TextInput
+        style={styles.alertTextInput}
+        placeholder="Describe the situation observed..."
+        placeholderTextColor="#9ca3af"
+        value={alertDescription}
+        onChangeText={setAlertDescription}
+        multiline
+        numberOfLines={3}
+        textAlignVertical="top"
+      />
+
+      <Text style={styles.alertSectionLabel}>Photo (visual proof) *</Text>
+      {alertPhoto ? (
+        <View style={styles.alertPhotoContainer}>
+          <Image source={{ uri: alertPhoto.uri }} style={styles.alertPhotoPreview} />
+          <TouchableOpacity onPress={() => setAlertPhoto(null)} style={styles.alertRemovePhoto}>
+            <MaterialCommunityIcons name="close-circle" size={26} color="#ef4444" />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.alertPhotoBtn} onPress={handleAlertTakePhoto}>
+          <MaterialCommunityIcons name="camera" size={22} color="#2563eb" />
+          <Text style={styles.alertPhotoBtnText}>Take Photo</Text>
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity
+        style={[styles.alertSubmitBtn, alertSubmitting && { opacity: 0.6 }]}
+        onPress={handleSubmitAlert}
+        disabled={alertSubmitting || isVisitCompleted}
+      >
+        {alertSubmitting
+          ? <ActivityIndicator size="small" color="#fff" />
+          : <MaterialCommunityIcons name="send" size={17} color="#fff" />}
+        <Text style={styles.alertSubmitBtnText}>Submit Alert</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.stepOptionalHint}>This step is optional. Press 'Submit &amp; Check-out' below when ready.</Text>
+    </View>
+  );
+
+  const renderWorkflowContent = () => {
+    if (!isCheckedIn) {
+      if (autoCheckIn) {
+        return (
+          <View style={styles.preStartCard}>
+            <ActivityIndicator size="large" color="#2563eb" />
+            <Text style={[styles.preStartTitle, { marginTop: 16 }]}>Checking in...</Text>
+          </View>
+        );
+      }
+      return (
+        <View style={styles.preStartCard}>
+          <MaterialCommunityIcons name="store-clock-outline" size={48} color="#cbd5e1" />
+          <Text style={styles.preStartTitle}>Ready to Start?</Text>
+          <Text style={styles.preStartDesc}>
+            Check in to the store below to begin the guided visit workflow.
+          </Text>
+        </View>
+      );
+    }
+    if (isVisitCompleted) {
+      return (
+        <View style={styles.preStartCard}>
+          <MaterialCommunityIcons name="check-decagram-outline" size={48} color="#16a34a" />
+          <Text style={[styles.preStartTitle, { color: '#16a34a' }]}>Mission Complete</Text>
+          <Text style={styles.preStartDesc}>All tasks have been submitted for this visit.</Text>
+        </View>
+      );
+    }
+    switch (currentStep) {
+      case 1: return renderBeforePhotoStep();
+      case 2: return renderFacingStep();
+      case 3: return renderAnomaliesStep();
+      case 4: return renderAfterPhotoStep();
+      case 5: return renderOutOfStockStep();
+      case 6: return renderCompetitorAlertsStep();
+      default: return null;
+    }
+  };
+
   // ─── Main render ─────────────────────────────────────────────────────────────
+
+  // Primary bottom button logic
+  let primaryBtnLabel = 'Start Visit';
+  let primaryBtnAction = handleCheckIn;
+  let primaryBtnDisabled = !canCheckIn;
+  let primaryBtnIcon = 'login-variant';
+  let primaryBtnHelper = !canCheckIn ? 'Enable GPS to start this visit' : null;
+
+  if (isVisitCompleted) {
+    primaryBtnLabel = 'Mission Complete';
+    primaryBtnAction = () => {};
+    primaryBtnDisabled = true;
+    primaryBtnIcon = 'check-circle';
+    primaryBtnHelper = null;
+  } else if (isCheckedIn) {
+    if (currentStep < 6) {
+      primaryBtnLabel = 'Next';
+      primaryBtnAction = handleStepNext;
+      primaryBtnDisabled = isNextDisabled;
+      primaryBtnIcon = 'arrow-right';
+      primaryBtnHelper = null;
+    } else {
+      primaryBtnLabel = 'Submit & Check-out';
+      primaryBtnAction = handleSubmitAndCheckout;
+      primaryBtnDisabled = false;
+      primaryBtnIcon = 'check-circle-outline';
+      primaryBtnHelper = null;
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
-        {/* Header */}
+        {/* Slim Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
             <MaterialCommunityIcons name="chevron-left" size={28} color="#111" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Visit Store</Text>
-          <TouchableOpacity style={styles.headerButton}>
-            <MaterialCommunityIcons name="dots-vertical" size={24} color="#111" />
-          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            {isCheckedIn ? (
+              <View style={styles.headerTimerWrap}>
+                <MaterialCommunityIcons name="clock-outline" size={15} color="#2563eb" />
+                <Text style={styles.headerTimer}>{elapsedTime}</Text>
+                <Text style={styles.headerTimerLabel}>Visit Duration</Text>
+              </View>
+            ) : (
+              <Text style={styles.headerStoreTitle} numberOfLines={1}>
+                {store?.name || 'Visit Store'}
+              </Text>
+            )}
+          </View>
+          <View style={styles.headerButton} />
         </View>
+
+        {/* Step Progress Bar — fixed outside scroll */}
+        {isCheckedIn && !isVisitCompleted && currentStep > 0 && (
+          <View style={styles.stepProgressWrap}>
+            <View style={styles.stepProgressRow}>
+              <Text style={styles.stepProgressLabel}>Step {currentStep} of 6</Text>
+              <Text style={styles.stepProgressName}>{STEPS[currentStep - 1]?.label}</Text>
+            </View>
+            <View style={styles.stepProgressTrack}>
+              <View style={[styles.stepProgressFill, { width: `${Math.round((currentStep / 6) * 100)}%` }]} />
+            </View>
+            <View style={styles.stepDotRow}>
+              {STEPS.map((step) => (
+                <View
+                  key={step.id}
+                  style={[
+                    styles.stepDot,
+                    currentStep > step.id && styles.stepDotDone,
+                    currentStep === step.id && styles.stepDotActive,
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+        )}
 
         <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
           {isVisitCompleted && (
             <View style={styles.completedBanner}>
               <MaterialCommunityIcons name="check-circle" size={24} color="#10b981" />
               <View style={styles.completedBannerContent}>
-                <Text style={styles.completedBannerTitle}>Visit Completed</Text>
-                <Text style={styles.completedBannerText}>This visit has been completed and is now read-only</Text>
+                <Text style={styles.completedBannerTitle}>Visit Complete</Text>
+                <Text style={styles.completedBannerText}>This visit has been submitted and is now read-only.</Text>
               </View>
             </View>
           )}
 
-          {/* Hero card */}
-          <View style={styles.heroCard}>
-            <View style={styles.heroTopRow}>
-              <View style={styles.heroTextWrap}>
-                <Text style={styles.storeName}>{store?.name || visit?.store_name || 'Unknown Store'}</Text>
-                <View style={styles.addressRow}>
-                  <MaterialCommunityIcons name="map-marker-outline" size={14} color="#6b7280" />
-                  <Text style={styles.storeAddress}>{store?.address || store?.location || 'Address not available'}</Text>
-                </View>
-              </View>
-              <View style={[styles.visitStatusChip, { backgroundColor: visitStatusConfig.bg }]}>
-                <Text style={[styles.visitStatusChipText, { color: visitStatusConfig.color }]}>
-                  {visitStatusConfig.label}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.heroMetaRow}>
-              <View style={styles.timerBox}>
-                <Text style={styles.timerValue}>{isCheckedIn ? elapsedTime : scheduleLabel}</Text>
-                <Text style={styles.timerLabel}>{isCheckedIn ? 'Temps sur place' : 'Heure prevue'}</Text>
-              </View>
-              <View style={styles.progressBox}>
-                <Text style={styles.progressValue}>{completionPercentage}%</Text>
-                <Text style={styles.progressLabel}>Execution</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Tab bar */}
-          <View style={styles.tabBar}>
-            {[
-              { key: 'articles', label: 'Analyse IA' },
-              { key: 'events', label: 'Evenements' },
-              { key: 'store-info', label: 'Infos Magasin' },
-            ].map((tab) => (
-              <TouchableOpacity
-                key={tab.key}
-                style={[styles.tabButton, activeTab === tab.key && styles.tabButtonActive]}
-                onPress={() => setActiveTab(tab.key)}
-              >
-                <Text style={[styles.tabButtonText, activeTab === tab.key && styles.tabButtonTextActive]}>
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {renderActiveTab()}
-
-          <View style={styles.syncStatus}>
-            <MaterialCommunityIcons name="cloud-sync" size={16} color="#2563eb" />
-            <Text style={styles.syncText}>CLOUD SYNC ACTIVE</Text>
-          </View>
+          {renderWorkflowContent()}
         </ScrollView>
 
-        {/* Footer */}
-        <View style={styles.footerCtaWrap}>
-          {!isCheckedIn && !isVisitCompleted && !canCheckIn && (
-            <Text style={styles.footerHelperText}>
-              Move within {MAX_CHECK_IN_DISTANCE_METERS} meters of the store to start this visit
-            </Text>
-          )}
-          {isCheckedIn && !isVisitCompleted && !areRequiredEventsCompleted() && (
-            <Text style={styles.footerHelperText}>
-              Complete Before/After Photos, Facing & Price Comparison to check out
-            </Text>
-          )}
-          <TouchableOpacity
-            style={[styles.footerCtaButton, footerButtonDisabled && styles.footerCtaButtonDisabled]}
-            onPress={footerButtonHandler}
-            disabled={footerButtonDisabled}
-            activeOpacity={0.9}
-          >
-            <MaterialCommunityIcons name={isCheckedIn ? 'logout-variant' : 'login-variant'} size={20} color="#fff" />
-            <Text style={styles.footerCtaText}>{footerButtonLabel}</Text>
-          </TouchableOpacity>
+        {/* Bottom Footer — Back + Primary Button */}
+        <View style={styles.singleFooter}>
+          {primaryBtnHelper ? (
+            <Text style={styles.footerHelperText}>{primaryBtnHelper}</Text>
+          ) : null}
+          <View style={styles.footerRow}>
+            {isCheckedIn && !isVisitCompleted && currentStep > 1 && (
+              <TouchableOpacity style={styles.secondaryFooterBtn} onPress={handleStepBack} activeOpacity={0.85}>
+                <MaterialCommunityIcons name="arrow-left" size={20} color="#2563eb" />
+                <Text style={styles.secondaryFooterBtnText}>Back</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.primaryFooterBtn, primaryBtnDisabled && styles.primaryFooterBtnDisabled,
+                isCheckedIn && !isVisitCompleted && currentStep > 1 ? styles.primaryFooterBtnSplit : styles.primaryFooterBtnFullWidth]}
+              onPress={primaryBtnAction}
+              disabled={primaryBtnDisabled}
+              activeOpacity={0.9}
+            >
+              <MaterialCommunityIcons name={primaryBtnIcon} size={20} color="#fff" />
+              <Text style={styles.primaryFooterBtnText}>{primaryBtnLabel}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -1784,107 +2613,6 @@ export default function VisitExecutionScreen({ route, navigation }) {
       </Modal>
 
       {/* ── Alert Modal ──────────────────────────────────────────────────────── */}
-      <Modal visible={showAlertModal} animationType="slide" transparent={false} onRequestClose={() => setShowAlertModal(false)}>
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowAlertModal(false)}>
-              <MaterialCommunityIcons name="close" size={24} color="#111" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Alerte Concurrent</Text>
-            <View style={{ width: 24 }} />
-          </View>
-
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
-            <View style={styles.alertInfoCard}>
-              <View style={styles.alertInfoRow}>
-                <MaterialCommunityIcons name="store" size={18} color="#6b7280" />
-                <Text style={styles.alertInfoLabel}>Magasin</Text>
-                <Text style={styles.alertInfoValue}>{store?.name || visit?.store_name || 'N/A'}</Text>
-              </View>
-              <View style={styles.alertInfoDivider} />
-              <View style={styles.alertInfoRow}>
-                <MaterialCommunityIcons name="calendar" size={18} color="#6b7280" />
-                <Text style={styles.alertInfoLabel}>Date</Text>
-                <Text style={styles.alertInfoValue}>{new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</Text>
-              </View>
-            </View>
-
-            <Text style={styles.alertSectionLabel}>Marque concurrente *</Text>
-            <TouchableOpacity
-              style={[styles.alertDropdown, !competitorBrands.length && styles.alertDropdownDisabled]}
-              onPress={() => competitorBrands.length && setShowAlertBrandDropdown(!showAlertBrandDropdown)}
-              disabled={!competitorBrands.length}
-            >
-              <Text style={alertBrand ? styles.alertDropdownText : styles.alertDropdownPlaceholder}>
-                {alertBrand || (competitorBrands.length ? 'Sélectionner la marque...' : 'Aucune marque concurrente disponible')}
-              </Text>
-              <MaterialCommunityIcons name={showAlertBrandDropdown ? 'chevron-up' : 'chevron-down'} size={22} color="#6b7280" />
-            </TouchableOpacity>
-            {showAlertBrandDropdown && (
-              <View style={styles.alertDropdownList}>
-                {competitorBrands.map((brand) => (
-                  <TouchableOpacity
-                    key={brand}
-                    style={[styles.alertDropdownItem, alertBrand === brand && styles.alertDropdownItemActive]}
-                    onPress={() => {
-                      setAlertBrand(brand);
-                      setShowAlertBrandDropdown(false);
-                    }}
-                  >
-                    <Text style={[styles.alertDropdownItemText, alertBrand === brand && styles.alertDropdownItemTextActive]}>{brand}</Text>
-                    {alertBrand === brand && <MaterialCommunityIcons name="check" size={18} color="#2563eb" />}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            <Text style={styles.alertSectionLabel}>Type d'alerte *</Text>
-            <TouchableOpacity style={styles.alertDropdown} onPress={() => setShowAlertTypeDropdown(!showAlertTypeDropdown)}>
-              <Text style={alertType ? styles.alertDropdownText : styles.alertDropdownPlaceholder}>
-                {alertType ? ALERT_TYPES.find((t) => t.value === alertType)?.label : 'Sélectionner le type...'}
-              </Text>
-              <MaterialCommunityIcons name={showAlertTypeDropdown ? 'chevron-up' : 'chevron-down'} size={22} color="#6b7280" />
-            </TouchableOpacity>
-            {showAlertTypeDropdown && (
-              <View style={styles.alertDropdownList}>
-                {ALERT_TYPES.map((type) => (
-                  <TouchableOpacity
-                    key={type.value}
-                    style={[styles.alertDropdownItem, alertType === type.value && styles.alertDropdownItemActive]}
-                    onPress={() => { setAlertType(type.value); setShowAlertTypeDropdown(false); }}
-                  >
-                    <Text style={[styles.alertDropdownItemText, alertType === type.value && styles.alertDropdownItemTextActive]}>{type.label}</Text>
-                    {alertType === type.value && <MaterialCommunityIcons name="check" size={18} color="#2563eb" />}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            <Text style={styles.alertSectionLabel}>Description *</Text>
-            <TextInput style={styles.alertTextInput} placeholder="Décrivez la situation observée..." placeholderTextColor="#9ca3af" value={alertDescription} onChangeText={setAlertDescription} multiline numberOfLines={4} textAlignVertical="top" />
-
-            <Text style={styles.alertSectionLabel}>Photo (preuve visuelle) *</Text>
-            {alertPhoto ? (
-              <View style={styles.alertPhotoContainer}>
-                <Image source={{ uri: alertPhoto.uri }} style={styles.alertPhotoPreview} />
-                <TouchableOpacity onPress={() => setAlertPhoto(null)} style={styles.alertRemovePhoto}>
-                  <MaterialCommunityIcons name="close-circle" size={28} color="#ef4444" />
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.alertPhotoBtn} onPress={handleAlertTakePhoto}>
-                <MaterialCommunityIcons name="camera" size={24} color="#2563eb" />
-                <Text style={styles.alertPhotoBtnText}>Prendre photo</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity style={styles.alertSubmitBtn} onPress={handleSubmitAlert}>
-              <MaterialCommunityIcons name="send" size={20} color="#fff" />
-              <Text style={styles.alertSubmitBtnText}>Envoyer l'alerte</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -2143,6 +2871,373 @@ const styles = StyleSheet.create({
   alertRemovePhoto: { position: 'absolute', top: 8, right: 8 },
   alertPhotoBtn: { flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 20, borderRadius: 12, backgroundColor: '#f0f5ff', borderWidth: 1.5, borderColor: '#dbeafe', borderStyle: 'dashed' },
   alertPhotoBtnText: { fontSize: 13, fontWeight: '600', color: '#2563eb' },
-  alertSubmitBtn: { backgroundColor: '#2563eb', borderRadius: 12, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 20, marginBottom: 30 },
+  alertSuccessBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4', borderRadius: 10, padding: 10, marginBottom: 14, borderWidth: 1, borderColor: '#bbf7d0' },
+  alertSuccessText: { fontSize: 13, color: '#16a34a', fontWeight: '600', flex: 1 },
+  alertSubmitBtn: { backgroundColor: '#2563eb', borderRadius: 12, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16, marginBottom: 8 },
   alertSubmitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  // ── Sequential workflow ────────────────────────────────────────────────────
+  stepProgressWrap: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  stepProgressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  stepProgressLabel: { fontSize: 11, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6 },
+  stepProgressName: { fontSize: 13, fontWeight: '700', color: '#2563eb' },
+  stepProgressTrack: { height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, overflow: 'hidden', marginBottom: 10 },
+  stepProgressFill: { height: '100%', backgroundColor: '#2563eb', borderRadius: 2 },
+  stepDotRow: { flexDirection: 'row', gap: 6 },
+  stepDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#e5e7eb' },
+  stepDotDone: { backgroundColor: '#bfdbfe' },
+  stepDotActive: { backgroundColor: '#2563eb', width: 18 },
+
+  stepCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  stepCardDesc: { fontSize: 14, color: '#6b7280', marginBottom: 18, lineHeight: 20 },
+
+  stepCaptureBtn: {
+    borderWidth: 2,
+    borderColor: '#bfdbfe',
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    paddingVertical: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f0f7ff',
+    gap: 10,
+  },
+  stepCaptureBtnText: { fontSize: 15, fontWeight: '700', color: '#2563eb' },
+
+  stepAddMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    marginTop: 12,
+  },
+  stepAddMoreText: { fontSize: 13, fontWeight: '700', color: '#2563eb' },
+
+  stepActionTile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
+  },
+  stepActionTileDone: { borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' },
+  stepActionTileText: { flex: 1 },
+  stepActionTileTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  stepActionTileSub: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
+
+  stepOptionalHint: { fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 10, fontStyle: 'italic' },
+
+  stepNavRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 18,
+    marginTop: 4,
+  },
+  stepSkipBtn: {
+    flex: 0.4,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  stepSkipText: { fontSize: 14, fontWeight: '600', color: '#6b7280' },
+  stepNextBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#2563eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#2563eb',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  stepNextBtnDisabled: { backgroundColor: '#93c5fd', shadowOpacity: 0, elevation: 0 },
+  stepNextText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+  preStartCard: {
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 36,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  preStartTitle: { fontSize: 18, fontWeight: '700', color: '#374151', marginTop: 16, marginBottom: 8 },
+  preStartDesc: { fontSize: 14, color: '#9ca3af', textAlign: 'center', lineHeight: 20 },
+
+  // ── New layout additions ───────────────────────────────────────────────────
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerStoreTitle: { fontSize: 16, fontWeight: '700', color: '#111827', textAlign: 'center' },
+  headerTimerWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerTimer: { fontSize: 17, fontWeight: '800', color: '#111827', letterSpacing: 1 },
+  headerTimerLabel: { fontSize: 11, color: '#9ca3af', fontWeight: '500' },
+
+  singleFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+  },
+  footerRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    width: '100%',
+  },
+  secondaryFooterBtn: {
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#2563eb',
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 16,
+    flexShrink: 0,
+  },
+  secondaryFooterBtnText: { fontSize: 14, fontWeight: '600', color: '#2563eb' },
+  primaryFooterBtn: {
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#2563eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#2563eb',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 4,
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  primaryFooterBtnSplit: { flex: 1 },
+  primaryFooterBtnFullWidth: { width: '100%' },
+  primaryFooterBtnDisabled: { backgroundColor: '#93c5fd', shadowOpacity: 0, elevation: 0 },
+  primaryFooterBtnText: { fontSize: 14, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
+
+  // ── Step 2 — Facing Matrix ─────────────────────────────────────────────────
+  facingMatrixList: { gap: 12, marginTop: 8 },
+  facingMatrixCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  facingMatrixHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  facingMatrixName: { flex: 1, fontSize: 14, fontWeight: '600', color: '#111827' },
+  facingMatrixTotalBadge: {
+    backgroundColor: '#2563eb',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    minWidth: 36,
+    alignItems: 'center',
+  },
+  facingMatrixTotalText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  facingMatrixInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  facingMatrixInputGroup: { flex: 1, alignItems: 'center' },
+  facingMatrixInputLabel: { fontSize: 11, color: '#6b7280', fontWeight: '500', marginBottom: 4 },
+  facingMatrixInput: {
+    width: '100%',
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#fff',
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  facingMatrixMultiply: { fontSize: 22, fontWeight: '700', color: '#9ca3af', marginBottom: 10 },
+  facingMatrixEquals: { flex: 1, alignItems: 'center' },
+  facingMatrixEqualsLabel: { fontSize: 11, color: '#6b7280', fontWeight: '500', marginBottom: 4 },
+  facingMatrixEqualsValue: { fontSize: 20, fontWeight: '800', color: '#16a34a' },
+  facingMatrixGrandTotal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  facingMatrixGrandTotalLabel: { fontSize: 14, fontWeight: '600', color: '#374151' },
+  facingMatrixGrandTotalValue: { fontSize: 22, fontWeight: '800', color: '#2563eb' },
+
+  // ── Step 3 — Anomaly Inline Form ──────────────────────────────────────────
+  anomalySuccessBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#d1fae5',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+  },
+  anomalySuccessText: { flex: 1, fontSize: 13, color: '#065f46', fontWeight: '500' },
+  anomalyFieldLabel: { fontSize: 12, fontWeight: '600', color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
+  anomalyDropdownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderColor: '#d1d5db',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  anomalyDropdownBtnText: { fontSize: 14, color: '#111827', fontWeight: '500', flex: 1 },
+  anomalyDropdownBtnPlaceholder: { fontSize: 14, color: '#9ca3af', flex: 1 },
+  anomalyDropdownList: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    marginTop: 4,
+    maxHeight: 220,
+    overflow: 'hidden',
+  },
+  anomalyDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  anomalyDropdownItemActive: { backgroundColor: '#eff6ff' },
+  anomalyDropdownItemText: { fontSize: 14, color: '#374151' },
+  anomalyDescriptionInput: {
+    borderWidth: 1.5,
+    borderColor: '#d1d5db',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: '#111827',
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  anomalyPhotoWrap: { position: 'relative', marginTop: 4, alignSelf: 'flex-start' },
+  anomalyPhotoPreview: { width: 100, height: 80, borderRadius: 10 },
+  anomalyPhotoRemove: { position: 'absolute', top: -8, right: -8 },
+  anomalyPhotoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: '#bfdbfe',
+    borderRadius: 10,
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  anomalyPhotoBtnText: { fontSize: 14, color: '#2563eb', fontWeight: '500' },
+  anomalySubmitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 18,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#f59e0b',
+  },
+  anomalySubmitBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+  // ── Step 5 — Stock Audit Choice Cards ─────────────────────────────────────
+  auditChoiceRow: { flexDirection: 'row', gap: 14, marginTop: 12 },
+  auditChoiceCard: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 28,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+    gap: 8,
+  },
+  auditChoiceTitle: { fontSize: 15, fontWeight: '700', color: '#111827', textAlign: 'center' },
+  auditChoiceSub: { fontSize: 12, color: '#6b7280', textAlign: 'center' },
+  auditBackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+  },
+  auditBackText: { fontSize: 14, color: '#2563eb', fontWeight: '600' },
+  manualOosList: { gap: 8, marginTop: 4 },
+  manualOosItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
+  },
+  manualOosItemChecked: { borderColor: '#fca5a5', backgroundColor: '#fff5f5' },
+  manualOosItemName: { flex: 1, fontSize: 14, color: '#374151', fontWeight: '500' },
+  manualOosItemNameChecked: { color: '#ef4444', textDecorationLine: 'line-through' },
+  manualOosSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#fff5f5',
+  },
+  manualOosSummaryText: { fontSize: 13, color: '#ef4444', fontWeight: '600' },
 });
