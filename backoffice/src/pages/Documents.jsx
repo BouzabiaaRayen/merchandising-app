@@ -14,6 +14,7 @@ const Documents = () => {
   const [users, setUsers] = useState([]);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [activeTypeFilter, setActiveTypeFilter] = useState('all');
   
   // Form state
   const [formData, setFormData] = useState({
@@ -26,7 +27,6 @@ const Documents = () => {
       supervisors: false,
       selected_users: [],
     },
-    send_notification: true,
   });
 
   useEffect(() => {
@@ -153,13 +153,6 @@ const Documents = () => {
 
   const selectedUsersData = users.filter(user => formData.target_audience.selected_users.includes(user.id));
 
-  const handleNotificationToggle = (e) => {
-    setFormData(prev => ({
-      ...prev,
-      send_notification: e.target.checked
-    }));
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -195,7 +188,7 @@ const Documents = () => {
       payload.append('file', formData.file);
       payload.append('send_to_merchandisers', formData.target_audience.merchandisers);
       payload.append('send_to_supervisors', formData.target_audience.supervisors);
-      payload.append('send_notification', formData.send_notification);
+      payload.append('send_notification', 'true');
       
       // Add selected users if any
       if (formData.target_audience.selected_users.length > 0) {
@@ -219,7 +212,6 @@ const Documents = () => {
           supervisors: false,
           selected_users: [],
         },
-        send_notification: true,
       });
       
       setUserSearchQuery('');
@@ -295,11 +287,16 @@ const Documents = () => {
     training: 'Training'
   };
 
+  const filteredDocuments = documents.filter((doc) => {
+    if (activeTypeFilter === 'all') return true;
+    return (doc.document_type || '').toLowerCase() === activeTypeFilter;
+  });
+
   return (
     <div className="app">
       <Sidebar />
       <div className="main-content">
-        <Navbar />
+       
         <div className="page-container">
           <div className="page-header">
             <div>
@@ -486,20 +483,6 @@ const Documents = () => {
                   </div>
                 </div>
 
-                <div className="settings-right">
-                  <label className="settings-title">Notifications</label>
-                  <div className="notification-toggle-wrapper">
-                    <label className="toggle-switch">
-                      <input
-                        type="checkbox"
-                        checked={formData.send_notification}
-                        onChange={handleNotificationToggle}
-                      />
-                      <span className="toggle-slider"></span>
-                    </label>
-                    <span className="toggle-label">Send mobile notification</span>
-                  </div>
-                </div>
               </div>
 
               {/* Messages */}
@@ -520,8 +503,8 @@ const Documents = () => {
                       target_audience: {
                         merchandisers: false,
                         supervisors: false,
+                        selected_users: [],
                       },
-                      send_notification: true,
                     });
                     setUserSearchQuery('');
                     setShowUserDropdown(false);
@@ -555,22 +538,42 @@ const Documents = () => {
               </button>
             </div>
 
+            <div className="document-type-filters" role="tablist" aria-label="Filter documents by type">
+              <button
+                type="button"
+                className={`type-filter-btn ${activeTypeFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setActiveTypeFilter('all')}
+              >
+                All
+              </button>
+              {Object.entries(documentTypeOptions).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`type-filter-btn ${activeTypeFilter === value ? 'active' : ''}`}
+                  onClick={() => setActiveTypeFilter(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {loading ? (
               <div className="empty-state">
                 <div className="loading-spinner"></div>
                 <div>Loading documents...</div>
               </div>
-            ) : documents.length === 0 ? (
+            ) : filteredDocuments.length === 0 ? (
               <div className="empty-state">
                 <div style={{ fontSize: '48px', marginBottom: '1rem' }}><FileText size={48} strokeWidth={1} /></div>
-                <div className="empty-title">No documents uploaded yet</div>
+                <div className="empty-title">No documents found for this type</div>
                 <div className="empty-description">
-                  Documents you upload will appear here
+                  Try another type filter or upload a new document.
                 </div>
               </div>
             ) : (
               <div className="documents-grid">
-                {documents.map((doc) => (
+                {filteredDocuments.map((doc) => (
                   <div key={doc.id} className="document-card">
                     <div className="document-card-header">
                       <div className="document-icon"><FileSpreadsheet size={24} strokeWidth={1.5} /></div>

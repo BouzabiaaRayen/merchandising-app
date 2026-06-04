@@ -15,10 +15,10 @@ const Dashboard = () => {
     merchandiserChange: 0,
     totalSupervisors: 0,
     supervisorChange: 0,
-    activeVisits: 0,
-    completedVisits: 0,
+    todaysVisits: 0,
+    todaysCompletedVisits: 0,
     completedVisitsChange: 0,
-    gpsAlerts: 0,
+    offGps: 0,
   });
   const [recentActivities, setRecentActivities] = useState([]);
   const [gpsLocations, setGpsLocations] = useState([]);
@@ -38,7 +38,6 @@ const Dashboard = () => {
   const fetchStats = async () => {
     try {
       setLoading(true);
-      
       // Fetch users by role
       const [merchandisersRes, supervisorsRes] = await Promise.all([
         userService.getUsers({ role: 'merchandiser' }).catch(err => {
@@ -51,52 +50,48 @@ const Dashboard = () => {
         }),
       ]);
 
-      // Fetch visits by status
-      const [activeVisitsRes, completedVisitsRes] = await Promise.all([
-        visitService.getVisits({ status: 'in_progress' }).catch(err => {
-          console.error('Failed to fetch active visits:', err.response?.data || err.message);
+      // Get today's date in YYYY-MM-DD
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${yyyy}-${mm}-${dd}`;
+
+      // Fetch today's visits
+      const [todaysVisitsRes, todaysCompletedVisitsRes] = await Promise.all([
+        visitService.getVisits({ date: todayStr }).catch(err => {
+          console.error('Failed to fetch today\'s visits:', err.response?.data || err.message);
           return { count: 0, results: [] };
         }),
-        visitService.getVisits({ status: 'completed' }).catch(err => {
-          console.error('Failed to fetch completed visits:', err.response?.data || err.message);
+        visitService.getVisits({ date: todayStr, status: 'completed' }).catch(err => {
+          console.error('Failed to fetch today\'s completed visits:', err.response?.data || err.message);
           return { count: 0, results: [] };
         }),
       ]);
 
-      // Fetch GPS alerts (urgent system notifications about GPS being disabled)
-      let alertsRes = await notificationService.getUrgent().catch(err => {
-        console.error('Failed to fetch alerts from urgent endpoint:', err.response?.data || err.message);
-        return null;
-      });
-
-      // Fallback: if urgent endpoint fails or returns nothing, filter all notifications
-      if (!alertsRes || (!alertsRes.count && !alertsRes.results?.length)) {
-        console.log('Trying fallback: fetching all notifications and filtering by GPS alerts');
-        const allNotifs = await notificationService.getNotifications().catch(err => {
-          console.error('Failed to fetch notifications:', err.response?.data || err.message);
-          return { results: [] };
+      // Calculate merchandisers with GPS ON today (unique users with GPS records today)
+      let onGpsCount = 0;
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const gpsToday = await gpsService.getLocations({
+          recorded_at__date: today,
+          page_size: 500,
         });
-        // Count system notifications with urgent priority (GPS disable alerts)
-        const gpsAlerts = (allNotifs.results || []).filter(n => 
-          (n.type === 'GPS_ALERT' || n.notification_type === 'GPS_ALERT' ||
-           (n.notification_type === 'system' && n.priority === 'urgent' && n.title?.includes('GPS')))
-        );
-        alertsRes = { results: gpsAlerts, count: gpsAlerts.length };
+        const uniqueUsers = new Set((gpsToday.results || []).map(loc => loc.user).filter(Boolean));
+        onGpsCount = uniqueUsers.size;
+      } catch (err) {
+        console.error('Failed to fetch GPS status:', err.response?.data || err.message);
       }
-
-      // Handle both count and results array formats
-      const gpsAlertsCount = alertsRes?.count || alertsRes?.results?.length || 0;
-      console.log('GPS Alerts response:', alertsRes, 'Count:', gpsAlertsCount);
 
       setStats({
         totalMerchandisers: merchandisersRes.count || 0,
-        merchandiserChange: 0, // Calculate from historical data if available
+        merchandiserChange: 0,
         totalSupervisors: supervisorsRes.count || 0,
-        supervisorChange: 0, // Calculate from historical data if available
-        activeVisits: activeVisitsRes.count || 0,
-        completedVisits: completedVisitsRes.count || 0,
-        completedVisitsChange: 0, // Calculate from historical data if available
-        gpsAlerts: gpsAlertsCount,
+        supervisorChange: 0,
+        todaysVisits: todaysVisitsRes.count || 0,
+        todaysCompletedVisits: todaysCompletedVisitsRes.count || 0,
+        completedVisitsChange: 0,
+        onGps: onGpsCount,
       });
     } catch (error) {
       console.error('Failed to fetch stats:', error.response?.data || error.message);
@@ -107,10 +102,13 @@ const Dashboard = () => {
 
   const fetchRecentActivities = async () => {
     try {
-      // Fetch recent visits (last 10)
+      // Fetch today's completed visits
+      const todayStr = new Date().toISOString().split('T')[0];
       const visitsRes = await visitService.getVisits({ 
         ordering: '-updated_at',
-        page_size: 10 
+        status: 'completed',
+        date: todayStr,
+        page_size: 50 
       });
 
 
@@ -196,25 +194,30 @@ const Dashboard = () => {
 
   const fetchGPSLocations = async () => {
     try {
+      const today = new Date().toISOString().split('T')[0];
       const data = await gpsService.getLocations({ 
-        ordering: '-timestamp',
-        page_size: 50 // Get latest 50 locations
+        ordering: '-recorded_at',
+        page_size: 200,
+        recorded_at__date: today,
       });
       
       // Get unique locations (latest per merchandiser/visit)
       const locationMap = new Map();
       (data.results || []).forEach(location => {
-        const key = location.merchandiser || location.visit;
+        const key = location.user || location.visit;
         if (!locationMap.has(key)) {
+          const ud = location.user_details || {};
+          const fullName = `${ud.first_name || ''} ${ud.last_name || ''}`.trim() || ud.username || null;
           locationMap.set(key, {
             id: location.id,
+            merchandiser_id: location.user,
             latitude: location.latitude,
             longitude: location.longitude,
-            merchandiser_name: location.merchandiser_name,
-            store_name: location.store_name,
-            status: location.status || 'active',
+            merchandiser_name: fullName,
+            store_name: location.visit_details?.store_name || null,
+            status: 'active',
             accuracy: location.accuracy,
-            updated_at: location.timestamp || location.created_at,
+            updated_at: location.recorded_at || location.created_at,
           });
         }
       });
@@ -314,40 +317,30 @@ const Dashboard = () => {
                 <div className="stat-card">
                   <div className="stat-header">
                     <div className="stat-icon active"><RefreshCw size={22} /></div>
-                    <div className="live-indicator">
-                      <span className="live-dot"></span>
-                      LIVE
-                    </div>
                   </div>
                   <div className="stat-content">
-                    <h3>Active Visits</h3>
-                    <p className="stat-value">{stats.activeVisits}</p>
+                    <h3>Today's Visits</h3>
+                    <p className="stat-value">{stats.todaysVisits}</p>
                   </div>
                 </div>
 
                 <div className="stat-card">
                   <div className="stat-header">
                     <div className="stat-icon completed"><CheckCircle2 size={22} /></div>
-                    {stats.completedVisitsChange !== 0 && (
-                      <div className={`stat-change ${stats.completedVisitsChange > 0 ? 'positive' : 'negative'}`}>
-                        {stats.completedVisitsChange > 0 ? '+' : ''}{stats.completedVisitsChange}%
-                      </div>
-                    )}
                   </div>
                   <div className="stat-content">
-                    <h3>Completed Visits</h3>
-                    <p className="stat-value">{stats.completedVisits.toLocaleString()}</p>
+                    <h3>Today's Completed Visits</h3>
+                    <p className="stat-value">{stats.todaysCompletedVisits.toLocaleString()}</p>
                   </div>
                 </div>
 
-                <div className={`stat-card ${stats.gpsAlerts > 0 ? 'alert-active' : ''}`}>
+                <div className="stat-card">
                   <div className="stat-header">
                     <div className="stat-icon alerts"><AlertTriangle size={22} /></div>
-                    <div className="stat-badge">Live</div>
                   </div>
                   <div className="stat-content">
-                    <h3>GPS Alerts</h3>
-                    <p className="stat-value">{stats.gpsAlerts}</p>
+                    <h3>On GPS</h3>
+                    <p className="stat-value">{stats.onGps}</p>
                   </div>
                 </div>
               </div>
@@ -356,10 +349,10 @@ const Dashboard = () => {
                 <div className="gps-section">
                   <div className="section-header">
                     <div>
-                      <h2>GPS Monitoring</h2>
-                      <p>Real-time merchandiser locations in Tunisia</p>
+                      <h2>Live Field Map</h2>
+                      <p>Real-time merchandiser locations & store coverage</p>
                     </div>
-                    <a href="#" className="full-view-link">Full View ↗</a>
+                    <a href="/gps-monitoring" className="full-view-link">Full View ↗</a>
                   </div>
                   <div className="map-container">
                     <GPSMap 
@@ -377,7 +370,7 @@ const Dashboard = () => {
                       <h2>Recent Activities</h2>
                       <p>Live operational log</p>
                     </div>
-                    <a href="#" className="view-all-link" onClick={e => { e.preventDefault(); window.location.href = '/logs'; }}>VIEW ALL LOGS</a>
+
                   </div>
                   <div className="activities-list">
                     {recentActivities.length > 0 ? (

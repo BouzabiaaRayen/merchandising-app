@@ -17,6 +17,7 @@ import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import ProtectedRoute from './components/ProtectedRoute';
 import Logs from './pages/Logs';
+import GPSMonitoring from './pages/GPSMonitoring';
 import './App.css';
 
 function App() {
@@ -45,6 +46,7 @@ function App() {
         <Route path="/schedules" element={<ProtectedRoute><Complaints /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+        <Route path="/gps-monitoring" element={<ProtectedRoute><GPSMonitoring /></ProtectedRoute>} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Router>

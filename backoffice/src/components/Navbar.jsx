@@ -84,30 +84,15 @@ const Navbar = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  const getBreadcrumb = () => {
-    const path = location.pathname;
-    if (path.includes('dashboard')) return 'Dashboard Overview';
-    if (path.includes('users')) return 'Team Management';
-    if (path.includes('stores')) return 'Stores Management';
-    if (path.includes('visits')) return 'Visits Tracking';
-    if (path.includes('reports')) return 'Reporting';
-    if (path.includes('leave-requests')) return 'Leave Requests';
-    if (path.includes('settings')) return 'Settings';
-    return 'Dashboard';
-  };
 
   return (
     <nav className="navbar">
       <div className="navbar-content">
         <div className="navbar-left">
           <div className="navbar-title">
-            <h2>{getBreadcrumb()}</h2>
+            <h2>Dashboard Overview</h2>
           </div>
-          <div className="breadcrumb">
-            <span className="breadcrumb-item">Main Console</span>
-            <span className="breadcrumb-separator">›</span>
-            <span className="breadcrumb-item active">Overview</span>
-          </div>
+          {/* Breadcrumb removed as per new dashboard design */}
         </div>
         
         <div className="navbar-right">

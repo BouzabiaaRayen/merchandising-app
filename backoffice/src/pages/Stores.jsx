@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
-import Navbar from '../components/Navbar';
 import GPSMap from '../components/GPSMap';
+import { Dropdown, DropdownItem } from '../components/Dropdown';
 import { storeService } from '../services/apiService';
 import './Users.css';
 import './Products.css';
@@ -110,15 +110,16 @@ const Stores = () => {
     setFormError('');
     setSubmitting(true);
 
-    if (!formData.code || !formData.name || !formData.address) {
-      setFormError('Code, Name and Address are required');
+    if (!formData.name || !formData.address) {
+      setFormError('Name and Address are required');
       setSubmitting(false);
       return;
     }
 
     try {
+      const resolvedCode = (editingStore?.code || formData.code || '').toString().trim() || `STR-${Date.now().toString().slice(-6)}`;
       const payload = {
-        code: formData.code.trim(),
+        code: resolvedCode,
         name: formData.name.trim(),
         address: formData.address.trim(),
       };
@@ -207,11 +208,18 @@ const Stores = () => {
 
   const totalPages = Math.ceil(count / itemsPerPage);
 
+  const renderStoreActions = (store) => (
+    <Dropdown>
+      <DropdownItem onClick={() => handleOpenViewModal(store)}>View Details</DropdownItem>
+      <DropdownItem onClick={() => handleOpenEditModal(store)}>Edit Info</DropdownItem>
+      <DropdownItem onClick={() => handleDelete(store.id, store.name)} className="danger">Delete</DropdownItem>
+    </Dropdown>
+  );
+
   return (
     <div className="app">
       <Sidebar />
       <div className="main-content">
-        <Navbar />
         <div className="page-container">
           <div className="page-header">
             <div>
@@ -224,13 +232,13 @@ const Stores = () => {
                   className={`toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
                   onClick={() => setViewMode('list')}
                 >
-                  📋 List
+                  List
                 </button>
                 <button
                   className={`toggle-btn ${viewMode === 'map' ? 'active' : ''}`}
                   onClick={() => setViewMode('map')}
                 >
-                  🗺️ Map
+                  Map
                 </button>
               </div>
               <button className="add-btn" onClick={handleOpenAddModal}>
@@ -264,19 +272,17 @@ const Stores = () => {
                   <thead>
                     <tr>
                       <th>ID</th>
-                      <th>Code</th>
                       <th>Name</th>
                       <th>Address</th>
                       <th>City</th>
                       <th>Phone</th>
-                      <th>Coordinates</th>
-                      <th>Actions</th>
+                      <th aria-label="More actions"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {stores.length === 0 ? (
                       <tr>
-                        <td colSpan="8" className="no-data">
+                        <td colSpan="6" className="no-data">
                           No stores found. Click "Add Store" to create one.
                         </td>
                       </tr>
@@ -284,39 +290,11 @@ const Stores = () => {
                       stores.map((store) => (
                         <tr key={store.id}>
                           <td>{store.id}</td>
-                          <td>{store.code || 'N/A'}</td>
                           <td>{store.name}</td>
                           <td>{store.address || 'N/A'}</td>
                           <td>{store.city || 'N/A'}</td>
-                          <td>{store.phone || 'N/A'}</td>
-                          <td>
-                            {store.latitude && store.longitude
-                              ? `${store.latitude}, ${store.longitude}`
-                              : 'Not set'}
-                          </td>
-                          <td>
-                            <button
-                              className="action-btn view"
-                              onClick={() => handleOpenViewModal(store)}
-                              title="View Details"
-                            >
-                              👁️
-                            </button>
-                            <button
-                              className="action-btn edit"
-                              onClick={() => handleOpenEditModal(store)}
-                              title="Edit Store"
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              className="action-btn delete"
-                              onClick={() => handleDelete(store.id, store.name)}
-                              title="Delete Store"
-                            >
-                              🗑️
-                            </button>
-                          </td>
+                          <td>{store.phone || '--'}</td>
+                          <td>{renderStoreActions(store)}</td>
                         </tr>
                       ))
                     )}
@@ -325,7 +303,7 @@ const Stores = () => {
               </div>
 
               {totalPages > 1 && (
-                <div className="pagination">
+                <div className="pagination stores-pagination-bottom">
                   <button
                     className="page-btn"
                     onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
@@ -355,7 +333,7 @@ const Stores = () => {
         <div className="modal-overlay" onClick={handleCloseModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{editingStore ? 'Edit Store' : 'Add New Store'}</h2>
+              <h2>{editingStore ? 'Edit Info' : 'Add New Store'}</h2>
               <button className="close-btn" onClick={handleCloseModal}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
@@ -365,20 +343,7 @@ const Stores = () => {
                 )}
                 
                 <div className="form-group">
-                  <label htmlFor="code">Store Code *</label>
-                  <input
-                    type="text"
-                    id="code"
-                    name="code"
-                    value={formData.code}
-                    onChange={handleInputChange}
-                    placeholder="Enter store code (e.g., ST001)"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="name">Store Name *</label>
+                  <label htmlFor="name">Store Name </label>
                   <input
                     type="text"
                     id="name"
@@ -391,7 +356,7 @@ const Stores = () => {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="address">Address *</label>
+                  <label htmlFor="address">Address </label>
                   <input
                     type="text"
                     id="address"
@@ -455,9 +420,7 @@ const Stores = () => {
                   </div>
                 </div>
 
-                <p className="form-hint">
-                  💡 Tip: Coordinates are optional but recommended for map features
-                </p>
+                {/* Tip removed as requested */}
               </div>
 
               <div className="modal-footer">
@@ -476,57 +439,55 @@ const Stores = () => {
       {/* View Modal */}
       {showViewModal && viewingStore && (
         <div className="modal-overlay" onClick={handleCloseModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content store-view-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Store Details</h2>
               <button className="close-btn" onClick={handleCloseModal}>×</button>
             </div>
-            <div className="view-details">
-              <div className="detail-row">
-                <span className="detail-label">ID:</span>
-                <span className="detail-value">{viewingStore.id}</span>
+            <div className="store-view-details">
+              <div className="store-detail-card compact">
+                <span className="store-detail-label">Store ID</span>
+                <span className="store-detail-value">#{viewingStore.id}</span>
               </div>
-              <div className="detail-row">
-                <span className="detail-label">Code:</span>
-                <span className="detail-value">{viewingStore.code || 'N/A'}</span>
+              <div className="store-detail-card">
+                <span className="store-detail-label">Store Code</span>
+                <span className="store-detail-value">{viewingStore.code || '--'}</span>
               </div>
-              <div className="detail-row">
-                <span className="detail-label">Name:</span>
-                <span className="detail-value">{viewingStore.name}</span>
+              <div className="store-detail-card">
+                <span className="store-detail-label">Name</span>
+                <span className="store-detail-value">{viewingStore.name || '--'}</span>
               </div>
-              <div className="detail-row">
-                <span className="detail-label">Address:</span>
-                <span className="detail-value">{viewingStore.address || 'N/A'}</span>
+              <div className="store-detail-card full-width">
+                <span className="store-detail-label">Address</span>
+                <span className="store-detail-value">{viewingStore.address || '--'}</span>
               </div>
-              <div className="detail-row">
-                <span className="detail-label">City:</span>
-                <span className="detail-value">{viewingStore.city || 'N/A'}</span>
+              <div className="store-detail-card">
+                <span className="store-detail-label">City</span>
+                <span className="store-detail-value">{viewingStore.city || '--'}</span>
               </div>
-              <div className="detail-row">
-                <span className="detail-label">Phone:</span>
-                <span className="detail-value">{viewingStore.phone || 'N/A'}</span>
+              <div className="store-detail-card">
+                <span className="store-detail-label">Phone</span>
+                <span className="store-detail-value">{viewingStore.phone || '--'}</span>
               </div>
-              <div className="detail-row">
-                <span className="detail-label">Latitude:</span>
-                <span className="detail-value">{viewingStore.latitude || 'Not set'}</span>
+              <div className="store-detail-card">
+                <span className="store-detail-label">Latitude</span>
+                <span className="store-detail-value">{viewingStore.latitude || '--'}</span>
               </div>
-              <div className="detail-row">
-                <span className="detail-label">Longitude:</span>
-                <span className="detail-value">{viewingStore.longitude || 'Not set'}</span>
+              <div className="store-detail-card">
+                <span className="store-detail-label">Longitude</span>
+                <span className="store-detail-value">{viewingStore.longitude || '--'}</span>
               </div>
               {viewingStore.latitude && viewingStore.longitude && (
-                <div className="detail-row">
-                  <span className="detail-label">Map Link:</span>
-                  <span className="detail-value">
-                    <a
-                      href={`https://www.openstreetmap.org/?mlat=${viewingStore.latitude}&mlon=${viewingStore.longitude}&zoom=15`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="map-link"
-                    >
-                      View on OpenStreetMap 🗺️
-                    </a>
-                  </span>
+                <div className="store-detail-card full-width">
+                  <span className="store-detail-label">Location</span>
+                  <a
+                    href={`https://www.openstreetmap.org/?mlat=${viewingStore.latitude}&mlon=${viewingStore.longitude}&zoom=15`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="store-map-link"
+                  >
+                    Open in OpenStreetMap
+                  </a>
                 </div>
               )}
             </div>

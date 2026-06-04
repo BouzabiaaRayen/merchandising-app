@@ -77,7 +77,7 @@ const LeaveRequests = () => {
     <div className="app">
       <Sidebar />
       <div className="main-content">
-        <Navbar />
+        
         <div className="page-container">
           <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>

@@ -20,6 +20,103 @@ const createDefaultForm = () => ({
   imagePreview: '',
 });
 
+const DEMO_PRODUCTS = [
+  {
+    id: 'demo-cannelloni-bechamel',
+    name: 'Cannelloni Bechamel',
+    barcode: '220000010001',
+    sku: 'CAN-BECH-001',
+    brand_name: 'Demo Pasta',
+    category_name: 'Cannelloni',
+    price: 8.9,
+    recommended_facing: 3,
+    is_active: true,
+    stock_status: 'IN STOCK',
+    stock_quantity: 18,
+    is_demo: true,
+  },
+  {
+    id: 'demo-cannelloni-spinach',
+    name: 'Cannelloni Spinach',
+    barcode: '220000010002',
+    sku: 'CAN-SPIN-002',
+    brand_name: 'Demo Pasta',
+    category_name: 'Cannelloni',
+    price: 9.4,
+    recommended_facing: 2,
+    is_active: true,
+    stock_status: 'IN STOCK',
+    stock_quantity: 9,
+    is_demo: true,
+  },
+  {
+    id: 'demo-cannelloni-ricotta',
+    name: 'Cannelloni Ricotta',
+    barcode: '220000010003',
+    sku: 'CAN-RICO-003',
+    brand_name: 'Demo Pasta',
+    category_name: 'Cannelloni',
+    price: 9.9,
+    recommended_facing: 2,
+    is_active: true,
+    stock_status: 'OUT OF STOCK',
+    stock_quantity: 0,
+    is_demo: true,
+  },
+  {
+    id: 'demo-cannelloni-bolognese',
+    name: 'Cannelloni Bolognese',
+    barcode: '220000010004',
+    sku: 'CAN-BOLO-004',
+    brand_name: 'Demo Pasta',
+    category_name: 'Cannelloni',
+    price: 10.2,
+    recommended_facing: 1,
+    is_active: true,
+    stock_status: 'OUT OF STOCK',
+    stock_quantity: 0,
+    is_demo: true,
+  },
+  {
+    id: 'demo-lasagne-classic',
+    name: 'Lasagne Classic',
+    barcode: '220000010005',
+    sku: 'LAS-CLAS-005',
+    brand_name: 'Demo Pasta',
+    category_name: 'Lasagne',
+    price: 7.8,
+    recommended_facing: 3,
+    is_active: true,
+    stock_status: 'IN STOCK',
+    stock_quantity: 14,
+    is_demo: true,
+  },
+  {
+    id: 'demo-ravioli-cheese',
+    name: 'Ravioli Cheese',
+    barcode: '220000010006',
+    sku: 'RAV-CHEE-006',
+    brand_name: 'Demo Pasta',
+    category_name: 'Ravioli',
+    price: 6.7,
+    recommended_facing: 2,
+    is_active: true,
+    stock_status: 'OUT OF STOCK',
+    stock_quantity: 0,
+    is_demo: true,
+  },
+];
+
+const mergeDemoProducts = (products) => {
+  const liveProducts = Array.isArray(products) ? products : [];
+  const existingNames = new Set(liveProducts.map((product) => String(product?.name || '').trim().toLowerCase()).filter(Boolean));
+  const missingDemoProducts = DEMO_PRODUCTS.filter(
+    (product) => !existingNames.has(String(product.name).trim().toLowerCase())
+  );
+
+  return [...missingDemoProducts, ...liveProducts];
+};
+
 const getErrorMessage = (error, fallback) => {
   const detail = error?.response?.data;
   if (!detail) return fallback;
@@ -65,7 +162,7 @@ const Products = () => {
         categoryService.getCategories({ page_size: 1000, is_active: true }),
       ]);
 
-      setProducts(productsData.results ?? productsData);
+      setProducts(mergeDemoProducts(productsData.results ?? productsData));
       setBrands(brandsData.results ?? brandsData);
       setCategories(categoriesData.results ?? categoriesData);
       setError('');
@@ -244,13 +341,15 @@ const Products = () => {
                     <th>Price</th>
                     <th>Facing</th>
                     <th>Status</th>
+                    <th>Stock</th>
+                    <th>Qty</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {products.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="no-data">No products found.</td>
+                      <td colSpan="9" className="no-data">No products found.</td>
                     </tr>
                   ) : (
                     products.map((product) => (
@@ -265,6 +364,7 @@ const Products = () => {
                             <div className="catalog-meta">
                               <strong>{product.name}</strong>
                               <span>{product.barcode || product.sku || 'No code'}</span>
+                              {product.is_demo && <span className="catalog-demo-tag">Demo catalog</span>}
                             </div>
                           </div>
                         </td>
@@ -278,8 +378,15 @@ const Products = () => {
                           </span>
                         </td>
                         <td>
-                          <button className="action-btn edit" onClick={() => handleOpenEditModal(product)}>Edit</button>
-                          <button className="action-btn delete" onClick={() => handleDelete(product)}>Delete</button>
+                          <span className={`stock-badge ${String(product.stock_status || '').toUpperCase() === 'IN STOCK' ? 'in-stock' : 'out-of-stock'}`}>
+                            {String(product.stock_status || '').toUpperCase() === 'IN STOCK' ? 'In Stock' : 'Out of Stock'}
+                          </span>
+                        </td>
+                        <td>{Number(product.stock_quantity || 0)}</td>
+                        <td>
+                          {!product.is_demo && <button className="action-btn edit" onClick={() => handleOpenEditModal(product)}>Edit</button>}
+                          {!product.is_demo && <button className="action-btn delete" onClick={() => handleDelete(product)}>Delete</button>}
+                          {product.is_demo && <span className="catalog-demo-note">Seeded demo</span>}
                         </td>
                       </tr>
                     ))

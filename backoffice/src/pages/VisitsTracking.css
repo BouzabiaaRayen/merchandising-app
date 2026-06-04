@@ -2,8 +2,33 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
   gap: 1rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+}
+
+.tracking-title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.tracking-subtitle {
+  margin: 0.2rem 0 0;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.tracking-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.75rem;
 }
 
 .clear-filters-btn {
@@ -20,6 +45,17 @@
 .clear-filters-btn:hover {
   background-color: #f9fafb;
   border-color: #3b82f6;
+}
+
+@media (max-width: 768px) {
+  .tracking-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .tracking-actions {
+    flex-wrap: wrap;
+  }
 }
 
 .success-message {

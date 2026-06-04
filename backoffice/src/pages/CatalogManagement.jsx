@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Sidebar from '../components/Sidebar';
-import Navbar from '../components/Navbar';
 import { brandService, categoryService, productService } from '../services/apiService';
 import './Users.css';
 import './Products.css';
 import './CatalogManagement.css';
+import { Dropdown, DropdownItem } from '../components/Dropdown';
 
 const createDefaultOwnerBrandForm = () => ({
   name: '',
@@ -403,11 +403,17 @@ const CatalogManagement = () => {
     }
   };
 
+  const renderDropdownActions = (onEdit, onDelete) => (
+    <Dropdown>
+      <DropdownItem onClick={onEdit}>Edit</DropdownItem>
+      <DropdownItem onClick={onDelete} className="danger">Delete</DropdownItem>
+    </Dropdown>
+  );
+
   return (
     <div className="app">
       <Sidebar />
       <div className="main-content">
-        <Navbar />
         <div className="page-container">
           <div className="page-header">
             <div>
@@ -448,7 +454,6 @@ const CatalogManagement = () => {
             <div className="catalog-simple-header">
               <div>
                 <h2>Your Brand</h2>
-                <p>Enter the one main brand this admin account manages.</p>
               </div>
               <button className="add-btn" onClick={openOwnerBrandModal}>
                 {primaryBrand ? 'Edit Brand' : '+ Add Brand'}
@@ -471,8 +476,7 @@ const CatalogManagement = () => {
                   </div>
                 </div>
                 <div className="catalog-inline-actions">
-                  <button className="action-btn edit" onClick={openOwnerBrandModal}>Edit</button>
-                  <button className="action-btn delete" onClick={() => handleDeleteOwnerBrand(primaryBrand.id)}>Delete</button>
+                  {renderDropdownActions(() => openOwnerBrandModal(), () => handleDeleteOwnerBrand(primaryBrand.id))}
                 </div>
               </div>
             ) : !isFirstSetup ? (
@@ -486,7 +490,6 @@ const CatalogManagement = () => {
             <div className="catalog-simple-header">
               <div>
                 <h2>Categories</h2>
-                <p>Add the categories for your brand.</p>
               </div>
               <button className="add-btn" onClick={() => openCategoryModal()} disabled={!primaryBrand}>+ Add Category</button>
             </div>
@@ -500,16 +503,15 @@ const CatalogManagement = () => {
                 <p>No categories yet.</p>
               </div>
             ) : (
-              <div className="catalog-card-grid">
+              <div className="catalog-category-list">
                 {categories.map((category) => (
-                  <div key={category.id} className="catalog-mini-card">
-                    <div>
+                  <div key={category.id} className="catalog-category-row">
+                    <span className="catalog-category-label">
                       <strong>{category.name}</strong>
-                      <span>{categoryCounts[String(category.id)] || 0} products</span>
-                    </div>
+                      <span className="catalog-category-count">{categoryCounts[String(category.id)] || 0} products</span>
+                    </span>
                     <div className="catalog-inline-actions">
-                      <button className="action-btn edit" onClick={() => openCategoryModal(category)}>Edit</button>
-                      <button className="action-btn delete" onClick={() => handleDeleteCategory(category.id)}>Delete</button>
+                      {renderDropdownActions(() => openCategoryModal(category), () => handleDeleteCategory(category.id))}
                     </div>
                   </div>
                 ))}
@@ -521,7 +523,6 @@ const CatalogManagement = () => {
             <div className="catalog-simple-header">
               <div>
                 <h2>Products</h2>
-                <p>Add the products of each category. Products are attached automatically to your main brand.</p>
               </div>
               <button className="add-btn" onClick={() => openProductModal()} disabled={!primaryBrand || categories.length === 0}>+ Add Product</button>
             </div>
@@ -535,53 +536,18 @@ const CatalogManagement = () => {
                 <p>Add at least one category before creating products.</p>
               </div>
             ) : (
-              <>
-                <div className="catalog-toolbar">
-                  <select className="catalog-select" value={selectedCategoryFilter} onChange={(event) => setSelectedCategoryFilter(event.target.value)}>
-                    <option value="">All categories</option>
-                    {categories.map((category) => (
-                      <option key={category.id} value={category.id}>{category.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {displayedProducts.length === 0 ? (
-                  <div className="catalog-empty-state">
-                    <p>No products yet for this brand.</p>
+              <div className="catalog-category-list">
+                {ownBrandProducts.map((product) => (
+                  <div key={product.id} className="catalog-category-row">
+                    <span className="catalog-category-label">
+                      <strong>{product.name}</strong>
+                    </span>
+                    <div className="catalog-inline-actions">
+                      {renderDropdownActions(() => openProductModal(product), () => handleDeleteProduct(product.id))}
+                    </div>
                   </div>
-                ) : (
-                  <div className="table-container">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Product Name</th>
-                          <th>Category</th>
-                          <th>Price</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {displayedProducts.map((product) => (
-                          <tr key={product.id}>
-                            <td>
-                              <div className="catalog-meta">
-                                <strong>{product.name}</strong>
-                                <span>{primaryBrand?.name || 'No brand'}</span>
-                              </div>
-                            </td>
-                            <td>{product.category_name || 'No category'}</td>
-                            <td className="catalog-price">{Number(product.price || 0).toFixed(3)} TND</td>
-                            <td>
-                              <button className="action-btn edit" onClick={() => openProductModal(product)}>Edit</button>
-                              <button className="action-btn delete" onClick={() => handleDeleteProduct(product.id)}>Delete</button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </>
+                ))}
+              </div>
             )}
           </section>
 
@@ -589,7 +555,6 @@ const CatalogManagement = () => {
             <div className="catalog-simple-header">
               <div>
                 <h2>Competitors</h2>
-                <p>Keep this simple: just enter competitor brand names.</p>
               </div>
               <button className="add-btn" onClick={() => openCompetitorModal()}>+ Add Competitor</button>
             </div>
@@ -599,16 +564,12 @@ const CatalogManagement = () => {
                 <p>No competitors yet.</p>
               </div>
             ) : (
-              <div className="catalog-card-grid">
+              <div className="catalog-category-list">
                 {competitorBrands.map((brand) => (
-                  <div key={brand.id} className="catalog-mini-card">
-                    <div>
-                      <strong>{brand.name}</strong>
-                      <span>Competitor name</span>
-                    </div>
+                  <div key={brand.id} className="catalog-category-row">
+                    <strong>{brand.name}</strong>
                     <div className="catalog-inline-actions">
-                      <button className="action-btn edit" onClick={() => openCompetitorModal(brand)}>Edit</button>
-                      <button className="action-btn delete" onClick={() => handleDeleteCompetitor(brand.id)}>Delete</button>
+                      {renderDropdownActions(() => openCompetitorModal(brand), () => handleDeleteCompetitor(brand.id))}
                     </div>
                   </div>
                 ))}
@@ -630,12 +591,24 @@ const CatalogManagement = () => {
                 {ownerBrandFormError && <div className="form-error">{ownerBrandFormError}</div>}
                 <div className="catalog-form-grid">
                   <div className="form-group full-width">
-                    <label htmlFor="owner-brand-name">Brand name *</label>
+                    <label htmlFor="owner-brand-name">Brand name</label>
                     <input id="owner-brand-name" name="name" value={ownerBrandForm.name} onChange={handleOwnerBrandChange} required />
                   </div>
                   <div className="form-group full-width">
                     <label htmlFor="owner-brand-logo">Logo</label>
-                    <input id="owner-brand-logo" className="catalog-file-input" type="file" accept="image/*" onChange={handleOwnerBrandLogoChange} />
+                    <div className="catalog-file-picker">
+                      <input
+                        id="owner-brand-logo"
+                        className="catalog-file-input-hidden"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleOwnerBrandLogoChange}
+                      />
+                      <label htmlFor="owner-brand-logo" className="catalog-file-trigger">
+                        Choose image
+                      </label>
+                      {ownerBrandForm.logo ? <span className="catalog-file-name">{ownerBrandForm.logo.name}</span> : null}
+                    </div>
                     {ownerBrandForm.logoPreview ? (
                       <div className="catalog-preview">
                         <img src={ownerBrandForm.logoPreview} alt="Brand preview" />
@@ -670,7 +643,7 @@ const CatalogManagement = () => {
                 {competitorFormError && <div className="form-error">{competitorFormError}</div>}
                 <div className="catalog-form-grid">
                   <div className="form-group full-width">
-                    <label htmlFor="competitor-name">Competitor name *</label>
+                    <label htmlFor="competitor-name">Competitor name</label>
                     <input id="competitor-name" value={competitorForm.name} onChange={(event) => setCompetitorForm({ name: event.target.value })} required />
                   </div>
                 </div>
@@ -698,7 +671,7 @@ const CatalogManagement = () => {
                 {categoryFormError && <div className="form-error">{categoryFormError}</div>}
                 <div className="catalog-form-grid">
                   <div className="form-group full-width">
-                    <label htmlFor="category-name">Category name *</label>
+                    <label htmlFor="category-name">Category name</label>
                     <input id="category-name" value={categoryForm.name} onChange={(event) => setCategoryForm({ name: event.target.value })} required />
                   </div>
                 </div>
@@ -726,11 +699,11 @@ const CatalogManagement = () => {
                 {productFormError && <div className="form-error">{productFormError}</div>}
                 <div className="catalog-form-grid">
                   <div className="form-group full-width">
-                    <label htmlFor="product-name">Product name *</label>
+                    <label htmlFor="product-name">Product name</label>
                     <input id="product-name" value={productForm.name} onChange={(event) => setProductForm((current) => ({ ...current, name: event.target.value }))} required />
                   </div>
                   <div className="form-group">
-                    <label htmlFor="product-category">Category *</label>
+                    <label htmlFor="product-category">Category</label>
                     <select id="product-category" value={productForm.category} onChange={(event) => setProductForm((current) => ({ ...current, category: event.target.value }))} required>
                       <option value="">Select category</option>
                       {categories.map((category) => (
@@ -741,7 +714,7 @@ const CatalogManagement = () => {
                   <div className="form-group">
                     <label htmlFor="product-price">Price</label>
                     <input id="product-price" type="number" min="0" step="0.001" value={productForm.price} onChange={(event) => setProductForm((current) => ({ ...current, price: event.target.value }))} />
-                    <p className="catalog-helper">Optional. Leave 0 if you only want the product name for now.</p>
+                    <p className="catalog-helper"></p>
                   </div>
                 </div>
               </div>

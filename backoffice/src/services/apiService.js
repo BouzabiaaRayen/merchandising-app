@@ -225,6 +225,12 @@ export const visitService = {
   getVisits: (params = {}) =>
     api.get('/merchandising/visits/', { params }).then(r => r.data),
 
+  getCurrentPlanningPeriod: () =>
+    api.get('/merchandising/planning-periods/current/').then(r => r.data),
+
+  setCurrentPlanningPeriod: (data) =>
+    api.post('/merchandising/planning-periods/', { ...data, is_current: true }).then(r => r.data),
+
   getVisit: (id) =>
     api.get(`/merchandising/visits/${id}/`).then(r => r.data),
 
@@ -304,6 +310,13 @@ export const gpsService = {
   /** @param {{ latitude, longitude, visit, accuracy?, altitude?, speed?, heading? }} data */
   track: (data) =>
     api.post('/merchandising/gps/track/', data).then(r => r.data),
+
+  /**
+   * Fetches GPS status for all merchandisers.
+   * Expected backend response: { results: [ { merchandiserId, gpsOn: true|false, lastSeen: ISODateString }, ... ] }
+   */
+  getMerchandisersGpsStatus: () =>
+    api.get('/merchandising/gps/status/').then(r => r.data),
 };
 
 // ---------------------------------------------------------------------------
@@ -424,4 +437,14 @@ export const scheduleService = {
 
   deleteSchedule: (id) =>
     api.delete(`/merchandising/schedules/${id}/`).then(r => r.data),
+};
+
+// ---------------------------------------------------------------------------
+// Stats — live WebSocket / tracking sessions
+// ---------------------------------------------------------------------------
+export const statsService = {
+  // Expected response: { active_connections: number } (or similar field)
+  // Endpoint: GET /api/v1/tracking/stats/  — update path to match your backend
+  getLiveSessions: () =>
+    api.get('/tracking/stats/').then(r => r.data),
 };

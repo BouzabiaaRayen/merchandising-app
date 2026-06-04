@@ -1,1231 +1,715 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState, useCallback } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import {
-  LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ComposedChart,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
 import {
-  TrendingUp, CheckCircle2, Users,
-  Package, Zap,
+  TrendingUp, CheckCircle2, Users, Package, Zap,
+  MapPin, AlertTriangle, Clock, Activity, Eye,
+  ChevronDown, ChevronRight, WifiOff, Star,
+  MessageSquare, ShieldAlert, RefreshCw,
 } from 'lucide-react';
 import {
-  storeService, visitService, inventoryService, productService,
-  userService,
+  storeService, visitService, inventoryService,
+  productService, userService, complaintService, statsService,
 } from '../services/apiService';
-import { getAvatarUrl } from '../services/supabaseClient';
 import './Performance.css';
 
-const COMPETITOR_TRACKERS_KEY = 'competitorTrackers';
-const ACTIVE_COMPETITOR_KEY = 'activeCompetitorTracker';
-const DEFAULT_OWNER_OPTIONS = ['Warda', 'Lepidor', 'Spiga', 'Moulin d\'Or', 'Saida'];
+/* ── helpers ────────────────────────────────────────────── */
+
+const CircularGauge = ({ value = 0, max = 100, color = '#3b82f6', size = 120, label }) => {
+  const pct   = Math.min(Math.max(value / max, 0), 1);
+  const r     = 46;
+  const circ  = 2 * Math.PI * r;
+  const dash  = pct * circ;
+  return (
+    <div className="gauge-wrap" style={{ width: size, height: size }}>
+      <svg viewBox="0 0 100 100" width={size} height={size}>
+        <circle cx="50" cy="50" r={r} fill="none" stroke="#e5e7eb" strokeWidth="9" />
+        <circle
+          cx="50" cy="50" r={r} fill="none"
+          stroke={color} strokeWidth="9"
+          strokeDasharray={`${dash} ${circ - dash}`}
+          strokeLinecap="round"
+          transform="rotate(-90 50 50)"
+          style={{ transition: 'stroke-dasharray 0.6s ease' }}
+        />
+        <text x="50" y="47" textAnchor="middle" fontSize="18" fontWeight="700" fill="#0f172a">
+          {Math.round(value)}
+        </text>
+        <text x="50" y="60" textAnchor="middle" fontSize="9" fill="#64748b">
+          {label || `/ ${max}`}
+        </text>
+      </svg>
+    </div>
+  );
+};
+
+const Module = ({ letter, title, subtitle, children, defaultOpen = true }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="perf-module">
+      <button className="perf-module-header" onClick={() => setOpen(o => !o)}>
+        <div className="module-title-wrap">
+          <span className="module-title">{title}</span>
+          {subtitle && <span className="module-subtitle">{subtitle}</span>}
+        </div>
+        {open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+      </button>
+      {open && <div className="perf-module-body">{children}</div>}
+    </div>
+  );
+};
+
+const StatCard = ({ icon, label, value, sub, color = '#3b82f6' }) => (
+  <div className="perf-stat-card">
+    <div className="perf-stat-icon" style={{ background: color + '18', color }}>{icon}</div>
+    <div>
+      <div className="perf-stat-value">{value}</div>
+      <div className="perf-stat-label">{label}</div>
+      {sub && <div className="perf-stat-sub">{sub}</div>}
+    </div>
+  </div>
+);
+
+const CT = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="custom-tooltip">
+      <p className="ct-label">{label}</p>
+      {payload.map((p, i) => (
+        <p key={i} style={{ color: p.color || p.fill }}>
+          {p.name}: <strong>{p.value}</strong>
+        </p>
+      ))}
+    </div>
+  );
+};
+
+const PIE_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4'];
+
+/* ── main component ─────────────────────────────────────── */
 
 const Performance = () => {
-  const [performanceData, setPerformanceData] = useState({
-    overallPerformance: 0,
-    completionRate: 0,
-    totalVisits: 0,
-    completedVisits: 0,
-    activeVisits: 0,
-    totalStores: 0,
-    totalSupervisors: 0,
-  });
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState('');
+  const [lastFetch, setLastFetch] = useState(null);
 
-  const [stockRuptureData, setStockRuptureData] = useState([]);
+  /* Module A — Visit Analytics */
+  const [visitCounts, setVisitCounts]       = useState({ total: 0, completed: 0, active: 0, planned: 0, activeOnMap: 0 });
   const [visitStatusData, setVisitStatusData] = useState([]);
-  const [supervisorObjectives, setSupervisorObjectives] = useState([]);
-  const [performanceTrend, setPerformanceTrend] = useState([]);
-  const [competitorAnalysis, setCompetitorAnalysis] = useState({
-    promosDetected: 0,
-    criticalGaps: 0,
-    newProductsSpotted: 0,
-    activities: [],
-    priceRows: [],
-    categoryGaps: [],
-  });
-  const [productsData, setProductsData] = useState([]);
-  const [visitsData, setVisitsData] = useState([]);
-  const [trackedCompetitors, setTrackedCompetitors] = useState(() => {
+  const [avgDuration, setAvgDuration]       = useState(0);
+
+  /* Module B — Stock & Shelf */
+  const [stockoutProducts, setStockoutProducts] = useState([]);
+  const [regionalCriticality, setRegionalCriticality] = useState([]);
+  const [detectionRatio, setDetectionRatio]     = useState({ ai: 0, manual: 0 });
+
+  /* Module C — Team & Attendance */
+  const [attendance, setAttendance]         = useState({ present: 0, total: 0 });
+  const [gpsAlerts, setGpsAlerts]           = useState({ count: 0, note: '' });
+  const [leaderboard, setLeaderboard]       = useState([]);
+  const [liveTrackingSessions, setLiveSessions] = useState(null);
+
+  /* Module D — Anomalies & Complaints */
+  const [anomalyData, setAnomalyData]       = useState([]);
+  const [complaintsStatus, setComplaintsStatus] = useState({ open: 0, inProgress: 0, resolved: 0 });
+
+  /* Module E — Competitor Intel */
+  const [competitorShare, setCompetitorShare] = useState([]);
+  const [threatData, setThreatData]           = useState([]);
+  const [priceBenchmark, setPriceBenchmark]   = useState([]);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    setError('');
     try {
-      const raw = localStorage.getItem(COMPETITOR_TRACKERS_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch {
-      // Ignore parse issues and use defaults
-    }
-    return ['Warda'];
-  });
-  const [activeCompetitor, setActiveCompetitor] = useState(() => {
-    return localStorage.getItem(ACTIVE_COMPETITOR_KEY) || 'Warda';
-  });
-  const [showTrackerModal, setShowTrackerModal] = useState(false);
-  const [ownerOptions, setOwnerOptions] = useState(DEFAULT_OWNER_OPTIONS);
-  const [selectedCompetitorOption, setSelectedCompetitorOption] = useState(DEFAULT_OWNER_OPTIONS[0]);
-  const [customCompetitorName, setCustomCompetitorName] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [expandStockDetails, setExpandStockDetails] = useState(false);
-  const [expandVisitDetails, setExpandVisitDetails] = useState(false);
-
-  const rankedStockRuptures = [...stockRuptureData]
-    .map((store) => ({
-      ...store,
-      totalIssues: (store.ruptures || 0) + (store.lowStock || 0),
-    }))
-    .sort((a, b) => b.totalIssues - a.totalIssues || b.ruptures - a.ruptures || b.lowStock - a.lowStock);
-
-  const ruptureTotals = rankedStockRuptures.reduce((acc, store) => {
-    acc.ruptures += store.ruptures || 0;
-    acc.fieldRuptures += store.fieldRuptures || 0;
-    acc.lowStock += store.lowStock || 0;
-    if ((store.ruptures || 0) + (store.lowStock || 0) + (store.fieldRuptures || 0) > 0) {
-      acc.affectedStores += 1;
-    }
-    return acc;
-  }, { ruptures: 0, fieldRuptures: 0, lowStock: 0, affectedStores: 0 });
-
-  const maxRuptures = Math.max(...stockRuptureData.map((store) => store.ruptures || 0), 1);
-  const maxLowStock = Math.max(...stockRuptureData.map((store) => store.lowStock || 0), 1);
-
-  const getSeverityLevel = (totalIssues) => {
-    if (totalIssues >= 8) return { label: 'Critical', className: 'critical' };
-    if (totalIssues >= 4) return { label: 'Watch', className: 'watch' };
-    if (totalIssues > 0) return { label: 'Monitor', className: 'monitor' };
-    return { label: 'Clear', className: 'clear' };
-  };
-
-  const normalizeCompetitorKey = (name = '') =>
-    name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-
-  const buildCompetitorAnalysis = (products, visits, competitorName) => {
-    const nowMs = Date.now();
-    const monthMs = 30 * 24 * 60 * 60 * 1000;
-    const toNumber = (v) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : null;
-    };
-
-    const resolveCompetitorPrice = (product, selectedName) => {
-      const genericPrice =
-        toNumber(product.competitor_price) ??
-        toNumber(product.competitorPrice) ??
-        toNumber(product.market_price) ??
-        toNumber(product.reference_price) ??
-        toNumber(product.benchmark_price);
-
-      if (!selectedName) {
-        return genericPrice;
-      }
-
-      const key = normalizeCompetitorKey(selectedName);
-      const specificPrice =
-        toNumber(product[`${key}_price`]) ??
-        toNumber(product[`${key}Price`]) ??
-        toNumber(product[`price_${key}`]) ??
-        toNumber(product[`competitor_${key}_price`]) ??
-        toNumber(product[`competitor_${key}`]) ??
-        toNumber(product.competitor_prices?.[key]);
-
-      return specificPrice ?? genericPrice;
-    };
-
-    const normalizedActive = normalizeCompetitorKey(competitorName || '');
-
-    const visitRows = (visits || [])
-      .flatMap((visit) => {
-        const comparisons = Array.isArray(visit.price_comparisons)
-          ? visit.price_comparisons
-          : Array.isArray(visit.priceComparisons)
-            ? visit.priceComparisons
-            : [];
-
-        return comparisons.map((pc) => {
-          const ourPrice = toNumber(pc.ourPrice ?? pc.our_price);
-          const competitorPrice = toNumber(pc.competitorPrice ?? pc.competitor_price);
-          const competitor = pc.competitor || pc.competitor_name || pc.owner || '';
-          const normalizedCompetitor = normalizeCompetitorKey(String(competitor));
-
-          if (!ourPrice || !competitorPrice || competitorPrice <= 0) {
-            return null;
-          }
-
-          if (normalizedActive && normalizedCompetitor && normalizedCompetitor !== normalizedActive) {
-            return null;
-          }
-
-          const gapPercent = ((ourPrice - competitorPrice) / competitorPrice) * 100;
-          return {
-            name: pc.productName || pc.product_name || `Visit product ${visit.id || ''}`,
-            category: pc.category || 'Field Audit',
-            ourPrice,
-            competitorPrice,
-            gapPercent,
-            gapState: gapPercent > 0 ? 'up' : gapPercent < 0 ? 'down' : 'neutral',
-            updatedAt: visit.updated_at || visit.date || visit.created_at || null,
-            source: 'visit',
-          };
-        });
-      })
-      .filter(Boolean);
-
-    const productRows = products
-      .map((p) => {
-        const ourPrice = toNumber(p.price);
-        const competitorPrice = resolveCompetitorPrice(p, competitorName);
-
-        if (!ourPrice || !competitorPrice || competitorPrice <= 0) {
-          return null;
-        }
-
-        const gapPercent = ((ourPrice - competitorPrice) / competitorPrice) * 100;
-        return {
-          name: p.name || p.product_name || `Product ${p.id}`,
-          category: p.category || 'Uncategorized',
-          ourPrice,
-          competitorPrice,
-          gapPercent,
-          gapState: gapPercent > 0 ? 'up' : gapPercent < 0 ? 'down' : 'neutral',
-          updatedAt: p.updated_at || p.created_at || null,
-          source: 'product',
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => Math.abs(b.gapPercent) - Math.abs(a.gapPercent));
-
-    const mergedRows = [...visitRows, ...productRows]
-      .sort((a, b) => Math.abs(b.gapPercent) - Math.abs(a.gapPercent));
-
-    const criticalGaps = mergedRows.filter((r) => r.gapPercent > 8).length;
-    const promosDetected = mergedRows.filter((r) => Math.abs(r.gapPercent) >= 10).length;
-    const newProductsSpotted = products.filter((p) => {
-      const created = p.created_at ? new Date(p.created_at).getTime() : null;
-      return created && nowMs - created <= monthMs;
-    }).length;
-
-    const categoryMap = new Map();
-    mergedRows.forEach((row) => {
-      const key = row.category || 'Uncategorized';
-      if (!categoryMap.has(key)) {
-        categoryMap.set(key, { category: key, competitive: [], critical: [] });
-      }
-      const bucket = categoryMap.get(key);
-      if (row.gapPercent <= 0) {
-        bucket.competitive.push(Math.abs(row.gapPercent));
-      } else {
-        bucket.critical.push(row.gapPercent);
-      }
-    });
-
-    const categoryGaps = Array.from(categoryMap.values())
-      .map((entry) => {
-        const avg = (arr) => (arr.length ? arr.reduce((s, n) => s + n, 0) / arr.length : 0);
-        return {
-          category: entry.category,
-          competitive: Number(avg(entry.competitive).toFixed(1)),
-          critical: Number(avg(entry.critical).toFixed(1)),
-        };
-      })
-      .sort((a, b) => (b.critical + b.competitive) - (a.critical + a.competitive))
-      .slice(0, 6);
-
-    const activities = mergedRows.slice(0, 5).map((row, idx) => ({
-      id: idx + 1,
-      title: `${row.name} gap vs ${competitorName || 'market'} detected (${row.source === 'visit' ? 'field' : 'catalog'})`,
-      subtitle: row.category,
-      time: row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : 'Recent',
-      gapPercent: row.gapPercent,
-    }));
-
-    return {
-      promosDetected,
-      criticalGaps,
-      newProductsSpotted,
-      activities,
-      priceRows: mergedRows.slice(0, 8),
-      categoryGaps,
-    };
-  };
-
-  useEffect(() => {
-    localStorage.setItem(COMPETITOR_TRACKERS_KEY, JSON.stringify(trackedCompetitors));
-  }, [trackedCompetitors]);
-
-  useEffect(() => {
-    if (activeCompetitor && !trackedCompetitors.includes(activeCompetitor)) {
-      setTrackedCompetitors((prev) => [...prev, activeCompetitor]);
-    }
-  }, [activeCompetitor, trackedCompetitors]);
-
-  useEffect(() => {
-    localStorage.setItem(ACTIVE_COMPETITOR_KEY, activeCompetitor);
-    setCompetitorAnalysis(buildCompetitorAnalysis(productsData, visitsData, activeCompetitor));
-  }, [activeCompetitor, productsData, visitsData]);
-
-  useEffect(() => {
-    if (selectedCompetitorOption === '__custom__') {
-      return;
-    }
-    if (ownerOptions.length > 0 && !ownerOptions.includes(selectedCompetitorOption)) {
-      setSelectedCompetitorOption(ownerOptions[0]);
-    }
-  }, [ownerOptions, selectedCompetitorOption]);
-
-  useEffect(() => {
-    fetchPerformanceData();
-  }, []);
-
-  const fetchPerformanceData = async () => {
-    try {
-      setLoading(true);
-      setError('');
-
-      // Fetch all necessary data in parallel
-      const [
-        storesRes,
-        visitRes,
-        supervisorsRes,
-        inventoryRes,
-        productsRes,
-        allUsersRes,
-      ] = await Promise.all([
-        storeService.getStores({ page_size: 1000 }).catch(err => ({
-          count: 0,
-          results: [],
-        })),
-        visitService.getVisits({ page_size: 1000 }).catch(err => ({
-          count: 0,
-          results: [],
-        })),
-        userService.getUsers({ role: 'supervisor', page_size: 1000 }).catch(err => ({
-          count: 0,
-          results: [],
-        })),
-        inventoryService.getInventory({ page_size: 1000 }).catch(err => ({
-          count: 0,
-          results: [],
-        })),
-        productService.getProducts({ page_size: 1000 }).catch(err => ({
-          count: 0,
-          results: [],
-        })),
-        userService.getUsers({ page_size: 1000, expand: 'supervisor' }).catch(err => ({
-          count: 0,
-          results: [],
-        })),
+      const [visitsRes, storesRes, usersRes, invRes, productsRes, complaintsRes] = await Promise.all([
+        visitService.getVisits({ page_size: 1000 }).catch(() => ({ results: [] })),
+        storeService.getStores({ page_size: 1000 }).catch(() => ({ results: [] })),
+        userService.getUsers({ page_size: 500 }).catch(() => ({ results: [] })),
+        inventoryService.getInventory({ page_size: 1000 }).catch(() => ({ results: [] })),
+        productService.getProducts({ page_size: 1000 }).catch(() => ({ results: [] })),
+        complaintService.getComplaints({ page_size: 1000 }).catch(() => ({ results: [] })),
       ]);
 
-      const stores = storesRes.results || [];
-      const visits = visitRes.results || [];
-      const supervisors = supervisorsRes.results || [];
-      const inventory = inventoryRes.results || [];
-      const products = productsRes.results || [];
-      const ownerSlugToName = (slug = '') =>
-        slug
-          .replace(/[_-]+/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .replace(/\b\w/g, (c) => c.toUpperCase());
+      const visits     = visitsRes?.results   ?? visitsRes   ?? [];
+      const stores     = storesRes?.results   ?? storesRes   ?? [];
+      const users      = usersRes?.results    ?? usersRes    ?? [];
+      const inventory  = invRes?.results      ?? invRes      ?? [];
+      const products   = productsRes?.results ?? productsRes ?? [];
+      const complaints = complaintsRes?.results ?? complaintsRes ?? [];
 
-      const genericKeys = new Set([
-        'competitor',
-        'market',
-        'reference',
-        'benchmark',
-      ]);
+      /* ── Module A ── */
+      const total     = visits.length;
+      const completed = visits.filter(v => v.status === 'completed').length;
+      const active    = visits.filter(v => v.status === 'in_progress' || v.status === 'active').length;
+      const planned   = visits.filter(v => v.status === 'planned' || v.status === 'scheduled').length;
+      const activeOnMap = new Set(
+        visits
+          .filter(v => { const s = (v.status||'').toLowerCase(); return s === 'in_progress' || s === 'active'; })
+          .map(v => v.merchandiser || v.user || v.user_id)
+          .filter(Boolean)
+      ).size;
+      setVisitCounts({ total, completed, active, planned, activeOnMap });
 
-      const discoveredOwnerNames = new Set();
-      products.forEach((product) => {
-        const keys = Object.keys(product || {});
-        keys.forEach((key) => {
-          let slug = null;
-          let match = key.match(/^([a-z0-9_]+)_price$/i);
-          if (match) slug = match[1];
+      setVisitStatusData([
+        { name: 'Completed', value: completed, fill: '#059669' },
+        { name: 'Active',    value: active,    fill: '#2563eb' },
+        { name: 'Planned',   value: planned,   fill: '#f59e0b' },
+        { name: 'Pending',   value: Math.max(0, total - completed - active - planned), fill: '#dde3ed' },
+      ].filter(d => d.value > 0));
 
-          match = key.match(/^price_([a-z0-9_]+)$/i);
-          if (match) slug = slug || match[1];
-
-          match = key.match(/^competitor_([a-z0-9_]+)_price$/i);
-          if (match) slug = slug || match[1];
-
-          if (slug && !genericKeys.has(slug.toLowerCase())) {
-            discoveredOwnerNames.add(ownerSlugToName(slug));
-          }
-        });
-
-        if (product.competitor_prices && typeof product.competitor_prices === 'object') {
-          Object.keys(product.competitor_prices).forEach((slug) => {
-            if (!genericKeys.has(String(slug).toLowerCase())) {
-              discoveredOwnerNames.add(ownerSlugToName(String(slug)));
-            }
-          });
-        }
-      });
-
-      const mergedOwnerOptions = Array.from(
-        new Set([...DEFAULT_OWNER_OPTIONS, ...Array.from(discoveredOwnerNames)])
+      const getIn  = v => v.check_in_time || v.check_in || v.checked_in_at  || v.checkin_time  || null;
+      const getOut = v => v.check_out_time || v.check_out || v.checked_out_at || v.checkout_time || null;
+      const durationsMin = visits
+        .filter(v => {
+          const s = (v.status || '').toLowerCase();
+          return (s === 'completed' || s === 'done') && getIn(v) && getOut(v);
+        })
+        .map(v => (new Date(getOut(v)) - new Date(getIn(v))) / 60000)
+        .filter(d => d > 0 && d < 600);
+      setAvgDuration(durationsMin.length
+        ? Math.round(durationsMin.reduce((s, d) => s + d, 0) / durationsMin.length)
+        : 0
       );
-      setOwnerOptions(mergedOwnerOptions);
-      const allUsers = allUsersRes.results || [];
-      const merchandisers = allUsers.filter(u => u.role === 'merchandiser');
-      const savedAssignmentsRaw = localStorage.getItem('supervisorAssignments');
-      let savedAssignments = {};
-      if (savedAssignmentsRaw) {
-        try {
-          savedAssignments = JSON.parse(savedAssignmentsRaw);
-        } catch {
-          savedAssignments = {};
-        }
-      }
 
-      // Calculate overall performance metrics
-      const completedVisits = visits.filter(v => v.status === 'completed').length;
-      const activeVisits = visits.filter(v => v.status === 'in_progress').length;
-      const totalVisits = visits.length;
-      const completionRate = totalVisits > 0 ? Math.round((completedVisits / totalVisits) * 100) : 0;
-
-      // Calculate average performance based on visit completion and on-time rate
-      const onTimeVisits = visits.filter(v => v.status === 'completed' && !v.is_late).length;
-      const onTimeRate = completedVisits > 0 ? Math.round((onTimeVisits / completedVisits) * 100) : 0;
-      const overallPerformance = Math.round((completionRate + onTimeRate) / 2);
-
-      setPerformanceData({
-        overallPerformance,
-        completionRate,
-        totalVisits,
-        completedVisits,
-        activeVisits,
-        totalStores: stores.length,
-        totalSupervisors: supervisors.length,
-      });
-
-      // Process stock rupture data by store
-      const storeStockMap = new Map();
-      stores.forEach(store => {
-        storeStockMap.set(store.id, {
-          id: store.id,
-          name: store.name || `Store ${store.id}`,
-          ruptures: 0,
-          lowStock: 0,
-          fieldRuptures: 0,
-          totalItems: 0,
-          sourceLabel: 'Inventory + field reports',
-        });
-      });
-
+      /* ── Module B ── */
+      const ruptureMap = {};
       inventory.forEach(item => {
-        if (!item.store) {
-          return;
-        }
-
-        if (!storeStockMap.has(item.store)) {
-          storeStockMap.set(item.store, {
-            id: item.store,
-            name: item.store_name || item.storeName || `Store ${item.store}`,
-            ruptures: 0,
-            lowStock: 0,
-            fieldRuptures: 0,
-            totalItems: 0,
-            sourceLabel: 'Inventory + field reports',
-          });
-        }
-
-        const storeData = storeStockMap.get(item.store);
-        storeData.totalItems++;
-        if (item.quantity === 0) {
-          storeData.ruptures++;
-        } else if (item.quantity < (item.min_quantity || 5)) {
-          storeData.lowStock++;
+        const qty = Number(item.quantity ?? item.stock_quantity ?? 0);
+        const min = Number(item.minimum_stock ?? item.min_stock ?? 0);
+        const isOut = qty === 0;
+        const isLow = qty > 0 && qty < min;
+        if (isOut || isLow) {
+          const prodName = item.product_name || item.name || `Item ${item.id}`;
+          if (!ruptureMap[prodName]) ruptureMap[prodName] = { name: prodName, stockout: 0, low: 0 };
+          if (isOut) ruptureMap[prodName].stockout++;
+          else ruptureMap[prodName].low++;
         }
       });
+      const allRuptures = Object.values(ruptureMap)
+        .map(r => ({ ...r, total: r.stockout + r.low }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 8);
+      setStockoutProducts(allRuptures);
 
-      visits.forEach((visit) => {
-        const ruptureItems = Array.isArray(visit.stock_ruptures)
-          ? visit.stock_ruptures
-          : Array.isArray(visit.stockRuptures)
-            ? visit.stockRuptures
-            : [];
-
-        if (!visit.store || ruptureItems.length === 0) {
-          return;
-        }
-
-        if (!storeStockMap.has(visit.store)) {
-          storeStockMap.set(visit.store, {
-            id: visit.store,
-            name: visit.store_name || visit.storeName || `Store ${visit.store}`,
-            ruptures: 0,
-            lowStock: 0,
-            fieldRuptures: 0,
-            totalItems: 0,
-            sourceLabel: 'Inventory + field reports',
-          });
-        }
-
-        const storeData = storeStockMap.get(visit.store);
-        storeData.fieldRuptures += ruptureItems.length;
-        if (visit.updated_at || visit.check_out_time || visit.created_at) {
-          storeData.lastFieldReportAt = visit.updated_at || visit.check_out_time || visit.created_at;
+      const regionMap = {};
+      stores.forEach(s => {
+        const city = s.city || s.region || s.location || 'Unknown';
+        if (!regionMap[city]) regionMap[city] = { city, stores: 0, issues: 0 };
+        regionMap[city].stores++;
+      });
+      inventory.forEach(item => {
+        const qty = Number(item.quantity ?? item.stock_quantity ?? 0);
+        const min = Number(item.minimum_stock ?? item.min_stock ?? 0);
+        if (qty < min) {
+          const store = stores.find(s => s.id === (item.store || item.store_id));
+          const city = store?.city || store?.region || 'Unknown';
+          if (regionMap[city]) regionMap[city].issues++;
         }
       });
+      setRegionalCriticality(
+        Object.values(regionMap).sort((a, b) => b.issues - a.issues).slice(0, 6)
+      );
 
-      const stockData = Array.from(storeStockMap.values())
-        .map((store) => ({
-          ...store,
-          totalIssues: (store.ruptures || 0) + (store.lowStock || 0) + (store.fieldRuptures || 0),
-        }))
-        .sort((a, b) => b.totalIssues - a.totalIssues || b.fieldRuptures - a.fieldRuptures || b.ruptures - a.ruptures)
-        .slice(0, 10);
-      setStockRuptureData(stockData);
+      const aiDetected     = visits.filter(v => v.ai_detected || v.is_ai_analyzed).length;
+      const manualDetected = Math.max(0, visits.length - aiDetected);
+      setDetectionRatio({ ai: aiDetected, manual: manualDetected });
 
-      // Process visit status data
-      const visitStatuses = {
-        completed: visits.filter(v => v.status === 'completed').length,
-        in_progress: visits.filter(v => v.status === 'in_progress').length,
-        cancelled: visits.filter(v => v.status === 'cancelled').length,
-        pending: visits.filter(v => v.status === 'pending').length,
-      };
-      
-      const visitStatusArray = [
-        { status: 'Completed', count: visitStatuses.completed, color: '#10b981' },
-        { status: 'In Progress', count: visitStatuses.in_progress, color: '#3b82f6' },
-        { status: 'Pending', count: visitStatuses.pending, color: '#f59e0b' },
-        { status: 'Cancelled', count: visitStatuses.cancelled, color: '#ef4444' },
-      ].filter(item => item.count > 0);
-      
-      setVisitStatusData(visitStatusArray);
+      /* ── Module C ── */
+      const merchandisers = users.filter(u =>
+        (u.role || '').toLowerCase().includes('merch') ||
+        (u.user_type || '').toLowerCase().includes('merch')
+      );
+      const totalMerch  = merchandisers.length || users.length;
+      const presentToday = visits.filter(v => {
+        const d = new Date(v.date || v.created_at || v.check_in_time || 0);
+        return d.toDateString() === new Date().toDateString();
+      }).map(v => v.merchandiser || v.user || v.user_id);
+      const uniquePresent = new Set(presentToday).size;
+      setAttendance({ present: uniquePresent, total: totalMerch });
 
-      // Calculate supervisor objectives (based on their managed merchandiser teams and monthly targets)
-      const supervisorMap = new Map();
-      supervisors.forEach(sup => {
-        supervisorMap.set(sup.id, {
-          id: sup.id,
-          name: sup.first_name + ' ' + sup.last_name,
-          avatar: getAvatarUrl(sup.avatar_url || sup.avatar) || `https://ui-avatars.com/api/?name=${sup.first_name}+${sup.last_name}&background=667eea&color=fff`,
-          teamSize: 0, // Number of merchandisers they manage
-          teamVisits: 0, // Total visits from their team
-          completedVisits: 0, // Completed visits from their team
-          teamCompletionRate: 0,
-          monthlyObjective: 95, // Monthly target (%)
-          monthlyAchievement: 0, // Monthly achievement (%)
+      const gpsIssues = visits.filter(v => v.gps_alert || v.location_mismatch || v.outside_geofence).length;
+      setGpsAlerts({ count: gpsIssues, note: gpsIssues > 0 ? 'Location anomalies detected' : 'Full route compliance detected' });
+
+      const agentMap = {};
+      visits.forEach(v => {
+        const uid = v.merchandiser || v.user || v.user_id;
+        if (!uid) return;
+        if (!agentMap[uid]) {
+          const u = users.find(u => u.id === uid);
+          agentMap[uid] = {
+            id: uid,
+            name: u?.full_name || u?.username || `Agent ${uid}`,
+            visits: 0,
+            completed: 0,
+          };
+        }
+        agentMap[uid].visits++;
+        if (v.status === 'completed') agentMap[uid].completed++;
+      });
+      const board = Object.values(agentMap)
+        .map(a => ({ ...a, rate: a.visits ? Math.round((a.completed / a.visits) * 100) : 0 }))
+        .sort((a, b) => b.completed - a.completed || b.rate - a.rate)
+        .slice(0, 5);
+      setLeaderboard(board);
+
+      /* ── Module D ── */
+      const anomTypes = {};
+      visits.forEach(v => {
+        const anoms = Array.isArray(v.anomalies) ? v.anomalies : [];
+        anoms.forEach(a => {
+          const t = a.type || a.anomaly_type || 'Other';
+          anomTypes[t] = (anomTypes[t] || 0) + 1;
         });
       });
+      setAnomalyData(
+        Object.entries(anomTypes).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+      );
 
-      // Match merchandisers to supervisors and aggregate their team's performance
-      merchandisers.forEach(merch => {
-        // Accept multiple backend shapes: numeric FK, expanded object, or local assignment fallback
-        const expandedSupervisorId =
-          typeof merch.supervisor === 'object' && merch.supervisor !== null
-            ? merch.supervisor.id
-            : null;
-        const localAssignmentId = savedAssignments?.[merch.id]?.supervisorId;
-        const supervisorIdRaw =
-          merch.supervisor ||
-          merch.supervisor_id ||
-          merch.supervisorId ||
-          expandedSupervisorId ||
-          localAssignmentId;
-        const supervisorId = Number(supervisorIdRaw);
-        
-        if (Number.isFinite(supervisorId) && supervisorMap.has(supervisorId)) {
-          const supData = supervisorMap.get(supervisorId);
-          supData.teamSize++; // Count this merchandiser in the team
-          
-          // Find all visits for this merchandiser
-          const merchVisits = visits.filter(v => 
-            Number(v.merchandiser) === Number(merch.id) || 
-            Number(v.merchandiser_id) === Number(merch.id) ||
-            Number(v.merchandiserId) === Number(merch.id) ||
-            Number(v.assigned_to) === Number(merch.id)
-          );
-          
-          supData.teamVisits += merchVisits.length;
-          supData.completedVisits += merchVisits.filter(v => v.status === 'completed').length;
-        }
+      const open       = complaints.filter(c => c.status === 'open' || c.status === 'pending').length;
+      const inProgress = complaints.filter(c => c.status === 'in_progress').length;
+      const resolved   = complaints.filter(c => c.status === 'resolved' || c.status === 'closed').length;
+      setComplaintsStatus({ open, inProgress, resolved });
+
+      /* ── Module E ── */
+      const ownerMap = {};
+      products.forEach(p => {
+        const owner = p.owner || p.brand_owner || p.brand || 'Other';
+        ownerMap[owner] = (ownerMap[owner] || 0) + 1;
       });
+      setCompetitorShare(
+        Object.entries(ownerMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 6)
+      );
 
-      // Calculate team completion rate and monthly achievement
-      supervisorMap.forEach(supData => {
-        if (supData.teamVisits > 0) {
-          supData.teamCompletionRate = Math.round((supData.completedVisits / supData.teamVisits) * 100);
-          supData.monthlyAchievement = supData.teamCompletionRate; // Achievement based on team's completion rate
-        } else {
-          // If team has no visits yet, show as 0
-          supData.monthlyAchievement = 0;
-        }
+      const threatMap = {};
+      visits.forEach(v => {
+        const comps = Array.isArray(v.competitor_activities) ? v.competitor_activities : [];
+        comps.forEach(c => {
+          const name = c.competitor || c.name || 'Unknown';
+          threatMap[name] = (threatMap[name] || 0) + 1;
+        });
       });
+      setThreatData(
+        Object.entries(threatMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5)
+      );
 
-      // Sort supervisors - those with teams first, then by achievement
-      const supervisorObj = Array.from(supervisorMap.values())
-        .sort((a, b) => {
-          if (a.teamSize === 0 && b.teamSize === 0) return 0;
-          if (a.teamSize === 0) return 1;
-          if (b.teamSize === 0) return -1;
-          return b.monthlyAchievement - a.monthlyAchievement;
-        });
-      setSupervisorObjectives(supervisorObj);
+      const benchmark = products
+        .filter(p => p.price && (p.competitor_price || p.market_price))
+        .map(p => {
+          const ours = Number(p.price);
+          const comp = Number(p.competitor_price || p.market_price);
+          const gap  = comp ? Math.round(((ours - comp) / comp) * 100) : null;
+          return { name: p.name || `Product ${p.id}`, ours, comp, gap };
+        })
+        .filter(r => r.gap !== null)
+        .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap))
+        .slice(0, 8);
+      setPriceBenchmark(benchmark);
 
-      // Build real trend from the last 4 weeks of visit completion rate
-      const now = new Date();
-      const trendData = [];
-      for (let i = 3; i >= 0; i -= 1) {
-        const start = new Date(now);
-        start.setDate(now.getDate() - (i + 1) * 7);
-        const end = new Date(now);
-        end.setDate(now.getDate() - i * 7);
-
-        const weeklyVisits = visits.filter(v => {
-          const rawDate = v.updated_at || v.date || v.created_at || v.started_at;
-          if (!rawDate) return false;
-          const visitDate = new Date(rawDate);
-          return visitDate >= start && visitDate < end;
-        });
-
-        const weeklyCompleted = weeklyVisits.filter(v => v.status === 'completed').length;
-        const weeklyRate = weeklyVisits.length > 0
-          ? Math.round((weeklyCompleted / weeklyVisits.length) * 100)
-          : 0;
-
-        trendData.push({
-          week: `Week ${4 - i}`,
-          performance: weeklyRate,
-          target: 95,
-        });
-      }
-      setPerformanceTrend(trendData);
-
-      setProductsData(products);
-      setVisitsData(visits);
-      setCompetitorAnalysis(buildCompetitorAnalysis(products, visits, activeCompetitor));
+      setLastFetch(new Date());
     } catch (err) {
-      console.error('Error fetching performance data:', err);
-      setError('Failed to load performance data. Please try again later.');
+      console.error('Performance fetch error:', err);
+      setError('Failed to load performance data. Check API connection.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleExportReport = () => {
-    if (!competitorAnalysis.priceRows.length) {
-      return;
-    }
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
-    const headers = ['Product', 'Category', 'Our Price', 'Competitor Price', 'Gap %', 'Tracker'];
-    const rows = competitorAnalysis.priceRows.map((row) => [
-      row.name,
-      row.category,
-      row.ourPrice.toFixed(2),
-      row.competitorPrice.toFixed(2),
-      row.gapPercent.toFixed(2),
-      activeCompetitor,
-    ]);
-
-    const csv = [headers, ...rows]
-      .map((cols) => cols.map((col) => `"${String(col).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const safeName = normalizeCompetitorKey(activeCompetitor || 'tracker');
-    link.href = url;
-    link.setAttribute('download', `competitor-analysis-${safeName}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleSaveTracker = () => {
-    const candidate = selectedCompetitorOption === '__custom__'
-      ? customCompetitorName.trim()
-      : selectedCompetitorOption;
-
-    if (!candidate) {
-      return;
-    }
-
-    setTrackedCompetitors((prev) => {
-      if (prev.includes(candidate)) {
-        return prev;
+  /* ── Live tracking sessions poll (every 30 s) ── */
+  useEffect(() => {
+    const fetchLive = async () => {
+      try {
+        const data = await statsService.getLiveSessions();
+        // Adjust field name to match your backend response
+        const count = data?.active_connections ?? data?.active_sessions ?? data?.count ?? null;
+        if (count !== null) setLiveSessions(Number(count));
+      } catch {
+        // silently fall back to computed activeOnMap value
       }
-      return [...prev, candidate];
-    });
+    };
+    fetchLive();
+    const intervalId = setInterval(fetchLive, 30000);
+    return () => clearInterval(intervalId);
+  }, []);
 
-    setActiveCompetitor(candidate);
-    setShowTrackerModal(false);
-    setCustomCompetitorName('');
-  };
+  const completionRate = visitCounts.total > 0
+    ? Math.round((visitCounts.completed / visitCounts.total) * 100)
+    : 0;
 
-  if (loading) {
-    return (
-      <div className="app">
-        <Sidebar />
-        <div className="main-content">
-          <Navbar />
-          <div className="page-container performance-page">
-            <div className="loading-state">
-              <Zap className="loading-icon" size={48} />
-              <p>Loading performance data...</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const totalComplaints = complaintsStatus.open + complaintsStatus.inProgress + complaintsStatus.resolved;
+  const resolutionRate  = totalComplaints > 0
+    ? Math.round((complaintsStatus.resolved / totalComplaints) * 100)
+    : 0;
 
   return (
-    <div className="app">
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#f1f5f9' }}>
       <Sidebar />
-      <div className="main-content">
-        <Navbar />
-        <div className="page-container performance-page">
-          <div className="page-header">
-            <h1>Performance Analytics</h1>
-            <p>Overall system performance, stock management, and supervisor objectives</p>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        
+        <div className="perf-page">
+
+          {/* Page header */}
+          <div className="perf-page-header">
+            <div>
+              <h1>Statistics &amp; Performance Management</h1>
+              <p>
+                {lastFetch
+                  ? `Last updated: ${lastFetch.toLocaleTimeString()}`
+                  : 'Loading live data…'}
+              </p>
+            </div>
+            <button className="perf-refresh-btn" onClick={fetchAll} disabled={loading}>
+              <RefreshCw size={15} className={loading ? 'spin' : ''} />
+              Refresh
+            </button>
           </div>
 
-          {error && <div className="error-banner">{error}</div>}
+          {error && <div className="perf-error-banner"><AlertTriangle size={16} />{error}</div>}
 
-          {/* Key Metrics Section */}
-          <div className="metrics-grid">
-            <div className="metric-card">
-              <div className="metric-icon overall">
-                <TrendingUp size={24} />
-              </div>
-              <div className="metric-content">
-                <p className="metric-label">Overall Performance</p>
-                <h3 className="metric-value">{performanceData.overallPerformance}%</h3>
-                <p className="metric-subtitle">System efficiency</p>
-              </div>
+          {loading ? (
+            <div className="perf-loading">
+              <div className="perf-spin" />
+              <p>Loading performance data…</p>
             </div>
+          ) : (
+            <>
 
-            <div className="metric-card">
-              <div className="metric-icon completion">
-                <CheckCircle2 size={24} />
-              </div>
-              <div className="metric-content">
-                <p className="metric-label">Completion Rate</p>
-                <h3 className="metric-value">{performanceData.completionRate}%</h3>
-                <p className="metric-subtitle">
-                  {performanceData.completedVisits}/{performanceData.totalVisits} visits
-                </p>
-              </div>
-            </div>
+              {/* ── Module A: Visit Analytics ── */}
+              <Module  title="Visit Analytics" subtitle="Field coverage, completion rates & visit durations">
+                <div className="mod-grid-3">
 
-            <div className="metric-card">
-              <div className="metric-icon active">
-                <Zap size={24} />
-              </div>
-              <div className="metric-content">
-                <p className="metric-label">Active Visits</p>
-                <h3 className="metric-value">{performanceData.activeVisits}</h3>
-                <p className="metric-subtitle">In progress</p>
-              </div>
-            </div>
-
-            <div className="metric-card">
-              <div className="metric-icon users">
-                <Users size={24} />
-              </div>
-              <div className="metric-content">
-                <p className="metric-label">Team Overview</p>
-                <h3 className="metric-value">{performanceData.totalSupervisors}</h3>
-                <p className="metric-subtitle">
-                  Supervisors managing {performanceData.totalStores} stores
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Charts Section */}
-          <div className="charts-container">
-            {/* Performance Trend */}
-            <div className="chart-card">
-              <div className="chart-header">
-                <h2>Performance Trend</h2>
-                <p>Weekly performance vs target</p>
-              </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <ComposedChart data={performanceTrend} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="week" stroke="#6b7280" />
-                  <YAxis stroke="#6b7280" />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="performance"
-                    stroke="#3b82f6"
-                    name="Actual Performance"
-                    strokeWidth={2}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="target"
-                    stroke="#10b981"
-                    name="Target"
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Stock Rupture by Store */}
-            <div className="chart-card chart-card-spotlight">
-              <div className="chart-header">
-                <div className="chart-header-copy">
-                  <span className="section-kicker">Stock intelligence</span>
-                  <h2>Stock Ruptures by Location</h2>
-                  <p>Merged from inventory levels and field reports collected during visits.</p>
-                </div>
-                <div className="chart-header-actions">
-                  <div className="chart-header-chip">
-                    {ruptureTotals.affectedStores} stores affected
-                  </div>
-                  <button
-                    onClick={() => setExpandStockDetails(!expandStockDetails)}
-                    className="stock-toggle-btn"
-                    aria-expanded={expandStockDetails}
-                  >
-                    {expandStockDetails ? '▼' : '▶'}
-                  </button>
-                </div>
-              </div>
-              {stockRuptureData.length > 0 && expandStockDetails && (
-                <div className="rupture-layout">
-                  <div className="rupture-summary-row">
-                    <div className="rupture-summary-card danger">
-                      <span className="rupture-summary-label">Inventory ruptures</span>
-                      <strong>{ruptureTotals.ruptures}</strong>
+                  {/* Gauge */}
+                  <div className="mod-card center-col">
+                    <div className="gauge-header">
+                      <p className="gauge-title"> Progress</p>
+                      <p className="gauge-sub">Real-time completion tracking</p>
                     </div>
-                    <div className="rupture-summary-card warning">
-                      <span className="rupture-summary-label">Field ruptures</span>
-                      <strong>{ruptureTotals.fieldRuptures}</strong>
-                    </div>
-                    <div className="rupture-summary-card neutral">
-                      <span className="rupture-summary-label">Low stock items</span>
-                      <strong>{ruptureTotals.lowStock}</strong>
-                    </div>
-                    <div className="rupture-summary-card neutral">
-                      <span className="rupture-summary-label">Affected stores</span>
-                      <strong>{ruptureTotals.affectedStores}</strong>
+                    <CircularGauge value={completionRate} max={100} color="#059669" size={130} label="%" />
+                    <div className="gauge-stats">
+                      <div className="dot green" /><span>{visitCounts.completed} Completed</span>
+                      <div className="dot" style={{ background: '#e2e8f0' }} /><span>{visitCounts.total - visitCounts.completed} Pending</span>
                     </div>
                   </div>
 
-                  <div className="rupture-ranking">
-                    {rankedStockRuptures.map((store, index) => {
-                      const severity = getSeverityLevel(store.totalIssues);
-                      const rupturePercent = Math.min((store.ruptures / maxRuptures) * 100, 100);
-                      const lowStockPercent = Math.min((store.lowStock / maxLowStock) * 100, 100);
-
-                      return (
-                        <article key={`${store.name}-${index}`} className={`rupture-card severity-${severity.className}`}>
-                          <div className="rupture-card-header">
-                            <div>
-                              <div className="rupture-rank">#{index + 1}</div>
-                              <h4>{store.name}</h4>
-                              <p>{store.totalIssues} total stock issues</p>
-                            </div>
-                            <span className={`rupture-status ${severity.className}`}>{severity.label}</span>
-                          </div>
-
-                          <div className="rupture-pill-row">
-                            <span className="badge rupture">{store.ruptures} Inventory</span>
-                            <span className="badge warning">{store.fieldRuptures || 0} Field reports</span>
-                            <span className="badge low-stock">{store.lowStock} Low stock</span>
-                          </div>
-
-                          <div className="rupture-meta-row">
-                            <span className="rupture-source">{store.sourceLabel || 'Inventory + field reports'}</span>
-                            {store.lastFieldReportAt && (
-                              <span className="rupture-time">Last report {new Date(store.lastFieldReportAt).toLocaleDateString()}</span>
-                            )}
-                          </div>
-
-                          <div className="rupture-bars">
-                            <div className="bar-item">
-                              <div className="bar-label-row">
-                                <label>Inventory ruptures</label>
-                                <span>{store.ruptures}</span>
-                              </div>
-                              <div className="bar-container">
-                                <div className="bar-fill rupture" style={{ width: `${rupturePercent}%` }} />
-                              </div>
-                            </div>
-                            <div className="bar-item">
-                              <div className="bar-label-row">
-                                <label>Low stock items</label>
-                                <span>{store.lowStock}</span>
-                              </div>
-                              <div className="bar-container">
-                                <div className="bar-fill low-stock" style={{ width: `${lowStockPercent}%` }} />
-                              </div>
-                            </div>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {stockRuptureData.length === 0 && (
-                <div className="empty-state">
-                  <Package size={48} />
-                  <p>No stock data available</p>
-                </div>
-              )}
-            </div>
-
-            {/* Visit Status Summary */}
-            <div className="chart-card">
-              <div className="chart-header">
-                <div className="chart-header-copy">
-                  {expandVisitDetails && (
-                    <>
-                      <h2>Visit Execution Summary</h2>
-                      <p>Distribution of visit statuses</p>
-                    </>
-                  )}
-                  {!expandVisitDetails && <h2 className="compact-title">Visit Execution Summary</h2>}
-                </div>
-                <button
-                  onClick={() => setExpandVisitDetails(!expandVisitDetails)}
-                  className="status-toggle-btn"
-                  aria-expanded={expandVisitDetails}
-                >
-                  {expandVisitDetails ? '▼' : '▶'}
-                </button>
-              </div>
-              {expandVisitDetails && visitStatusData.length > 0 && (
-                <div className="visit-status-container">
-                  <div className="status-items">
-                    {visitStatusData.map((item, index) => (
-                      <div key={index} className="status-item">
-                        <div className="status-color" style={{ backgroundColor: item.color }} />
-                        <div className="status-info">
-                          <span className="status-name">{item.status}</span>
-                          <span className="status-count">{item.count}</span>
-                        </div>
-                        <div className="status-percentage">
-                          {Math.round((item.count / performanceData.totalVisits) * 100)}%
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="status-bars">
-                    {visitStatusData.map((item, index) => (
-                      <div key={index} className="status-bar-item">
-                        <div className="status-bar-wrapper">
-                          <div 
-                            className="status-bar" 
-                            style={{ 
-                              width: `${(item.count / performanceData.totalVisits) * 100}%`,
-                              backgroundColor: item.color
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {expandVisitDetails && visitStatusData.length === 0 && (
-                <div className="empty-state">
-                  <Zap size={48} />
-                  <p>No visit data available</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Competitor Analysis */}
-          <div className="competitor-section">
-            <div className="competitor-header">
-              <div>
-                <h2>Competitor Analysis</h2>
-                <p>Real-time owner brand movement and tactical pricing intelligence.</p>
-              </div>
-              <div className="competitor-actions">
-                <button type="button" className="competitor-btn secondary" onClick={handleExportReport}>Export Report</button>
-                <button type="button" className="competitor-btn primary" onClick={() => setShowTrackerModal(true)}>New Tracker</button>
-              </div>
-            </div>
-
-            <div className="tracker-row">
-              <span className="tracker-label">Tracking Owner:</span>
-              <div className="tracker-chips">
-                {trackedCompetitors.map((name) => (
-                  <button
-                    key={name}
-                    type="button"
-                    className={`tracker-chip ${activeCompetitor === name ? 'active' : ''}`}
-                    onClick={() => setActiveCompetitor(name)}
-                  >
-                    {name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="competitor-kpis">
-              <div className="competitor-kpi-card">
-                <p className="kpi-title">Competitor Promos Detected</p>
-                <div className="kpi-value-row">
-                  <h3>{competitorAnalysis.promosDetected}</h3>
-                </div>
-              </div>
-              <div className="competitor-kpi-card">
-                <p className="kpi-title">Price Gaps Found</p>
-                <div className="kpi-value-row">
-                  <h3>{competitorAnalysis.priceRows.length}</h3>
-                  <span className="kpi-alert">{competitorAnalysis.criticalGaps} critical</span>
-                </div>
-              </div>
-              <div className="competitor-kpi-card">
-                <p className="kpi-title">New Products Spotted</p>
-                <div className="kpi-value-row">
-                  <h3>{competitorAnalysis.newProductsSpotted}</h3>
-                  <span className="kpi-sub">Last 30 days</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="competitor-layout">
-              <div className="competitor-activities">
-                <h3>Detected Competitor Activities</h3>
-                {competitorAnalysis.activities.length > 0 ? (
-                  <ul className="activity-list">
-                    {competitorAnalysis.activities.map((activity) => (
-                      <li key={activity.id} className="activity-item">
-                        <div className="activity-dot" />
-                        <div className="activity-content">
-                          <p className="activity-title">{activity.title}</p>
-                          <p className="activity-meta">{activity.time} · {activity.subtitle}</p>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="competitor-empty">No competitor signals yet.</p>
-                )}
-              </div>
-
-              <div className="competitor-main">
-                <div className="competitor-table-wrap">
-                  <h3>Our Price vs. {activeCompetitor} (Owner)</h3>
-                  {competitorAnalysis.priceRows.length > 0 ? (
-                    <div className="competitor-table-scroll">
-                      <table className="competitor-table">
-                        <thead>
-                          <tr>
-                            <th>Product</th>
-                            <th>Category</th>
-                            <th>Our Price</th>
-                            <th>Comp. Price</th>
-                            <th>Gap %</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {competitorAnalysis.priceRows.map((row, idx) => (
-                            <tr key={`${row.name}-${idx}`}>
-                              <td>
-                                <div className="row-product-cell">
-                                  <span>{row.name}</span>
-                                  <span className={`source-badge ${row.source === 'visit' ? 'field' : 'catalog'}`}>
-                                    {row.source === 'visit' ? 'Field' : 'Catalog'}
-                                  </span>
-                                </div>
-                              </td>
-                              <td>{row.category}</td>
-                              <td>${row.ourPrice.toFixed(2)}</td>
-                              <td>${row.competitorPrice.toFixed(2)}</td>
-                              <td className={`gap-${row.gapState}`}>
-                                {row.gapPercent > 0 ? '+' : ''}{row.gapPercent.toFixed(1)}%
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                  {/* Visit status bar chart */}
+                  <div className="mod-card">
+                    <p className="gauge-title">Visit Status Breakdown</p>
+                    <p className="gauge-sub">Distribution by current state</p>
+                    <div style={{ marginTop: 20 }}>
+                    <ResponsiveContainer width="100%" height={160}>
+                      <BarChart data={visitStatusData} barSize={28}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <Tooltip content={<CT />} />
+                        <Bar dataKey="value" radius={[4,4,0,0]}>
+                          {visitStatusData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
                     </div>
-                  ) : (
-                    <p className="competitor-empty">
-                      No owner price fields found yet. Add owner-specific prices to products to activate gap analytics.
-                    </p>
-                  )}
-                </div>
-
-                <div className="competitor-categories">
-                  <h3>Price Gaps Across Categories</h3>
-                  <p>% difference relative to nearest competitor</p>
-                  <div className="category-bars">
-                    {competitorAnalysis.categoryGaps.map((cat) => (
-                      <div key={cat.category} className="category-bar-item">
-                        <div className="bar-pair">
-                          <div
-                            className="bar-competitive"
-                            style={{ height: `${Math.min(cat.competitive * 10, 120)}px` }}
-                            title={`Competitive: ${cat.competitive}%`}
-                          />
-                          <div
-                            className="bar-critical"
-                            style={{ height: `${Math.min(cat.critical * 10, 120)}px` }}
-                            title={`Critical: ${cat.critical}%`}
-                          />
-                        </div>
-                        <span>{cat.category}</span>
-                      </div>
-                    ))}
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
 
-          {showTrackerModal && (
-            <div className="tracker-modal-overlay" role="dialog" aria-modal="true">
-              <div className="tracker-modal">
-                <h3>Choose Owner To Track</h3>
-                <p>Select an existing owner brand or add a custom one.</p>
-
-                <label htmlFor="competitorOption">Owner</label>
-                <select
-                  id="competitorOption"
-                  value={selectedCompetitorOption}
-                  onChange={(e) => setSelectedCompetitorOption(e.target.value)}
-                >
-                  {ownerOptions.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                  <option value="__custom__">Other owner (custom)</option>
-                </select>
-
-                {selectedCompetitorOption === '__custom__' && (
-                  <>
-                    <label htmlFor="customCompetitor">Custom Owner Name</label>
-                    <input
-                      id="customCompetitor"
-                      type="text"
-                      value={customCompetitorName}
-                      onChange={(e) => setCustomCompetitorName(e.target.value)}
-                      placeholder="e.g. Warda Premium"
-                    />
-                  </>
-                )}
-
-                <div className="tracker-modal-actions">
-                  <button type="button" className="competitor-btn secondary" onClick={() => setShowTrackerModal(false)}>
-                    Cancel
-                  </button>
-                  <button type="button" className="competitor-btn primary" onClick={handleSaveTracker}>
-                    Track Owner
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Supervisor Objectives */}
-          <div className="supervisor-section">
-            <div className="section-header">
-              <h2>Supervisor Performance & Objectives</h2>
-              <p>Team management and monthly objective achievement</p>
-            </div>
-
-            {supervisorObjectives.length > 0 ? (
-              <div className="supervisor-grid">
-                {supervisorObjectives.map((supervisor, index) => (
-                  <div key={index} className="supervisor-card">
-                    <div className="supervisor-header">
-                      <div className="supervisor-name">
-                          <img 
-                            src={supervisor.avatar} 
-                            alt={supervisor.name} 
-                            className="supervisor-avatar"
-                            onError={(e) => {e.target.src = `https://ui-avatars.com/api/?name=${supervisor.name}&background=667eea&color=fff`}}
-                          />
-                        <h3>{supervisor.name}</h3>
+                  {/* KPI stack */}
+                  <div className="mod-card">
+                    <p className="mod-card-title">Key Metrics</p>
+                    <div className="kpi-stack">
+                      <div className="kpi-big">
+                        <span className="kpi-value" style={{ color: '#3b82f6' }}>{visitCounts.total}</span>
+                        <span className="kpi-label">Total Visits</span>
                       </div>
-                      <div
-                        className={`completion-badge ${
-                          supervisor.teamSize === 0
-                            ? 'pending'
-                            : supervisor.monthlyAchievement >= supervisor.monthlyObjective ? 'success' : 'warning'
-                        }`}
-                      >
-                        {supervisor.monthlyAchievement}%
+                      <div className="kpi-divider" />
+                      <div className="kpi-big">
+                        <span className="kpi-value" style={{ color: '#10b981' }}>{completionRate}%</span>
+                        <span className="kpi-label">Completion Rate</span>
+                      </div>
+                      <div className="kpi-divider" />
+                      <div className="kpi-big">
+                        <span className="kpi-value" style={{ color: '#f59e0b' }}>
+                          {avgDuration === 0
+                            ? '—'
+                            : avgDuration < 60
+                              ? `${avgDuration} min`
+                              : `${Math.floor(avgDuration / 60)}h ${avgDuration % 60}m`}
+                        </span>
+                        <span className="kpi-label">Avg Visit Duration</span>
+                      </div>
+                      <div className="kpi-divider" />
+                      <div className="kpi-big">
+                        <span className="kpi-value" style={{ color: '#8b5cf6' }}>{visitCounts.active}</span>
+                        <span className="kpi-label">Currently Active</span>
                       </div>
                     </div>
+                  </div>
 
-                    <div className="supervisor-stats">
-                      <div className="stat-row">
-                        <span className="stat-label">Team Size:</span>
-                        <span className="stat-value">{supervisor.teamSize} merchandisers</span>
-                      </div>
-                      <div className="stat-row">
-                        <span className="stat-label">Team Visits:</span>
-                        <span className="stat-value">{supervisor.teamVisits}</span>
-                      </div>
-                      <div className="stat-row">
-                        <span className="stat-label">Completed:</span>
-                        <span className="stat-value">{supervisor.completedVisits}</span>
-                      </div>
-                    </div>
+                </div>
+              </Module>
 
-                    <div className="objective-info">
-                      <div className="objective-row">
-                        <span className="objective-label">Monthly Objective:</span>
-                        <span className="objective-target">{supervisor.monthlyObjective}%</span>
-                      </div>
-                      <div className="objective-row">
-                        <span className="objective-label">Achievement:</span>
-                        <span className="objective-value">{supervisor.monthlyAchievement}%</span>
-                      </div>
-                    </div>
+              {/* ── Module B: Stock & Shelf ── */}
+              <Module  title="Stock & Shelf Intelligence" subtitle="Stockouts, low-stock alerts & shelf coverage by region">
+                <div className="mod-grid-3">
 
-                    {supervisor.teamSize > 0 ? (
-                      <>
-                        <div className="supervisor-progress-bar">
-                          <div
-                            className={`supervisor-progress-fill ${
-                              supervisor.monthlyAchievement >= supervisor.monthlyObjective ? 'success' : 'warning'
-                            }`}
-                            style={{ width: `${Math.min(supervisor.monthlyAchievement, 100)}%` }}
-                          />
-                        </div>
-
-                        <div className="supervisor-status-text">
-                          {supervisor.monthlyAchievement >= supervisor.monthlyObjective ? (
-                            <span className="success">✓ Objective achieved</span>
-                          ) : (
-                            <span className="warning">
-                              {supervisor.monthlyObjective - supervisor.monthlyAchievement}% to target
-                            </span>
-                          )}
-                        </div>
-                      </>
+                  {/* Top stockout products */}
+                  <div className="mod-card">
+                    <p className="mod-card-title">Top Stockout Products</p>
+                    {stockoutProducts.length === 0 ? (
+                      <p className="empty-msg">No stockout data available</p>
                     ) : (
-                      <div className="no-data-message">
-                        <p>No team members assigned</p>
+                      <ResponsiveContainer width="100%" height={190}>
+                        <BarChart data={stockoutProducts} layout="vertical" barSize={14}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis type="number" tick={{ fontSize: 10 }} />
+                          <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={90} />
+                          <Tooltip content={<CT />} />
+                          <Bar dataKey="stockout" name="Stockout" fill="#ef4444" radius={[0,4,4,0]} stackId="a" />
+                          <Bar dataKey="low"      name="Low Stock" fill="#f59e0b" radius={[0,4,4,0]} stackId="a" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+
+                  {/* Regional criticality */}
+                  <div className="mod-card">
+                    <p className="mod-card-title">Regional Criticality</p>
+                    {regionalCriticality.length === 0 ? (
+                      <p className="empty-msg">No regional data</p>
+                    ) : (
+                      <div className="crit-table">
+                        <div className="crit-header-row">
+                          <span className="crit-name">City</span>
+                          <span className="crit-num">Stores</span>
+                          <span className="crit-num">Issues</span>
+                          <span className="crit-badge">Level</span>
+                        </div>
+                        {regionalCriticality.map((r, i) => {
+                          const ratio = r.stores > 0 ? r.issues / r.stores : 0;
+                          const badge = ratio >= 0.5 ? 'critical' : ratio >= 0.2 ? 'watch' : 'clear';
+                          return (
+                            <div key={i} className="crit-data-row">
+                              <span className="crit-name">{r.city}</span>
+                              <span className="crit-num">{r.stores}</span>
+                              <span className="crit-num">{r.issues}</span>
+                              <span className={`crit-badge ${badge}`}>
+                                {badge.charAt(0).toUpperCase() + badge.slice(1)}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state">
-                <Users size={48} />
-                <p>No supervisors available</p>
-              </div>
-            )}
-          </div>
+
+                  {/* Detection ratio */}
+                  <div className="mod-card">
+                    <p className="mod-card-title">Detection Method</p>
+                    <div className="det-wrap">
+                      <div className="det-item">
+                        <div className="det-icon ai"><Zap size={18} /></div>
+                        <div>
+                          <div className="det-num">{detectionRatio.ai}</div>
+                          <div className="det-lbl">AI Analyzed</div>
+                        </div>
+                      </div>
+                      <div className="det-sep" />
+                      <div className="det-item">
+                        <div className="det-icon manual"><Eye size={18} /></div>
+                        <div>
+                          <div className="det-num">{detectionRatio.manual}</div>
+                          <div className="det-lbl">Manual Review</div>
+                        </div>
+                      </div>
+                    </div>
+                    {(detectionRatio.ai + detectionRatio.manual) > 0 && (
+                      <div className="det-bar-track">
+                        <div
+                          className="det-bar-fill"
+                          style={{ width: `${Math.round(detectionRatio.ai / (detectionRatio.ai + detectionRatio.manual) * 100)}%` }}
+                        />
+                      </div>
+                    )}
+                    <p className="det-note">
+                      {detectionRatio.ai + detectionRatio.manual > 0
+                        ? `${Math.round(detectionRatio.ai / (detectionRatio.ai + detectionRatio.manual) * 100)}% AI coverage`
+                        : 'No detection data'}
+                    </p>
+                  </div>
+
+                </div>
+              </Module>
+
+              {/* ── Module C: Team & Attendance ── */}
+              <Module  title="Team Performance & Attendance" subtitle="Attendance tracking, GPS compliance & agent leaderboard">
+                <div className="mod-grid-3">
+
+                  {/* Attendance gauge */}
+                  <div className="mod-card center-col">
+                    <p className="mod-card-title" style={{ alignSelf: 'flex-start', width: '100%' }}>Attendance</p>
+                    <CircularGauge
+                      value={attendance.total - attendance.present}
+                      max={Math.max(attendance.total, 1)}
+                      color="#64748b"
+                      size={130}
+                      label=" "
+                    />
+                    <div className="att-row">
+                      <div className="att-item">
+                        <strong>{attendance.present}</strong>
+                        <span>Present Today</span>
+                      </div>
+                      <div className="att-item">
+                        <strong>{attendance.total - attendance.present}</strong>
+                        <span>Absent / Off</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* GPS alerts */}
+                  <div className="mod-card center-col">
+                    <p className="mod-card-title" style={{ alignSelf: 'flex-start', width: '100%' }}>GPS Compliance</p>
+                    <div style={{ marginBottom: 4 }}>
+                      <MapPin size={42} color={gpsAlerts.count > 0 ? '#ef4444' : '#10b981'} />
+                    </div>
+                    <div className="gps-big" style={{ color: gpsAlerts.count > 0 ? '#ef4444' : '#10b981' }}>
+                      {gpsAlerts.count}
+                    </div>
+                    <div className="gps-alert-label">Active Alerts</div>
+                    {gpsAlerts.count === 0 && <div className="gps-note">{gpsAlerts.note}</div>}
+                    <StatCard
+                      icon={<Activity size={16} />}
+                      label="Live Tracking Sessions"
+                      value={liveTrackingSessions ?? visitCounts.activeOnMap}
+                      color="#3b82f6"
+                    />
+                  </div>
+
+                  {/* Leaderboard */}
+                  <div className="mod-card">
+                    <p className="mod-card-title">Top Agents</p>
+                    {leaderboard.length === 0 ? (
+                      <p className="empty-msg">No agent data yet</p>
+                    ) : (
+                      <div className="leader-list">
+                        {leaderboard.map((agent, i) => (
+                          <div key={agent.id} className="leader-row">
+                            <span className={`leader-rank ${i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : ''}`}>
+                              {i + 1}
+                            </span>
+                            <div className="leader-info">
+                              <span className="leader-name">
+                                {agent.name.replace(/\b\w/g, c => c.toUpperCase())}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              </Module>
+
+              {/* ── Module D: Anomalies & Complaints ── */}
+              <Module  title="Anomalies & Complaint Management" subtitle="Field anomaly types and complaint resolution pipeline">
+                <div className="mod-grid-2">
+
+                  {/* Anomaly pie */}
+                  <div className="mod-card">
+                    <p className="mod-card-title">Anomaly Types</p>
+                    {anomalyData.length === 0 ? (
+                      <p className="empty-msg">No anomaly data recorded</p>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+                        <ResponsiveContainer width={160} height={160}>
+                          <PieChart>
+                            <Pie data={anomalyData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={3} dataKey="value">
+                              {anomalyData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                            </Pie>
+                            <Tooltip content={<CT />} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="pie-legend">
+                          {anomalyData.map((d, i) => (
+                            <div key={i} className="pie-item">
+                              <span className="pie-dot" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                              {d.name} <strong>({d.value})</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              </Module>
+
+              {/* ── Module E: Competitor Intel ── */}
+              <Module  title="Competitor Intelligence" subtitle="Market share, threats & price benchmarking" defaultOpen={false}>
+                <div className="mod-grid-2">
+
+                  {/* Threat bar chart */}
+                  <div className="mod-card">
+                    <p className="mod-card-title">Competitor Activity Threats</p>
+                    {threatData.length === 0 ? (
+                      <p className="empty-msg">No competitor activity logged</p>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={180}>
+                        <BarChart data={threatData} barSize={28}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} />
+                          <Tooltip content={<CT />} />
+                          <Bar dataKey="count" name="Threats" fill="#ef4444" radius={[4,4,0,0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* Price benchmark full width */}
+                <div className="bench-full">
+                  <p className="mod-card-title">Price Benchmarking vs Competitors</p>
+                  {priceBenchmark.length === 0 ? (
+                    <p className="empty-msg">No price comparison data available in products</p>
+                  ) : (
+                    <table className="bench-table">
+                      <thead>
+                        <tr>
+                          <th className="bench-head">Product</th>
+                          <th className="bench-head">Our Price</th>
+                          <th className="bench-head">Competitor</th>
+                          <th className="bench-head">Gap</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {priceBenchmark.map((row, i) => (
+                          <tr key={i} className="bench-row">
+                            <td className="bench-prod">{row.name}</td>
+                            <td>{row.ours} DA</td>
+                            <td>{row.comp} DA</td>
+                            <td>
+                              <span className={`bench-gap ${row.gap > 0 ? 'up' : 'down'}`}>
+                                {row.gap > 0 ? '+' : ''}{row.gap}%
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+              </Module>
+
+            </>
+          )}
+
         </div>
       </div>
     </div>

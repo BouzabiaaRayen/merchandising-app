@@ -78,67 +78,82 @@ const Login = () => {
 
   return (
     <div className="login-container">
-      <div className="login-box">
-        <div className="login-header">
-          <h1>Merchandising</h1>
-          <p>Backoffice Login</p>
+      <div className="login-shell">
+        <div className="login-box">
+          <div className="login-header">
+            <p className="form-kicker">Welcome back</p>
+            <h2>Sign in to the backoffice</h2>
+            <p>Use your administrator account to continue.</p>
+          </div>
+          <form onSubmit={handleSubmit} className="login-form">
+            {error && <div className="error-message">{error}</div>}
+
+            <div className="form-group">
+              <label htmlFor="username">Email address</label>
+              <div className="input-with-icon">
+                <span className="input-prefix" aria-hidden="true">@</span>
+                <input
+                  type="text"
+                  id="username"
+                  name="username"
+                  value={credentials.username}
+                  onChange={handleChange}
+                  required
+                  autoFocus
+                  placeholder="admin@company.com"
+                  aria-label="Email address"
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <div className="label-row">
+                <label htmlFor="password">Password</label>
+                <a className="forgot-link" href="#" onClick={(e) => { e.preventDefault(); }}>
+                  Forgot password?
+                </a>
+              </div>
+              <div className="input-with-icon">
+                <span className="input-prefix" aria-hidden="true">*</span>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="password"
+                  name="password"
+                  value={credentials.password}
+                  onChange={handleChange}
+                  required
+                  placeholder="Enter your password"
+                  aria-label="Password"
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword((state) => !state)}
+                  aria-pressed={showPassword}
+                  aria-label="Show or hide password"
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+
+            <div className="form-row small-row">
+              <label className="checkbox-label">
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+                <span>Remember me for 30 days</span>
+              </label>
+              <span className="security-note">Protected access</span>
+            </div>
+
+            <button type="submit" disabled={loading} className="login-btn">
+              {loading ? 'Signing in...' : 'Enter workspace'}
+            </button>
+
+            <div className="register-link">
+              Need access? <a href="#">Request an administrator invite</a>
+            </div>
+          </form>
         </div>
-        <form onSubmit={handleSubmit} className="login-form">
-          {error && <div className="error-message">{error}</div>}
-          
-          <div className="form-group">
-            <label htmlFor="username">Email Address</label>
-            <div className="input-with-icon">
-              <input
-                type="text"
-                id="username"
-                name="username"
-                value={credentials.username}
-                onChange={handleChange}
-                required
-                autoFocus
-                aria-label="Email address"
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <div className="label-row">
-              <label htmlFor="password">Password</label>
-              <a className="forgot-link" href="#" onClick={(e)=>{e.preventDefault(); /* TODO: forgot */}}>Forgot password?</a>
-            </div>
-            <div className="input-with-icon">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                id="password"
-                name="password"
-                value={credentials.password}
-                onChange={handleChange}
-                required
-                placeholder="********"
-                aria-label="Password"
-              />
-              <button type="button" className="password-toggle" onClick={() => setShowPassword(s => !s)} aria-pressed={showPassword} aria-label="Show or hide password">
-                {showPassword ? 'Hide' : 'Show'}
-              </button>
-            </div>
-          </div>
-
-          <div className="form-row small-row">
-            <label className="checkbox-label">
-              <input type="checkbox" checked={remember} onChange={(e)=>setRemember(e.target.checked)} />
-              <span>Remember me for 30 days</span>
-            </label>
-          </div>
-
-          <button type="submit" disabled={loading} className="login-btn">
-            {loading ? 'Signing in...' : 'Sign In →'}
-          </button>
-
-          
-
-          <div className="register-link">Don't have an account? <a href="#">Request Access</a></div>
-        </form>
       </div>
     </div>
   );

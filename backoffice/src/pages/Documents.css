@@ -881,8 +881,9 @@
 }
 
 .btn-primary {
-  background-color: #6366f1;
-  color: white;
+  background: white;
+  border: 1px solid #1741b3;
+  color: #1741b3;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -935,6 +936,47 @@
   margin-bottom: 1.5rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid #e2e8f0;
+}
+
+.document-type-filters {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.2rem;
+  padding: 0.2rem 0;
+}
+
+.type-filter-btn {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 0;
+  padding: 0.3rem 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  position: relative;
+}
+
+.type-filter-btn:hover {
+  color: #334155;
+}
+
+.type-filter-btn.active {
+  color: #2563eb;
+}
+
+.type-filter-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.38rem;
+  height: 2px;
+  border-radius: 999px;
+  background: #2563eb;
 }
 
 .list-header h2 {

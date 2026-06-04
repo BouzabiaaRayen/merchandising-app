@@ -92,7 +92,7 @@ const Complaints = () => {
     <div className="app">
       <Sidebar />
       <div className="main-content">
-        <Navbar />
+        
         <div className="page-container">
           {/* Header */}
           <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

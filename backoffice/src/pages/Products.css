@@ -41,6 +41,27 @@
   color: #d32f2f;
 }
 
+.catalog-demo-tag {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 0.35rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.catalog-demo-note {
+  display: inline-flex;
+  align-items: center;
+  color: #92400e;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 .action-btn.delete {
   background-color: #f44336;
   color: white;

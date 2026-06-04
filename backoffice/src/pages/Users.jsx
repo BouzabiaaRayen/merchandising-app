@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Sidebar from '../components/Sidebar';
-import Navbar from '../components/Navbar';
 import { userService } from '../services/apiService';
 import { getAvatarUrl } from '../services/supabaseClient';
-import { Search, SlidersHorizontal, Pencil, Eye, UserPlus, Trash2, CheckCircle2, User } from 'lucide-react';
+import { Search, User } from 'lucide-react';
 import './Users.css';
 
 const ROLE_LABELS = {
@@ -34,7 +33,7 @@ const Users = () => {
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-  const [activeTab, setActiveTab] = useState('all'); // 'all', 'active', 'inactive'
+  const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [activeCount, setActiveCount] = useState(0);
@@ -47,7 +46,29 @@ const Users = () => {
   const [assigning, setAssigning] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    username: '',
+    first_name: '',
+    last_name: '',
+    email: '',
+    role: 'merchandiser',
+  });
+  const [editFormError, setEditFormError] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
   const [supervisorAssignments, setSupervisorAssignments] = useState({});
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const menuRef = useRef(null);
+  const syncedAssignmentsRef = useRef(false);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     fetchUsers();
@@ -66,6 +87,43 @@ const Users = () => {
   useEffect(() => {
     filterUsers();
   }, [users, activeTab, searchQuery]);
+
+  useEffect(() => {
+    const syncAssignments = async () => {
+      if (syncedAssignmentsRef.current) return;
+      const assignmentEntries = Object.entries(supervisorAssignments);
+      if (assignmentEntries.length === 0 || users.length === 0) return;
+
+      const merchandiserIds = new Set(
+        users
+          .filter((u) => u.role === 'merchandiser' || u.role === 'MERCHANDISER')
+          .map((u) => String(u.id))
+      );
+
+      const pending = assignmentEntries.filter(([merchandiserId, assignment]) => {
+        return merchandiserIds.has(String(merchandiserId)) && assignment?.supervisorId;
+      });
+
+      if (pending.length === 0) {
+        syncedAssignmentsRef.current = true;
+        return;
+      }
+
+      try {
+        await Promise.allSettled(
+          pending.map(([merchandiserId, assignment]) =>
+            userService.assignSupervisor(merchandiserId, assignment.supervisorId)
+          )
+        );
+        syncedAssignmentsRef.current = true;
+        await fetchUsers();
+      } catch (err) {
+        console.error('Error syncing supervisor assignments to backend:', err);
+      }
+    };
+
+    syncAssignments();
+  }, [users, supervisorAssignments]);
 
   const fetchSupervisors = async () => {
     try {
@@ -330,6 +388,7 @@ const Users = () => {
       };
       setSupervisorAssignments(newAssignments);
       localStorage.setItem('supervisorAssignments', JSON.stringify(newAssignments));
+      syncedAssignmentsRef.current = false;
       
       setSuccessMessage('Supervisor assigned successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
@@ -364,12 +423,89 @@ const Users = () => {
 
   const handleOpenViewModal = (user) => {
     setSelectedUser(user);
+    setEditFormData({
+      username: user.username || '',
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
+      email: user.email || '',
+      role: (user.role || 'merchandiser').toLowerCase(),
+    });
+    setEditFormError('');
     setShowViewModal(true);
   };
 
   const handleCloseViewModal = () => {
     setShowViewModal(false);
     setSelectedUser(null);
+    setEditFormError('');
+    setEditSubmitting(false);
+  };
+
+  const handleEditInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setEditFormData((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
+    setEditFormError('');
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    setEditFormError('');
+    setEditSubmitting(true);
+
+    if (!selectedUser?.id) {
+      setEditFormError('No user selected for update.');
+      setEditSubmitting(false);
+      return;
+    }
+
+    if (!editFormData.username || !editFormData.email) {
+      setEditFormError('Username and email are required.');
+      setEditSubmitting(false);
+      return;
+    }
+
+    try {
+      const payload = {
+        username: editFormData.username.trim(),
+        first_name: editFormData.first_name.trim(),
+        last_name: editFormData.last_name.trim(),
+        email: editFormData.email.trim(),
+        role: editFormData.role,
+      };
+
+      const updatedUser = await userService.patchUser(selectedUser.id, payload);
+
+      setUsers((prev) =>
+        prev.map((u) => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
+      );
+      setSelectedUser(updatedUser);
+      setSuccessMessage('User info updated successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+      setShowViewModal(false);
+      await fetchUsers();
+    } catch (err) {
+      const apiError = err.response?.data;
+      if (typeof apiError === 'string') {
+        setEditFormError(apiError);
+      } else if (apiError?.detail) {
+        setEditFormError(apiError.detail);
+      } else if (apiError && typeof apiError === 'object') {
+        const message = Object.entries(apiError)
+          .map(([field, messages]) => {
+            const msg = Array.isArray(messages) ? messages.join(', ') : messages;
+            return `${field}: ${msg}`;
+          })
+          .join('; ');
+        setEditFormError(message || 'Failed to update user info.');
+      } else {
+        setEditFormError(err.message || 'Failed to update user info.');
+      }
+    } finally {
+      setEditSubmitting(false);
+    }
   };
 
   const handleDeleteUser = async (user) => {
@@ -398,7 +534,6 @@ const Users = () => {
     <div className="app">
       <Sidebar />
       <div className="main-content">
-        <Navbar />
         <div className="page-container">
           <div className="page-header">
             <div>
@@ -423,59 +558,32 @@ const Users = () => {
           ) : (
             <>
               <div className="users-filters">
-                <div className="filter-tabs">
-                  <button 
-                    className={`filter-tab ${activeTab === 'all' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('all')}
-                  >
-                    All Users ({count})
-                  </button>
-                  <button 
-                    className={`filter-tab ${activeTab === 'active' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('active')}
-                  >
-                    Active ({activeCount})
-                  </button>
-                  <button 
-                    className={`filter-tab ${activeTab === 'inactive' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('inactive')}
-                  >
-                    Inactive ({inactiveCount})
-                  </button>
-                </div>
-
-                <div className="filter-actions">
-                  <div className="search-box">
-                    <span className="search-icon"><Search size={15} /></span>
-                    <input
-                      type="text"
-                      placeholder="Search by name, email or ID..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="search-input"
-                    />
-                  </div>
-                  <button className="filter-btn" title="More Filters">
-                    <SlidersHorizontal size={15} /> More Filters
-                  </button>
+                <div className="search-box">
+                  <span className="search-icon"><Search size={15} /></span>
+                  <input
+                    type="text"
+                    placeholder="Search by name or email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="search-input"
+                  />
                 </div>
               </div>
 
-              <div className="table-container">
+              <div className="table-scroll-wrap">
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>NAME & ID</th>
+                      <th>NAME</th>
                       <th>ROLE</th>
-                      <th>STATUS</th>
                       <th>SUPERVISOR</th>
-                      <th>ACTIONS</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredUsers.length === 0 ? (
                       <tr>
-                        <td colSpan="5" className="no-data">
+                        <td colSpan="4" className="no-data">
                           No users found
                         </td>
                       </tr>
@@ -509,79 +617,54 @@ const Users = () => {
                             </div>
                           </td>
                           <td>
-                            <span className={`role-badge ${(user.role || '').toLowerCase()}`}>
+                            <span className="role-badge">
                               {ROLE_LABELS[user.role] ?? user.role ?? 'N/A'}
-                            </span>
-                          </td>
-                          <td>
-                            <span className={`status-badge ${user.is_active ? 'active' : 'inactive'}`}>
-                              ● {user.is_active ? 'Active' : 'Inactive'}
                             </span>
                           </td>
                           <td>
                             <span className="supervisor-name">
                               {(() => {
-                                // First check locally stored assignments
-                                const localAssignment = supervisorAssignments[user.id];
-                                if (localAssignment && localAssignment.supervisorName) {
-                                  return localAssignment.supervisorName;
-                                }
-                                
-                                // Then check if supervisor_name exists from backend
+                                const isMerchandiser = user.role === 'merchandiser' || user.role === 'MERCHANDISER';
+                                if (!isMerchandiser) return '—';
+
+                                // Check locally stored assignments
+                                const local = supervisorAssignments[user.id];
+                                if (local?.supervisorName) return local.supervisorName;
+
+                                // Backend nested object
+                                if (typeof user.supervisor === 'object' && user.supervisor?.first_name)
+                                  return `${user.supervisor.first_name} ${user.supervisor.last_name}`;
+
+                                // Backend name string
                                 if (user.supervisor_name) return user.supervisor_name;
-                                
-                                // Try all possible supervisor field names from backend
-                                const supervisorId = user.supervisor || user.supervisor_id || user.assignedSupervisor;
-                                
-                                if (supervisorId) {
-                                  const supervisor = supervisors.find(s => s.id === supervisorId);
-                                  if (supervisor) {
-                                    return `${supervisor.first_name} ${supervisor.last_name}`;
-                                  }
+
+                                // Backend supervisor ID → look up in supervisors list
+                                const supId = typeof user.supervisor === 'number' ? user.supervisor : user.supervisor_id || null;
+                                if (supId) {
+                                  const sup = supervisors.find(s => s.id === supId);
+                                  if (sup) return `${sup.first_name} ${sup.last_name}`;
                                 }
-                                
-                                // Only show "-" for non-merchandisers
-                                if (user.role !== 'merchandiser' && user.role !== 'MERCHANDISER') {
-                                  return 'N/A';
-                                }
-                                
-                                return '-';
+
+                                return '—';
                               })()}
                             </span>
                           </td>
-                          <td>
-                            <div className="action-buttons">
-                              <button 
-                                className="action-btn-icon delete" 
-                                title="Edit User"
-                                onClick={() => handleDeleteUser(user)}
-                              >
-                                <Pencil size={14} />
-                              </button>
-                              <button 
-                                className="action-btn-icon view" 
-                                title="View"
-                                onClick={() => handleOpenViewModal(user)}
-                              >
-                                <Eye size={14} />
-                              </button>
-                              {(user.role === 'merchandiser' || user.role === 'MERCHANDISER') && (
-                                <button
-                                  className="action-btn-icon assign"
-                                  onClick={() => handleOpenAssignModal(user)}
-                                  title="Assign Supervisor"
-                                >
-                                  <UserPlus size={14} />
-                                </button>
-                              )}
-                              <button
-                                className={`action-btn-icon ${user.is_active ? 'delete' : 'activate'}`}
-                                onClick={() => handleToggleActive(user)}
-                                title={user.is_active ? 'Deactivate' : 'Activate'}
-                              >
-                                {user.is_active ? <Trash2 size={14} /> : <CheckCircle2 size={14} />}
-                              </button>
-                            </div>
+                          <td style={{ position: 'relative' }}>
+                            <button
+                              className="dots-btn"
+                              onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
+                            >
+                              <span className="dots-trigger">•••</span>
+                            </button>
+                            {openMenuId === user.id && (
+                              <div className="dots-menu" ref={menuRef}>
+                                <button className="dots-item" onClick={() => { handleOpenViewModal(user); setOpenMenuId(null); }}>Edit Info</button>
+                                {(user.role === 'merchandiser' || user.role === 'MERCHANDISER') && (
+                                  <button className="dots-item" onClick={() => { handleOpenAssignModal(user); setOpenMenuId(null); }}>Assign Supervisor</button>
+                                )}
+                                <button className="dots-item danger" onClick={() => { handleDeleteUser(user); setOpenMenuId(null); }}>Delete</button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))
@@ -589,23 +672,6 @@ const Users = () => {
                   </tbody>
                 </table>
               </div>
-
-              {filteredUsers.length > 0 && (
-                <div className="pagination">
-                  <span className="pagination-info">
-                    Showing 1 to {filteredUsers.length} of {activeTab === 'all' ? count : activeTab === 'active' ? activeCount : inactiveCount} users
-                  </span>
-                  <div className="pagination-buttons">
-                    <button className="page-btn">‹</button>
-                    <button className="page-btn active">1</button>
-                    <button className="page-btn">2</button>
-                    <button className="page-btn">3</button>
-                    <button className="page-btn">...</button>
-                    <button className="page-btn">31</button>
-                    <button className="page-btn">›</button>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>
@@ -627,7 +693,7 @@ const Users = () => {
                 
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="username">Username *</label>
+                    <label htmlFor="username">Username</label>
                     <input
                       type="text"
                       id="username"
@@ -640,7 +706,7 @@ const Users = () => {
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="email">Email *</label>
+                    <label htmlFor="email">Email</label>
                     <input
                       type="email"
                       id="email"
@@ -681,7 +747,7 @@ const Users = () => {
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="password">Password *</label>
+                    <label htmlFor="password">Password</label>
                     <input
                       type="password"
                       id="password"
@@ -694,7 +760,7 @@ const Users = () => {
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="password_confirm">Confirm Password *</label>
+                    <label htmlFor="password_confirm">Confirm Password</label>
                     <input
                       type="password"
                       id="password_confirm"
@@ -709,7 +775,7 @@ const Users = () => {
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="role">Role *</label>
+                    <label htmlFor="role">Role</label>
                     <select
                       id="role"
                       name="role"
@@ -721,18 +787,6 @@ const Users = () => {
                       <option value="supervisor">Supervisor</option>
                       <option value="admin">Admin</option>
                     </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        name="is_active"
-                        checked={formData.is_active}
-                        onChange={handleInputChange}
-                      />
-                      <span>Active User</span>
-                    </label>
                   </div>
                 </div>
               </div>
@@ -774,7 +828,7 @@ const Users = () => {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="supervisor">Select Supervisor *</label>
+                  <label htmlFor="supervisor">Select Supervisor</label>
                   <select
                     id="supervisor"
                     value={selectedSupervisor}
@@ -807,50 +861,53 @@ const Users = () => {
       {/* View User Modal */}
       {showViewModal && selectedUser && (
         <div className="modal-overlay" onClick={handleCloseViewModal}>
-          <div className="modal-content view-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content view-modal edit-user-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>User Details</h2>
+              <h2>Edit User Info</h2>
               <button className="close-btn" onClick={handleCloseViewModal}>×</button>
             </div>
+            <form onSubmit={handleEditSubmit}>
             <div className="form-body">
+              {editFormError && <div className="form-error">{editFormError}</div>}
               <div className="user-detail-card">
-                <div className="user-avatar-large">
-                  {selectedUser.avatar_url || selectedUser.avatar ? (
-                    (() => {
-                      const url = getAvatarUrl(selectedUser.avatar_url || selectedUser.avatar);
-                      return url ? (
-                        <img
-                          src={url}
-                          alt="avatar"
-                          style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <span>{selectedUser.username?.substring(0, 2).toUpperCase() || 'U'}</span>
-                      );
-                    })()
-                  ) : (
-                    <span>{selectedUser.username?.substring(0, 2).toUpperCase() || 'U'}</span>
-                  )}
-                </div>
-                
+
                 <div className="user-detail-section">
                   <h3>Personal Information</h3>
                   <div className="detail-grid">
-                    <div className="detail-item">
+                    <div className="detail-item full-width">
                       <span className="detail-label">Username</span>
-                      <span className="detail-value">{selectedUser.username || '-'}</span>
+                      <span className="detail-value read-only-value">{editFormData.username || '-'}</span>
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">First Name</span>
-                      <span className="detail-value">{selectedUser.first_name || '-'}</span>
+                      <input
+                        type="text"
+                        name="first_name"
+                        className="detail-value"
+                        value={editFormData.first_name}
+                        onChange={handleEditInputChange}
+                      />
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Last Name</span>
-                      <span className="detail-value">{selectedUser.last_name || '-'}</span>
+                      <input
+                        type="text"
+                        name="last_name"
+                        className="detail-value"
+                        value={editFormData.last_name}
+                        onChange={handleEditInputChange}
+                      />
                     </div>
-                    <div className="detail-item">
+                    <div className="detail-item full-width">
                       <span className="detail-label">Email</span>
-                      <span className="detail-value">{selectedUser.email || '-'}</span>
+                      <input
+                        type="email"
+                        name="email"
+                        className="detail-value"
+                        value={editFormData.email}
+                        onChange={handleEditInputChange}
+                        required
+                      />
                     </div>
                   </div>
                 </div>
@@ -860,21 +917,18 @@ const Users = () => {
                   <div className="detail-grid">
                     <div className="detail-item">
                       <span className="detail-label">Role</span>
-                      <span className="detail-value">
-                        <span className={`role-badge ${(selectedUser.role || '').toLowerCase()}`}>
-                          {ROLE_LABELS[selectedUser.role] ?? selectedUser.role ?? 'N/A'}
-                        </span>
-                      </span>
+                      <select
+                        name="role"
+                        className="detail-value"
+                        value={editFormData.role}
+                        onChange={handleEditInputChange}
+                      >
+                        <option value="admin">Admin</option>
+                        <option value="supervisor">Supervisor</option>
+                        <option value="merchandiser">Merchandiser</option>
+                      </select>
                     </div>
-                    <div className="detail-item">
-                      <span className="detail-label">Status</span>
-                      <span className="detail-value">
-                        <span className={`status-badge ${selectedUser.is_active ? 'active' : 'inactive'}`}>
-                          ● {selectedUser.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </span>
-                    </div>
-                    <div className="detail-item">
+                    <div className="detail-item full-width">
                       <span className="detail-label">User ID</span>
                       <span className="detail-value">{selectedUser.id || '-'}</span>
                     </div>
@@ -936,9 +990,13 @@ const Users = () => {
 
             <div className="modal-footer">
               <button type="button" className="btn-cancel" onClick={handleCloseViewModal}>
-                Close
+                Cancel
+              </button>
+              <button type="submit" className="btn-submit" disabled={editSubmitting}>
+                {editSubmitting ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
+            </form>
           </div>
         </div>
       )}

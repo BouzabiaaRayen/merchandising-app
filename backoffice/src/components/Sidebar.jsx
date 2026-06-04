@@ -17,7 +17,7 @@ const Sidebar = () => {
           <div className="logo-icon"><Zap size={22} /></div>
           {!isCollapsed && (
             <div className="logo-text">
-              <h1>MerchAdmin</h1>
+              <h1>MerchandisingTeam</h1>
               <p>MANAGEMENT SYSTEM</p>
             </div>
           )}

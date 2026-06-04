@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import { visitService, userService, storeService } from '../services/apiService';
-import { getAvatarUrl } from '../services/supabaseClient';
+import SimpleCalendar from '../components/SimpleCalendar';
 import './VisitsTracking.css';
+import '../components/SimpleCalendar.css';
 import './Users.css';
 import './Visits.css';
 
@@ -159,9 +160,6 @@ const VisitsTracking = () => {
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  const itemsPerPage = 10;
   const [successMessage, setSuccessMessage] = useState('');
 
   // ── Auto-planning modal ────────────────────────────────────────────────────
@@ -181,18 +179,63 @@ const VisitsTracking = () => {
   const [overrideSubmitting, setOverrideSubmitting] = useState(false);
   const [overrideError, setOverrideError] = useState('');
 
-  useEffect(() => { fetchData(); }, [currentPage]);
+  useEffect(() => { fetchData(); }, []);
+
+  const isScheduledVisit = (visit) => {
+    const status = String(visit?.status || '').trim().toUpperCase();
+    return ['SCHEDULED', 'PLANNED'].includes(status);
+  };
+
+  const fetchVisitsPages = async (params = {}) => {
+    const pageSize = 200;
+    let page = 1;
+    let allVisits = [];
+    let total = 0;
+
+    while (true) {
+      const data = await visitService.getVisits({
+        ...params,
+        page,
+        page_size: pageSize,
+      });
+
+      const results = data.results ?? [];
+      total = data.count ?? total;
+      allVisits = allVisits.concat(results);
+
+      if (!data.next || results.length === 0 || (total > 0 && allVisits.length >= total)) {
+        break;
+      }
+
+      page += 1;
+    }
+
+    return allVisits;
+  };
+
+  const fetchAllScheduledVisits = async () => {
+    try {
+      const filteredVisits = await fetchVisitsPages({ status: 'SCHEDULED' });
+      if (filteredVisits.length > 0) {
+        return filteredVisits.filter((visit) => visit.scheduled_date);
+      }
+    } catch (err) {
+      console.warn('Status-filtered visit fetch failed, retrying without status filter.', err);
+    }
+
+    const allVisits = await fetchVisitsPages();
+    return allVisits.filter((visit) => visit.scheduled_date && (isScheduledVisit(visit) || !visit.status));
+  };
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const [visitsData, merchandisersData, storesData] = await Promise.all([
-        visitService.getVisits({ page: currentPage, page_size: itemsPerPage }),
+        fetchAllScheduledVisits(),
         userService.getUsers({ role: 'merchandiser', page_size: 1000 }),
         storeService.getStores({ page_size: 1000 }),
       ]);
-      setVisits(visitsData.results ?? []);
-      setTotalCount(visitsData.count ?? 0);
+      setVisits(visitsData);
       setMerchandisers(merchandisersData.results ?? []);
       setStores(storesData.results ?? []);
       setError('');
@@ -203,29 +246,6 @@ const VisitsTracking = () => {
       setLoading(false);
     }
   };
-
-  const getMerchandiserInfo = (id) => id ? merchandisers.find((m) => m.id === id) : null;
-  const getStoreInfo = (id) => id ? stores.find((s) => s.id === id) : null;
-
-  const calculateDuration = (checkIn, checkOut) => {
-    if (!checkIn) return '0m';
-    const diffMins = Math.floor((new Date(checkOut || Date.now()) - new Date(checkIn)) / 60000);
-    return diffMins < 60 ? `${diffMins}m` : `${Math.floor(diffMins / 60)}h ${diffMins % 60}m`;
-  };
-
-  const formatTime = (ds) => {
-    if (!ds) return 'Not Recorded';
-    return new Date(ds).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-  };
-
-  const formatDate = (ds) => {
-    if (!ds) return 'N/A';
-    return new Date(ds).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
-  };
-
-  const totalPages = Math.ceil(totalCount / itemsPerPage);
-  const startEntry = (currentPage - 1) * itemsPerPage + 1;
-  const endEntry = Math.min(currentPage * itemsPerPage, totalCount);
 
   // ── Auto-planning handlers ─────────────────────────────────────────────────
 
@@ -293,6 +313,14 @@ const VisitsTracking = () => {
           )
         );
       }
+      await visitService.setCurrentPlanningPeriod({
+        name: 'Current Planning Period',
+        start_date: planStartDate,
+        end_date: planEndDate,
+      }).catch((periodErr) => {
+        console.warn('Could not persist current planning period:', periodErr?.message || periodErr);
+      });
+
       persistTerritories(territories);
       persistWorkingDays(workingDays);
       setSuccessMessage(`${allVisits.length} visits generated for all merchandisers.`);
@@ -379,16 +407,17 @@ const VisitsTracking = () => {
     <div className="app">
       <Sidebar />
       <div className="main-content">
-        <Navbar />
         <div className="page-container">
           <div className="tracking-header">
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-              <button className="add-btn" onClick={openAutoModal}>⚡ Auto Planning</button>
-              <button className="btn-override" onClick={openOverrideModal}>+ Override</button>
+            <div>
+              <h1 className="tracking-title">Visits Tracking</h1>
+              <p className="tracking-subtitle">All scheduled visits planned by admin</p>
+              <div className="tracking-actions">
+                <button className="add-btn" onClick={openAutoModal}> Auto Planning</button>
+                <button className="btn-override" onClick={openOverrideModal}>+ Override</button>
+              </div>
             </div>
-            <button className="clear-filters-btn" onClick={() => { setCurrentPage(1); fetchData(); }}>
-              Refresh
-            </button>
+           
           </div>
 
           {successMessage && <div className="success-message">{successMessage}</div>}
@@ -398,112 +427,7 @@ const VisitsTracking = () => {
           ) : error ? (
             <div className="error">{error}</div>
           ) : (
-            <>
-              <div className="tracking-table-container">
-                <table className="tracking-table">
-                  <thead>
-                    <tr>
-                      <th>MERCHANDISER</th>
-                      <th>STORE NAME</th>
-                      <th>PLANNED DATE</th>
-                      <th>CHECK-IN / OUT</th>
-                      <th>DURATION</th>
-                      <th>STATUS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visits.length === 0 ? (
-                      <tr><td colSpan="6" className="no-data">No visits found</td></tr>
-                    ) : (
-                      visits.map((visit) => {
-                        const merch = getMerchandiserInfo(visit.merchandiser);
-                        const store = getStoreInfo(visit.store);
-                        const sc = STATUS_CONFIG[visit.status] || { label: visit.status, class: 'default' };
-                        return (
-                          <tr key={visit.id}>
-                            <td>
-                              <div className="merchandiser-cell">
-                                <div className="merchandiser-avatar">
-                                  {(() => {
-                                    const url = (merch?.avatar_url || merch?.avatar)
-                                      ? getAvatarUrl(merch.avatar_url || merch.avatar) : null;
-                                    return url
-                                      ? <img src={url} alt="av" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
-                                      : <>{merch?.first_name?.charAt(0) || 'M'}{merch?.last_name?.charAt(0) || ''}</>;
-                                  })()}
-                                </div>
-                                <div className="merchandiser-info">
-                                  <div className="merchandiser-name">
-                                    {merch ? `${merch.first_name} ${merch.last_name}` : 'Unknown'}
-                                  </div>
-                                  <div className="merchandiser-id">ID #{visit.merchandiser || 'N/A'}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="store-cell">
-                                <div className="store-name">{store?.name || visit.store_name || 'Unknown Store'}</div>
-                                <div className="store-address">{store?.address || store?.location || 'No address'}</div>
-                              </div>
-                            </td>
-                            <td><div className="date-cell">{formatDate(visit.scheduled_date)}</div></td>
-                            <td>
-                              <div className="checkin-cell">
-                                <div className="time-row">
-                                  <span className="time-value">{formatTime(visit.check_in_time || visit.checked_in_at)}</span>
-                                </div>
-                                <div className="time-row">
-                                  <span className="time-value secondary">{formatTime(visit.check_out_time || visit.checked_out_at)}</span>
-                                </div>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="duration-cell">
-                                {calculateDuration(
-                                  visit.check_in_time || visit.checked_in_at,
-                                  visit.check_out_time || visit.checked_out_at
-                                )}
-                              </div>
-                            </td>
-                            <td>
-                              <span className={`tracking-status-badge ${sc.class}`}>● {sc.label}</span>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="tracking-pagination">
-                <div className="pagination-info">
-                  Showing <strong>{startEntry}</strong> to <strong>{endEntry}</strong> of <strong>{totalCount}</strong> entries
-                </div>
-                <div className="pagination-buttons">
-                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                    let p;
-                    if (totalPages <= 5) p = i + 1;
-                    else if (currentPage <= 3) p = i + 1;
-                    else if (currentPage >= totalPages - 2) p = totalPages - 4 + i;
-                    else p = currentPage - 2 + i;
-                    return (
-                      <button key={p} className={`page-btn ${currentPage === p ? 'active' : ''}`}
-                        onClick={() => setCurrentPage(p)}>{p}</button>
-                    );
-                  })}
-                  {totalPages > 5 && currentPage < totalPages - 2 && (
-                    <>
-                      <span className="page-ellipsis">...</span>
-                      <button className="page-btn" onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
-                    </>
-                  )}
-                  {currentPage < totalPages && (
-                    <button className="page-btn nav-btn" onClick={() => setCurrentPage(currentPage + 1)}>›</button>
-                  )}
-                </div>
-              </div>
-            </>
+            <SimpleCalendar visits={visits} merchandisers={merchandisers} stores={stores} />
           )}
         </div>
       </div>
@@ -566,7 +490,7 @@ const VisitsTracking = () => {
                       )}
                     </div>
                     <button type="button" className="btn-auto-dist" onClick={handleAutoDistribute}>
-                      ⚡ Auto-distribute equally
+                       Auto-distribute equally
                     </button>
                   </div>
 
@@ -630,11 +554,11 @@ const VisitsTracking = () => {
                     <p className="auto-section-desc">Visits will be generated for every week between these two dates.</p>
                     <div className="auto-date-row">
                       <div className="form-group">
-                        <label>Start date *</label>
+                        <label>Start date </label>
                         <input type="date" value={planStartDate} onChange={(e) => setPlanStartDate(e.target.value)} />
                       </div>
                       <div className="form-group">
-                        <label>End date *</label>
+                        <label>End date </label>
                         <input type="date" value={planEndDate} min={planStartDate || undefined}
                           onChange={(e) => setPlanEndDate(e.target.value)} />
                       </div>
@@ -752,7 +676,7 @@ const VisitsTracking = () => {
               <div className="form-body">
                 {overrideError && <div className="form-error">{overrideError}</div>}
                 <div className="form-group">
-                  <label>Merchandiser *</label>
+                  <label>Merchandiser </label>
                   <select value={overrideForm.merchandiser}
                     onChange={(e) => setOverrideForm((p) => ({ ...p, merchandiser: e.target.value }))} required>
                     <option value="">— Select —</option>
@@ -762,7 +686,7 @@ const VisitsTracking = () => {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Store *</label>
+                  <label>Store </label>
                   <select value={overrideForm.store}
                     onChange={(e) => setOverrideForm((p) => ({ ...p, store: e.target.value }))} required>
                     <option value="">— Select —</option>
@@ -770,7 +694,7 @@ const VisitsTracking = () => {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Date *</label>
+                  <label>Date </label>
                   <input type="date" value={overrideForm.scheduled_date}
                     onChange={(e) => setOverrideForm((p) => ({ ...p, scheduled_date: e.target.value }))} required />
                 </div>
